@@ -1,11 +1,7 @@
-import torch
-import numpy as np
+from envs.slip_env import SlipEnv
+from policies.gaussian_mlp import GaussianMLP
+from algos.dagger import DAgger
 
-from slip_env import SlipEnv
-from gaussian_mlp import GaussianMLP
-from dagger import DAgger
-
-import logging
 
 if __name__ == "__main__":
     env = SlipEnv(0.001)
