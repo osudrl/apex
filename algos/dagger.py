@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 
 from utils.data import SplitDataset
 from utils.progbar import ProgBar
+from utils.rtplot import RealtimePlot
 
 from envs.controller import controller
 
@@ -14,6 +15,8 @@ class DAgger():
         self.env = env
         self.expert = expert
         self.learner = learner
+        self.rtplot = RealtimePlot()
+        self.rtplot.config("MSE Loss", "Epoch")
 
     def train(self, dagger_itr, epochs, trj_len, log=True):
         env = self.env
@@ -61,3 +64,5 @@ class DAgger():
 
                     running_loss += self.learner.fit(X_batch, y_batch)[0]
                     bar.next("DAgger iteration: %s / %s" % (d + 1, dagger_itr))
+
+                self.rtplot.plot(running_loss / len(dataloader))
