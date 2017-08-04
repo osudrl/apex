@@ -25,13 +25,9 @@ class GaussianMLP(nn.Module):
 
         self.nonlin = nonlin
 
-        print(self.nonlin)
-
         self.optimizer = optimizer(self.parameters(),
                                    lr=0.003,
                                    weight_decay=0.0)
-
-        print(self)
 
     def forward(self, x):
         for l in self.hidden_layers:
@@ -39,7 +35,7 @@ class GaussianMLP(nn.Module):
 
         means = self.out(x)
 
-        log_stds = self.log_stds.repeat(x.size()[0], 1)  # batch size compensation
+        log_stds = self.log_stds.repeat(means.size()[0], 1)  # batch size compensation
 
         rnd = Variable(torch.randn(log_stds.size()))
 

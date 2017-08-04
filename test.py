@@ -1,19 +1,25 @@
 from envs.slip_env import SlipEnv
 from policies.gaussian_mlp import GaussianMLP
 from algos.dagger import DAgger
+from utils.plotting import policyplot
 
+import torch
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dagger_itr", type=int, default=10,
+parser.add_argument("--dagger_itr", type=int, default=100,
                     help="number of iterations of DAgger")
-parser.add_argument("--epochs", type=int, default=100,
+parser.add_argument("--epochs", type=int, default=10,
                     help="number of optimization epochs")
 parser.add_argument("--trj_len", type=int, default=10000,
                     help="maximum trajectory length")
+parser.add_argument("--seed", type=int, default=1,
+                    help="random seed for experiment")
 args = parser.parse_args()
 
 if __name__ == "__main__":
+    torch.manual_seed(args.seed)
+
     env = SlipEnv(0.001)
     obs_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
@@ -26,3 +32,5 @@ if __name__ == "__main__":
         epochs=args.epochs,
         trj_len=args.trj_len
     )
+
+    policyplot(env, learner, args.trj_len)
