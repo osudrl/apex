@@ -4,15 +4,19 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 
+import numpy as np
+
+
 # MLP policy that outputs a mean and samples actions from a gaussian
 # distribution with a learned (but fixed in space) std dev
 class GaussianMLP(nn.Module):
     def __init__(self, obs_dim, action_dim,  hidden_dims=(128, 128),
-                 init_std=1.0, nonlin=F.tanh, optimizer=optim.Adam):
+                 init_std=0.0, nonlin=F.tanh, optimizer=optim.Adam):
 
         super(GaussianMLP, self).__init__()
 
         self.hidden_layers = nn.ModuleList()
+
         self.hidden_layers += [nn.Linear(obs_dim, hidden_dims[0])]
         for dim in hidden_dims:
             self.hidden_layers += [nn.Linear(dim, dim)]
@@ -35,13 +39,14 @@ class GaussianMLP(nn.Module):
 
         means = self.out(x)
 
-        log_stds = self.log_stds.repeat(means.size()[0], 1)  # batch size compensation
+        log_stds = self.log_stds.expand_as(means)
 
-        rnd = Variable(torch.randn(log_stds.size()))
+        stds = torch.exp(log_stds)
 
-        actions = rnd * torch.exp(log_stds) + means
+        return means, log_stds, stds
 
-        return actions
+
+
 
     def loss(self, X, y):
         output = self.forward(X)
