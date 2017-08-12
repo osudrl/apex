@@ -1,17 +1,24 @@
+"""
+Implementation of vanilla policy gradient.
+Current problems:
+1) Way too slow. Likely bottleneck is storing/calculating an
+   unneccessary amount of computation graphs via autograd variables
+   Solution: cache observations then batch them so there's only one
+   computation graph.
+2) Weird bug is causing learning to fail catastrophically (where the gradient
+   is too large?) causing massive fluctuations
+3) No baseline/variance reduction. This is just sort of a "todo"
+4) Doesn't use PT's ".reinforce()" idiom because I don't like abstracting
+   away too many mathematical details. TODO: evaluate if this is still the most
+   readable idiom after speed optimizations
+5) No parallel sampling. Just another todo. Might have parallel algos
+   reimplemented in their own area and keep a seperate more "readable" section
+   for their sequential counterparts. I want to keep this code as minimal
+   and clear as possible.
+"""
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
-import numpy as np
-import math
-
-
-def lognormal_density(x, mean, log_std, std):
-    var = std.pow(2)
-
-    log_density = -(x - mean).pow(2) / (
-        2 * var) - 0.5 * math.log(2 * math.pi) - log_std
-
-    return log_density.sum(1)
 
 
 class VPG():
@@ -40,11 +47,10 @@ class VPG():
                     obs_var = Variable(torch.Tensor(obs).unsqueeze(0))
                     means, log_stds, stds = policy(obs_var)
 
-                    action = torch.normal(means, stds)
-                    action = action.detach()
+                    action = policy.get_action(means, stds)
 
                     logprobs.append(
-                        lognormal_density(action, means, log_stds, stds)
+                        policy.log_likelihood(action, means, log_stds, stds)
                     )
 
                     next_obs, reward, done, _ = env.step(action.data.numpy())
@@ -68,6 +74,7 @@ class VPG():
             print(sum(total_r) / len(total_r))
 
             policy_loss = sum(losses) / len(losses)
+            print("loss: %s, num: %s" % (policy_loss.data.numpy(), len(losses)))
 
             self.optimizer.zero_grad()
             policy_loss.backward()

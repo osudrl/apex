@@ -6,9 +6,10 @@ from torch.autograd import Variable
 
 import numpy as np
 
+import math
 
 # MLP policy that outputs a mean and samples actions from a gaussian
-# distribution with a learned (but fixed in space) std dev
+# distribution with a learned (but state invariant) std dev
 class GaussianMLP(nn.Module):
     def __init__(self, obs_dim, action_dim,  hidden_dims=(128, 128),
                  init_std=0.0, nonlin=F.tanh, optimizer=optim.Adam):
@@ -45,7 +46,17 @@ class GaussianMLP(nn.Module):
 
         return means, log_stds, stds
 
+    def log_likelihood(self, x, means, log_stds, stds):
+        var = stds.pow(2)
 
+        log_density = -(x - means).pow(2) / (
+            2 * var) - 0.5 * math.log(2 * math.pi) - log_stds
+
+        return log_density.sum(1)
+
+    def get_action(self, means, stds):
+        action = torch.normal(means, stds)
+        return action.detach()
 
 
     def loss(self, X, y):
