@@ -2,6 +2,7 @@
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
+from baselines.zero_baseline import ZeroBaseline
 import numpy as np
 
 
@@ -12,11 +13,16 @@ class VPG():
     http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf
     """
 
-    def __init__(self, env, policy, discount=0.99, lr=0.01):
+    def __init__(self, env, policy, discount=0.99, lr=0.01,
+                 baseline=None):
         self.env = env
         self.policy = policy
-        #self.baseline = baseline
         self.discount = discount
+
+        if baseline is None:
+            self.baseline = ZeroBaseline()
+        else:
+            self.baseline = baseline
 
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
@@ -28,17 +34,19 @@ class VPG():
 
             observations = torch.cat([p["observations"] for p in paths])
             actions = torch.cat([p["actions"] for p in paths])
-            returns = torch.cat([p["returns"] for p in paths])
+            advantages = torch.cat([p["advantages"] for p in paths])
 
             means, log_stds, stds = policy(observations)
 
             logprobs = policy.log_likelihood(actions, means, log_stds, stds)
 
-            policy_loss = -(logprobs * returns).mean()
+            policy_loss = -(logprobs * advantages).mean()
 
             self.optimizer.zero_grad()
             policy_loss.backward()
             self.optimizer.step()
+
+            self.baseline.fit(paths)
 
             print(
                 'Average Return: %f' %
@@ -47,10 +55,11 @@ class VPG():
 
     def rollout(self, env, policy, max_trj_len):
         """Collect a single rollout."""
-        rewards = []
         observations = []
         actions = []
+        rewards = []
         returns = []
+        advantages = []
 
         obs = env.reset()
         for _ in range(max_trj_len):
@@ -70,14 +79,19 @@ class VPG():
             if done:
                 break
 
+        baseline = Variable(self.baseline.predict(torch.cat(observations)))
         R = Variable(torch.zeros(1, 1))
         for i in reversed(range(len(rewards))):
             R = self.discount * R + rewards[i]
+            advantage = R - baseline[i]
+
             returns.append(R)
+            advantages.append(advantage)
 
         return dict(
             rewards=torch.stack(rewards),
             returns=torch.cat(returns[::-1]),
+            advantages=torch.cat(advantages[::-1]),
             observations=torch.cat(observations),
             actions=torch.cat(actions)
         )

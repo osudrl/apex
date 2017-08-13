@@ -62,3 +62,6 @@ class GaussianMLP(nn.Module):
     def get_action(self, means, stds):
         action = torch.normal(means, stds)
         return action.detach()
+
+    # TODO: add entropy, KL divergence
+    # maybe encapsulate distribution related functions
