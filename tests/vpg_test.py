@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     algo = VPG(env, policy)
 
-    algo.train(100, 100, 100)
+    algo.train(10, 100, 100)
 
     input("press enter")
 

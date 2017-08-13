@@ -12,6 +12,7 @@ Soon to be implemented:
 To be implemented long term:
 
 * DDPG
+* SVG
 * Noisy Nets for Exploration
 
 Maybe implemented in future:

@@ -11,28 +11,27 @@ import math
 # MLP policy that outputs a mean and samples actions from a gaussian
 # distribution with a learned (but state invariant) std dev
 class GaussianMLP(nn.Module):
-    def __init__(self, obs_dim, action_dim,  hidden_dims=(128, 128),
-                 init_std=0.0, nonlin=F.tanh, optimizer=optim.Adam):
+    def __init__(self, obs_dim, action_dim,  hidden_dims=(32, 32),
+                 init_std=1.0, nonlin=F.tanh, optimizer=optim.Adam):
 
         super(GaussianMLP, self).__init__()
 
         self.hidden_layers = nn.ModuleList()
 
         self.hidden_layers += [nn.Linear(obs_dim, hidden_dims[0])]
-        for dim in hidden_dims:
-            self.hidden_layers += [nn.Linear(dim, dim)]
+
+        for l in range(len(hidden_dims) - 1):
+            in_dim = hidden_dims[l]
+            out_dim = hidden_dims[l + 1]
+            self.hidden_layers += [nn.Linear(in_dim, out_dim)]
 
         self.out = nn.Linear(hidden_dims[-1], action_dim)
 
         self.log_stds = nn.Parameter(
-            torch.ones(1, action_dim) * init_std
+            torch.ones(1, action_dim) * np.log(init_std)
         )
 
         self.nonlin = nonlin
-
-        self.optimizer = optimizer(self.parameters(),
-                                   lr=0.003,
-                                   weight_decay=0.0)
 
     def forward(self, x):
         for l in self.hidden_layers:
@@ -57,18 +56,3 @@ class GaussianMLP(nn.Module):
     def get_action(self, means, stds):
         action = torch.normal(means, stds)
         return action.detach()
-
-
-    def loss(self, X, y):
-        output = self.forward(X)
-        loss = nn.MSELoss()(output, y)
-        return loss
-
-    def fit(self, X, y):
-        self.optimizer.zero_grad()
-        output = self.forward(X)
-        loss = nn.MSELoss()(output, y)
-        loss.backward()  # accumulate gradients
-        self.optimizer.step()  # update parameters
-
-        return loss.data

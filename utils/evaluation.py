@@ -9,7 +9,7 @@ def renderpolicy(env, policy, trj_len):
         obs_var = Variable(torch.Tensor(obs).unsqueeze(0))
         means, log_stds, stds = policy(obs_var)
 
-        action = policy.get_action(means, stds).data.numpy()
+        action = means.data.numpy()  # don't explore when evaluating
 
         obs = env.step(action)[0]
         env.render()
