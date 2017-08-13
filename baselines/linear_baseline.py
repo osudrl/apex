@@ -10,7 +10,7 @@ class FeatureEncodingBaseline():
     """
     Linear time-varying feature encoding baseline from Duan et al.
 
-    https://arxiv.org/pdf/1604.06778.pdf
+    See: https://arxiv.org/pdf/1604.06778.pdf
     """
 
     def __init__(self, obs_dim, weight_decay=1e-5):

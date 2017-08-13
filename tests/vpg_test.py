@@ -19,9 +19,10 @@ parser.add_argument("--seed", type=int, default=1,
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    torch.manual_seed(args.seed)
-
     env = CartpoleEnv()
+    #env.seed(args.seed)
+
+    torch.manual_seed(args.seed)
 
     obs_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]

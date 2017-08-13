@@ -3,6 +3,7 @@ import torch
 import torch.optim as optim
 from torch.autograd import Variable
 from baselines.zero_baseline import ZeroBaseline
+from utils.math import center
 import numpy as np
 
 
@@ -13,8 +14,7 @@ class VPG():
     http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf
     """
 
-    def __init__(self, env, policy, discount=0.99, lr=0.01,
-                 baseline=None):
+    def __init__(self, env, policy, discount=0.99, lr=0.01, baseline=None):
         self.env = env
         self.policy = policy
         self.discount = discount
@@ -36,8 +36,9 @@ class VPG():
             actions = torch.cat([p["actions"] for p in paths])
             advantages = torch.cat([p["advantages"] for p in paths])
 
-            means, log_stds, stds = policy(observations)
+            advantages = center(advantages)
 
+            means, log_stds, stds = policy(observations)
             logprobs = policy.log_likelihood(actions, means, log_stds, stds)
 
             policy_loss = -(logprobs * advantages).mean()
