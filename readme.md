@@ -8,6 +8,7 @@ Soon to be implemented:
 * PPO
 * A3C
 * Parallelism
+* Beta distribution policy
 
 To be implemented long term:
 
@@ -21,3 +22,7 @@ Maybe implemented in future:
 * DXNN
 * ACER and other off-policy methods
 * Model-based methods
+
+In the pipeline:
+* Considering Visdom for progress tracking
+* Option to render random trajectories in seperate thread during training

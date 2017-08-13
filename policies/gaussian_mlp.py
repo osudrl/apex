@@ -8,9 +8,15 @@ import numpy as np
 
 import math
 
-# MLP policy that outputs a mean and samples actions from a gaussian
-# distribution with a learned (but state invariant) std dev
+
 class GaussianMLP(nn.Module):
+    """
+    Gaussian Multilayer Perceptron Policy.
+
+    Policy that samples actions from a gaussian distribution with a
+    learned (but state invariant) standard deviation.
+    """
+
     def __init__(self, obs_dim, action_dim,  hidden_dims=(32, 32),
                  init_std=1.0, nonlin=F.tanh, optimizer=optim.Adam):
 

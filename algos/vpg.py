@@ -6,6 +6,12 @@ import numpy as np
 
 
 class VPG():
+    """
+    Implements vanilla policy gradient aka REINFORCE.
+
+    http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf
+    """
+
     def __init__(self, env, policy, discount=0.99, lr=0.01):
         self.env = env
         self.policy = policy
