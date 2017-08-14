@@ -22,6 +22,7 @@ To be implemented long term:
 * SVG
 * Noisy Nets for Exploration
 * CUDA support (should be trivial but I don't have a GPU to test on currently)
+* PGPE?
 
 Maybe implemented in future:
 
@@ -32,4 +33,7 @@ Maybe implemented in future:
 
 In the pipeline:
 * Considering Visdom for progress tracking
-* Option to render random trajectories in seperate thread during training
+
+Implemented:
+* VPG plus + baseline confirmed to be correct and fast.
+* No baseline implementation to test against, but adaptive VPG appears correct.

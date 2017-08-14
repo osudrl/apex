@@ -51,6 +51,10 @@ class GaussianMLP(nn.Module):
 
         return means, log_stds, stds
 
+    def get_action(self, means, stds):
+        action = torch.normal(means, stds)
+        return action.detach()
+
     def log_likelihood(self, x, means, log_stds, stds):
         var = stds.pow(2)
 
@@ -59,9 +63,11 @@ class GaussianMLP(nn.Module):
 
         return log_density.sum(1)
 
-    def get_action(self, means, stds):
-        action = torch.normal(means, stds)
-        return action.detach()
+    def kl_divergence(self, mean0, log_std0, std0,
+                            mean1, log_std1, std1):
+        kl = log_std1 - log_std0 + (std0.pow(2) + (mean0 - mean1).pow(2)) / (2.0 * std1.pow(2)) - 0.5
+        return kl.sum(1)
 
-    # TODO: add entropy, KL divergence
+
+    # TODO: add entropy
     # maybe encapsulate distribution related functions

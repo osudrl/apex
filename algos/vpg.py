@@ -11,7 +11,10 @@ class VPG():
     """
     Implements vanilla policy gradient aka REINFORCE.
 
-    http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf
+    See: http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf
+
+    Includes adaptive learning rate implementation mentioned in
+    Schulman et al 2017: https://arxiv.org/pdf/1707.06347.pdf
     """
 
     def __init__(self, env, policy, discount=0.99, lr=0.01, baseline=None):
@@ -26,7 +29,7 @@ class VPG():
 
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
-    def train(self, n_itr, n_trj, max_trj_len):
+    def train(self, n_itr, n_trj, max_trj_len, adaptive=True, desired_kl=2e-3):
         env = self.env
         policy = self.policy
         for _ in range(n_itr):
@@ -36,6 +39,8 @@ class VPG():
             actions = torch.cat([p["actions"] for p in paths])
             advantages = torch.cat([p["advantages"] for p in paths])
 
+            # TODO: verify centering advantages over whole batch instead of per
+            # path actually makes sense
             advantages = center(advantages)
 
             means, log_stds, stds = policy(observations)
@@ -49,8 +54,24 @@ class VPG():
 
             self.baseline.fit(paths)
 
+            new_means, new_log_stds, new_stds = policy(observations)
+            kl_oldnew = policy.kl_divergence(means, log_stds, stds,
+                                             new_means, new_log_stds, new_stds)
+
+            mean_kl = kl_oldnew.mean().data[0]
+
+            # see: https://arxiv.org/pdf/1707.06347.pdf, footnote 3
+            if adaptive:
+                if mean_kl > desired_kl * 2:
+                    lr_multiplier = 1 / 1.5
+                elif mean_kl < desired_kl / 2:
+                    lr_multiplier = 1 * 1.5
+
+                for param_group in self.optimizer.param_groups:
+                    param_group['lr'] *= lr_multiplier
+
             print(
-                'Average Return: %f' %
+                'Average Return: %f\r' %
                 np.mean(([p["rewards"].sum().data.numpy() for p in paths]))
             )
 
@@ -62,9 +83,9 @@ class VPG():
         returns = []
         advantages = []
 
-        obs = env.reset()
+        obs = env.reset().ravel()[None, :]
         for _ in range(max_trj_len):
-            obs_var = Variable(torch.Tensor(obs).unsqueeze(0))
+            obs_var = Variable(torch.Tensor(obs))
 
             means, log_stds, stds = policy(obs_var)
             action = policy.get_action(means, stds)
@@ -75,16 +96,16 @@ class VPG():
             actions.append(action)
             rewards.append(Variable(torch.Tensor([reward])))
 
-            obs = next_obs
+            obs = next_obs.ravel()[None, :]
 
             if done:
                 break
 
         baseline = Variable(self.baseline.predict(torch.cat(observations)))
         R = Variable(torch.zeros(1, 1))
-        for i in reversed(range(len(rewards))):
-            R = self.discount * R + rewards[i]
-            advantage = R - baseline[i]
+        for t in reversed(range(len(rewards))):
+            R = self.discount * R + rewards[t]
+            advantage = R - baseline[t]
 
             returns.append(R)
             advantages.append(advantage)

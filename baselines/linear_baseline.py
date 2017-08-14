@@ -37,6 +37,6 @@ class FeatureEncodingBaseline():
         B = torch.cat([path["returns"] for path in paths]).data
         eye = torch.eye(A.size()[1])
 
-        # solves regularized orginary least squares to fit weights
+        # solves (ridge) regularized orginary least squares to fit weights
         self.weights, _ = torch.gels(A.t() @ B,
                                      A.t() @ A + self.weight_decay * eye)
