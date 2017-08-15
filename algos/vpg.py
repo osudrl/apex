@@ -47,9 +47,9 @@ class VPG():
             # path actually makes sense
             advantages = center(advantages)
 
-            means, log_stds, stds = policy(observations)
-            logprobs = policy.log_likelihood(actions, means, log_stds, stds)
-            entropy = policy.entropy(log_stds)
+            policy.act(observations) # update distribution params
+            logprobs = policy.distribution.log_likelihood(actions)
+            entropy = policy.distribution.entropy()
 
             policy_loss = -(logprobs * advantages + 0.01 * entropy).mean()
 
@@ -59,9 +59,10 @@ class VPG():
 
             self.baseline.fit(paths)
 
-            new_means, new_log_stds, new_stds = policy(observations)
-            kl_oldnew = policy.kl_divergence(means, log_stds, stds,
-                                             new_means, new_log_stds, new_stds)
+            """
+            new_policy_distributions = policy.act(observations)
+            kl_oldnew = pd.kl_divergence(policy_distributions,
+                                         new_policy_distributions)
 
             mean_kl = kl_oldnew.mean().data[0]
 
@@ -74,7 +75,7 @@ class VPG():
 
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] *= lr_multiplier
-
+            """
             print(
                 'Average Return: %f, iteration: %d' %
                 (np.mean(([p["rewards"].sum().data.numpy() for p in paths])), _)
@@ -82,6 +83,7 @@ class VPG():
 
     def rollout(self, env, policy, max_trj_len):
         """Collect a single rollout."""
+
         observations = []
         actions = []
         rewards = []
@@ -92,8 +94,7 @@ class VPG():
         for _ in range(max_trj_len):
             obs_var = Variable(torch.Tensor(obs))
 
-            means, log_stds, stds = policy(obs_var)
-            action = policy.get_action(means, stds)
+            action = policy.act(obs_var)
 
             next_obs, reward, done, _ = env.step(action.data.numpy().ravel())
 

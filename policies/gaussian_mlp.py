@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 import numpy as np
 
-import math
+from distributions.diagonal_gaussian import DiagonalGaussian
 
 
 class GaussianMLP(nn.Module):
@@ -21,6 +21,8 @@ class GaussianMLP(nn.Module):
                  init_std=1.0, nonlin=F.tanh, optimizer=optim.Adam):
 
         super(GaussianMLP, self).__init__()
+
+        self.distribution = DiagonalGaussian()
 
         self.hidden_layers = nn.ModuleList()
 
@@ -51,22 +53,14 @@ class GaussianMLP(nn.Module):
 
         return means, log_stds, stds
 
-    def get_action(self, means, stds):
-        action = torch.normal(means, stds)
-        return action.detach()
+    def act(self, obs, stochastic=True):
+        means, log_stds, stds = self(obs)
 
-    def log_likelihood(self, x, means, log_stds, stds):
-        var = stds.pow(2)
+        self.distribution.mu = means
+        self.distribution.log_sigma = log_stds
+        self.distribution.sigma = stds
 
-        log_density = -(x - means).pow(2) / (
-            2 * var) - 0.5 * math.log(2 * math.pi) - log_stds
+        if not stochastic:
+            return self.distribution.mu
 
-        return log_density.sum(1)
-
-    def kl_divergence(self, mean0, log_std0, std0,
-                            mean1, log_std1, std1):
-        kl = log_std1 - log_std0 + (std0.pow(2) + (mean0 - mean1).pow(2)) / (2.0 * std1.pow(2)) - 0.5
-        return kl.sum(1)
-
-    def entropy(self, log_stds):
-        return (log_stds + np.log(np.sqrt(2 * np.pi * np.e))).sum(1)
+        return self.distribution.sample()

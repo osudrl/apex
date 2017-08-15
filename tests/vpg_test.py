@@ -57,5 +57,5 @@ if __name__ == "__main__":
                           args=(env, policy, args.max_trj_len))
     render_p.start()
 
-    #train_p.join()
+    train_p.join()
     render_p.join()

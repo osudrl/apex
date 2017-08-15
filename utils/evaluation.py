@@ -9,12 +9,9 @@ def renderpolicy(env, policy, trj_len, explore=False, speedup=1, dt=0.05):
     obs = env.reset().ravel()[None, :]
     for t in range(trj_len):
         obs_var = Variable(torch.Tensor(obs))
-        means, log_stds, stds = policy(obs_var)
+        dist = policy(obs_var)
 
-        if explore:
-            action = policy.get_action(means, stds)
-        else:
-            action = means.data.numpy()  # don't explore when evaluating
+        action = policy.act(obs_var, explore).data.numpy()
 
         obs = env.step(action.ravel())[0].ravel()[None, :]
         env.render()
