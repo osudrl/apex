@@ -1,15 +1,11 @@
 from distributions.base import Distribution
+from torch.autograd import Variable
 import torch
 import numpy as np
 
 
 class DiagonalGaussian(Distribution):
-    def __init__(self):
-        self.mu = None
-        self.sigma = None
-        self.log_sigma = None
-
-    def set_params(self, mu, sigma, log_sigma):
+    def __init__(self, mu=None, sigma=None, log_sigma=None):
         self.mu = mu
         self.sigma = sigma
         self.log_sigma = log_sigma
@@ -26,7 +22,6 @@ class DiagonalGaussian(Distribution):
         kl = new.log_sigma - self.log_sigma + \
              (self.sigma.pow(2) + (self.mu - new.mu).pow(2)) / \
              (2.0 * new.sigma.pow(2)) - 0.5
-
         return kl.sum(1)
 
     def entropy(self):
@@ -35,3 +30,10 @@ class DiagonalGaussian(Distribution):
     def sample(self):
         action = torch.normal(self.mu, self.sigma)
         return action.detach()
+
+    def copy(self):
+        return DiagonalGaussian(
+            Variable(self.mu.data.clone()),
+            Variable(self.sigma.data.clone()),
+            Variable(self.log_sigma.data.clone())
+        )

@@ -3,6 +3,7 @@ from rllab.envs.box2d.cartpole_env import CartpoleEnv
 from rllab.envs.box2d.double_pendulum_env import DoublePendulumEnv
 from rllab.envs.mujoco.walker2d_env import Walker2DEnv
 from rllab.envs.mujoco.hopper_env import HopperEnv
+from rllab.envs.mujoco.walker2d_env import Walker2DEnv
 from rllab.envs.gym_env import GymEnv
 from rllab.envs.normalized_env import normalize
 

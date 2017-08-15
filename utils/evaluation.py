@@ -11,7 +11,7 @@ def renderpolicy(env, policy, trj_len, explore=False, speedup=1, dt=0.05):
         obs_var = Variable(torch.Tensor(obs))
         dist = policy(obs_var)
 
-        action = policy.act(obs_var, explore).data.numpy()
+        action = policy.get_action(obs_var, explore).data.numpy()
 
         obs = env.step(action.ravel())[0].ravel()[None, :]
         env.render()

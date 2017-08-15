@@ -53,7 +53,7 @@ class GaussianMLP(nn.Module):
 
         return means, log_stds, stds
 
-    def act(self, obs, stochastic=True):
+    def get_action(self, obs, stochastic=True):
         means, log_stds, stds = self(obs)
 
         self.distribution.mu = means
@@ -64,3 +64,12 @@ class GaussianMLP(nn.Module):
             return self.distribution.mu
 
         return self.distribution.sample()
+
+    def get_distribution(self, observations):
+        means, log_stds, stds = self(observations)
+
+        self.distribution.mu = means
+        self.distribution.log_sigma = log_stds
+        self.distribution.sigma = stds
+
+        return self.distribution

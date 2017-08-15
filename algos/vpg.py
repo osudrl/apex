@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from baselines.zero_baseline import ZeroBaseline
 from utils.math import center
 import numpy as np
+import copy
 
 
 class VPG():
@@ -47,9 +48,10 @@ class VPG():
             # path actually makes sense
             advantages = center(advantages)
 
-            policy.act(observations) # update distribution params
-            logprobs = policy.distribution.log_likelihood(actions)
-            entropy = policy.distribution.entropy()
+            distribution = policy.get_distribution(observations)
+
+            logprobs = distribution.log_likelihood(actions)
+            entropy = distribution.entropy()
 
             policy_loss = -(logprobs * advantages + 0.01 * entropy).mean()
 
@@ -59,10 +61,10 @@ class VPG():
 
             self.baseline.fit(paths)
 
-            """
-            new_policy_distributions = policy.act(observations)
-            kl_oldnew = pd.kl_divergence(policy_distributions,
-                                         new_policy_distributions)
+            old_distribution = distribution.copy()
+            new_distribution = policy.get_distribution(observations)
+
+            kl_oldnew = old_distribution.kl_divergence(new_distribution)
 
             mean_kl = kl_oldnew.mean().data[0]
 
@@ -72,10 +74,12 @@ class VPG():
                     lr_multiplier = 1 / 1.5
                 elif mean_kl < desired_kl / 2:
                     lr_multiplier = 1 * 1.5
+                else:
+                    lr_multiplier = 1
 
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] *= lr_multiplier
-            """
+
             print(
                 'Average Return: %f, iteration: %d' %
                 (np.mean(([p["rewards"].sum().data.numpy() for p in paths])), _)
@@ -94,7 +98,7 @@ class VPG():
         for _ in range(max_trj_len):
             obs_var = Variable(torch.Tensor(obs))
 
-            action = policy.act(obs_var)
+            action = policy.get_action(obs_var)
 
             next_obs, reward, done, _ = env.step(action.data.numpy().ravel())
 
