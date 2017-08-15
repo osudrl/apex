@@ -68,6 +68,5 @@ class GaussianMLP(nn.Module):
         kl = log_std1 - log_std0 + (std0.pow(2) + (mean0 - mean1).pow(2)) / (2.0 * std1.pow(2)) - 0.5
         return kl.sum(1)
 
-
-    # TODO: add entropy
-    # maybe encapsulate distribution related functions
+    def entropy(self, log_stds):
+        return (log_stds + np.log(np.sqrt(2 * np.pi * np.e))).sum(1)

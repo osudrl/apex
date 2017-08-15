@@ -1,5 +1,7 @@
 """Python file for automatically running experiments from command line."""
 from rllab.envs.box2d.cartpole_env import CartpoleEnv
+from rllab.envs.box2d.double_pendulum_env import DoublePendulumEnv
+from rllab.envs.mujoco.hopper_env import HopperEnv
 from rllab.envs.gym_env import GymEnv
 from rllab.envs.normalized_env import normalize
 
@@ -14,7 +16,7 @@ import argparse
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_itr", type=int, default=100,
+parser.add_argument("--n_itr", type=int, default=1000,
                     help="number of iterations of the learning algorithm")
 parser.add_argument("--max_trj_len", type=int, default=100,
                     help="maximum trajectory length")
@@ -22,15 +24,16 @@ parser.add_argument("--n_trj", type=int, default=100,
                     help="number of sample trajectories per iteration")
 parser.add_argument("--seed", type=int, default=1,
                     help="random seed for experiment")
-parser.add_argument("--lr", type=int, default=0.1,
+parser.add_argument("--lr", type=int, default=0.01,
                     help="Adam learning rate")
-parser.add_argument("--desired_kl", type=int, default=2e-3,
+parser.add_argument("--desired_kl", type=int, default=0.01,
                     help="Desired change in mean kl per iteration")
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    env = normalize(CartpoleEnv())
-    #env = normalize(GymEnv("Pendulum-v0"))
+    #env = normalize(DoublePendulumEnv())
+    #env = normalize(CartpoleEnv())
+    env = normalize(HopperEnv())
     #env.seed(args.seed)
 
     #torch.manual_seed(args.seed)
@@ -47,11 +50,12 @@ if __name__ == "__main__":
     algo = VPG(env, policy, baseline=baseline, lr=args.lr)
 
     train_p = mp.Process(target=algo.train,
-                         args=(args.n_itr, args.n_trj, args.max_trj_len, False))
+                         args=(args.n_itr, args.n_trj, args.max_trj_len, True))
     train_p.start()
 
     render_p = mp.Process(target=renderloop,
                           args=(env, policy, args.max_trj_len))
     render_p.start()
-    train_p.join()
+
+    #train_p.join()
     render_p.join()

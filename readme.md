@@ -15,14 +15,17 @@ Bells and whistles:
 * Variable step size for VPG (aka poor man's natural gradient)
 * Entropy based exploration bonus
 * Observation and advantage centering
+* Pytorch wrapper for OpenAI Gym environments
 
 To be implemented long term:
 
 * DDPG
+* NAF
 * SVG
+* I2A
+* PGPE?
 * Noisy Nets for Exploration
 * CUDA support (should be trivial but I don't have a GPU to test on currently)
-* PGPE?
 
 Maybe implemented in future:
 

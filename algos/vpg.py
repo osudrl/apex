@@ -14,7 +14,11 @@ class VPG():
     See: http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf
 
     Includes adaptive learning rate implementation mentioned in
-    Schulman et al 2017: https://arxiv.org/pdf/1707.06347.pdf
+    Schulman et al 2017. See: https://arxiv.org/pdf/1707.06347.pdf
+
+    Includes entropy bonus mentioned in Mnih et al 2016.
+
+    Includes GAE described in Schulman et al 2016.
     """
 
     def __init__(self, env, policy, discount=0.99, lr=0.01, baseline=None):
@@ -45,8 +49,9 @@ class VPG():
 
             means, log_stds, stds = policy(observations)
             logprobs = policy.log_likelihood(actions, means, log_stds, stds)
+            entropy = policy.entropy(log_stds)
 
-            policy_loss = -(logprobs * advantages).mean()
+            policy_loss = -(logprobs * advantages + 0.01 * entropy).mean()
 
             self.optimizer.zero_grad()
             policy_loss.backward()
@@ -71,8 +76,8 @@ class VPG():
                     param_group['lr'] *= lr_multiplier
 
             print(
-                'Average Return: %f\r' %
-                np.mean(([p["rewards"].sum().data.numpy() for p in paths]))
+                'Average Return: %f, iteration: %d' %
+                (np.mean(([p["rewards"].sum().data.numpy() for p in paths])), _)
             )
 
     def rollout(self, env, policy, max_trj_len):
@@ -90,7 +95,7 @@ class VPG():
             means, log_stds, stds = policy(obs_var)
             action = policy.get_action(means, stds)
 
-            next_obs, reward, done, _ = env.step(action.data.numpy())
+            next_obs, reward, done, _ = env.step(action.data.numpy().ravel())
 
             observations.append(obs_var)
             actions.append(action)
