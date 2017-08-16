@@ -50,7 +50,7 @@ class VPG():
             means, log_stds, stds = policy(observations)
             logprobs = policy.log_likelihood(actions, means, log_stds, stds)
             entropy = policy.entropy(log_stds)
-
+            entropy = 0
             policy_loss = -(logprobs * advantages + 0.01 * entropy).mean()
 
             self.optimizer.zero_grad()
@@ -96,6 +96,17 @@ class VPG():
             action = policy.get_action(means, stds)
 
             next_obs, reward, done, _ = env.step(action.data.numpy().ravel())
+
+            if np.any(np.isnan(action.data.numpy())):
+                print("=================")
+                print("mu:")
+                print(means.data.numpy())
+                print("sigma")
+                print(stds.data.numpy())
+                print("log sigma")
+                print(log_stds.data.numpy())
+                print("=================")
+                input("paused")
 
             observations.append(obs_var)
             actions.append(action)
