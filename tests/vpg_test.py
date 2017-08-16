@@ -18,7 +18,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--n_itr", type=int, default=1000,
                     help="number of iterations of the learning algorithm")
-parser.add_argument("--max_trj_len", type=int, default=100,
+parser.add_argument("--max_trj_len", type=int, default=200,
                     help="maximum trajectory length")
 parser.add_argument("--n_trj", type=int, default=100,
                     help="number of sample trajectories per iteration")

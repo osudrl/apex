@@ -3,12 +3,13 @@ import torch
 import torch.optim as optim
 from torch.autograd import Variable
 from baselines.zero_baseline import ZeroBaseline
+from algos.base import PolicyGradientAlgorithm
 from utils.math import center
 import numpy as np
 import copy
 
 
-class VPG():
+class VPG(PolicyGradientAlgorithm):
     """
     Implements vanilla policy gradient aka REINFORCE.
 
@@ -34,7 +35,8 @@ class VPG():
 
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
-    def train(self, n_itr, n_trj, max_trj_len, adaptive=True, desired_kl=2e-3):
+    def train(self, n_itr, n_trj, max_trj_len, adaptive=True, desired_kl=2e-3,
+              explore_bonus=1e-4):
         env = self.env
         policy = self.policy
         for _ in range(n_itr):
@@ -53,10 +55,11 @@ class VPG():
             logprobs = distribution.log_likelihood(actions)
             entropy = distribution.entropy()
 
-            policy_loss = -(logprobs * advantages + 0.01 * entropy).mean()
+            policy_loss = logprobs * advantages
+            total_loss = -(policy_loss + explore_bonus * entropy).mean()
 
             self.optimizer.zero_grad()
-            policy_loss.backward()
+            total_loss.backward()
             self.optimizer.step()
 
             self.baseline.fit(paths)
@@ -84,57 +87,3 @@ class VPG():
                 'Average Return: %f, iteration: %d' %
                 (np.mean(([p["rewards"].sum().data.numpy() for p in paths])), _)
             )
-
-    def rollout(self, env, policy, max_trj_len):
-        """Collect a single rollout."""
-
-        observations = []
-        actions = []
-        rewards = []
-        returns = []
-        advantages = []
-
-        obs = env.reset().ravel()[None, :]
-        for _ in range(max_trj_len):
-            obs_var = Variable(torch.Tensor(obs))
-
-            action = policy.get_action(obs_var)
-
-            next_obs, reward, done, _ = env.step(action.data.numpy().ravel())
-
-            if np.any(np.isnan(action.data.numpy())):
-                print("=================")
-                print("mu:")
-                print(means.data.numpy())
-                print("sigma")
-                print(stds.data.numpy())
-                print("log sigma")
-                print(log_stds.data.numpy())
-                print("=================")
-                input("paused")
-
-            observations.append(obs_var)
-            actions.append(action)
-            rewards.append(Variable(torch.Tensor([reward])))
-
-            obs = next_obs.ravel()[None, :]
-
-            if done:
-                break
-
-        baseline = Variable(self.baseline.predict(torch.cat(observations)))
-        R = Variable(torch.zeros(1, 1))
-        for t in reversed(range(len(rewards))):
-            R = self.discount * R + rewards[t]
-            advantage = R - baseline[t]
-
-            returns.append(R)
-            advantages.append(advantage)
-
-        return dict(
-            rewards=torch.stack(rewards),
-            returns=torch.cat(returns[::-1]),
-            advantages=torch.cat(advantages[::-1]),
-            observations=torch.cat(observations),
-            actions=torch.cat(actions)
-        )
