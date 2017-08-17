@@ -1,4 +1,4 @@
-from distributions.base import Distribution
+from rl.distributions.base import Distribution
 from torch.autograd import Variable
 import torch
 import numpy as np

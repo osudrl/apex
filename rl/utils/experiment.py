@@ -1,5 +1,5 @@
 import torch.multiprocessing as mp
-from utils.evaluation import renderloop
+from rl.utils import renderloop
 
 
 def run_experiment(algo, args, render=False):

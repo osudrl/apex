@@ -1,7 +1,7 @@
-from envs.slip_env import SlipEnv
-from policies.gaussian_mlp import GaussianMLP
-from algos.dagger import DAgger
-from utils.plotting import policyplot
+from rl.envs import SlipEnv
+from rl.policies import GaussianMLP
+from rl.algos import DAgger
+from rl.utils import policyplot
 
 import torch
 import argparse

@@ -35,7 +35,8 @@ Maybe implemented in future:
 * Model-based methods
 
 In the pipeline:
-* Considering Visdom for progress tracking
+* ~Visdom~ Bokeh for progress tracking
+* Package everything
 
 Implemented:
 * VPG plus + baseline confirmed to be correct and fast.

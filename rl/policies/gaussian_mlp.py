@@ -6,7 +6,7 @@ from torch.autograd import Variable
 
 import numpy as np
 
-from distributions.diagonal_gaussian import DiagonalGaussian
+from rl.distributions import DiagonalGaussian
 
 
 class GaussianMLP(nn.Module):

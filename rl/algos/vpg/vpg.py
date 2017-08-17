@@ -2,11 +2,12 @@
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
-from baselines.zero_baseline import ZeroBaseline
-from algos.base import PolicyGradientAlgorithm
-from utils.math import center
+
+from rl.utils import center
+from rl.baselines import ZeroBaseline
+from ..base import PolicyGradientAlgorithm
+
 import numpy as np
-import copy
 
 
 class VPG(PolicyGradientAlgorithm):

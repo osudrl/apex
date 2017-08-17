@@ -4,11 +4,9 @@ from torch import Tensor
 from torch.autograd import Variable as Var
 from torch.utils.data import DataLoader
 
-from utils.data import SplitDataset
-from utils.progbar import ProgBar
-from utils.plotting import RealtimePlot
+from rl.utils import SplitDataset, ProgBar, RealtimePlot
 
-from envs.controller import controller
+from rl.envs import controller
 
 
 class DAgger():

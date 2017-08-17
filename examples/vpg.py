@@ -7,10 +7,10 @@ from rllab.envs.mujoco.walker2d_env import Walker2DEnv
 from rllab.envs.gym_env import GymEnv
 from rllab.envs.normalized_env import normalize
 
-from utils.experiment import run_experiment
-from policies.gaussian_mlp import GaussianMLP
-from baselines.linear_baseline import FeatureEncodingBaseline
-from algos.vpg import VPG
+from rl.utils import run_experiment
+from rl.policies import GaussianMLP
+from rl.baselines import FeatureEncodingBaseline
+from rl.algos import VPG
 
 import argparse
 

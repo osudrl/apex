@@ -2,7 +2,7 @@ from rllab.envs.base import Env
 from rllab.spaces import Box
 from rllab.envs.base import Step
 
-import envs.pyslip as slip
+from rl.envs import pyslip as slip
 import numpy as np
 import pygame
 
