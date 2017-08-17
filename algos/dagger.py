@@ -1,3 +1,4 @@
+"""CURRENTLY OUTDATED. WILL UPDATE IN FUTURE"""
 import torch
 from torch import Tensor
 from torch.autograd import Variable as Var
