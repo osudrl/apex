@@ -8,8 +8,33 @@ This is a small, modular library that contains some implementations of continuou
 ### Basics
 An example of running an experiment using vanilla policy gradient is shown in ```examples/vpg.py```.
 
+```python
+env = gym.make("Hopper-v1")
 
-### Logging
+obs_dim = env.observation_space.shape[0]
+action_dim = env.action_space.shape[0]
+
+policy = GaussianMLP(obs_dim, action_dim, (8,))
+baseline = FeatureEncodingBaseline(obs_dim)
+
+algo = VPG(
+    env=env,
+    policy=policy,
+    baseline=baseline,
+    lr=args.lr,
+)
+```
+This script shows the basics of defining a model and setting up an algorithm. The recommended way to train the model, log diagnostics, and visualize the current policy all at once is to use the ```rl.utils.run_experiment()``` function.
+
+```python
+logger = Logger(args)
+
+run_experiment(algo, args, render=True, logger=logger)
+```
+
+This sets up the logging, launches a progress monitor in your browser, renders the policy continuously in a seperate thread, and executes ```algo.train()``` according to your hyperparameters in ```args```.
+
+### Logging details
 For the logger to work properly, you want to supply all of your hyperparameters via command line arguments through argparser, and pass the resulting object to an instance of ```rl.utils.Logger```. Algorithms take care of their own diagnostic logging; if you don't wont to log anything, simply don't pass a logger object to ```algo.train()```.
 
 Beyond your algorithm hyperparameters, the Logger expects that you supply an argument named ```logdir```, containing the root directory you want to store your logfiles in, and an argument named ```seed```, which is used to seed the pseudorandom number generators.
@@ -46,6 +71,12 @@ This should open a tab to http://localhost:5006/bokeh_monitor in your browser. I
 Comming soon.
 
 
+### To Do
+- [ ] Make algorithms handle their own argument parsing
+- [ ] Launch monitor from run_experiment
+- [ ] Package everything
+- [ ] Clean up utils/
+
 
 
 ## Soon to be implemented:
@@ -78,10 +109,6 @@ Maybe implemented in future:
 * DXNN
 * ACER and other off-policy methods
 * Model-based methods
-
-In the pipeline:
-* ~Visdom~ Bokeh for progress tracking
-* Package everything
 
 Implemented:
 * VPG plus + baseline confirmed to be correct and fast.

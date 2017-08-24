@@ -1,7 +1,6 @@
 """Implementation of vanilla policy gradient."""
 import torch
 import torch.optim as optim
-from torch.autograd import Variable
 
 from rl.utils import center
 from rl.baselines import ZeroBaseline
@@ -17,11 +16,11 @@ class VPG(PolicyGradientAlgorithm):
     See: http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf
 
     Includes adaptive learning rate implementation mentioned in
-    Schulman et al 2017. See: https://arxiv.org/pdf/1707.06347.pdf
+    Schulman et al 2017.
+    [https://arxiv.org/pdf/1707.06347.pdf]
 
     Includes entropy bonus mentioned in Mnih et al 2016.
-
-    Includes GAE described in Schulman et al 2016.
+    [https://arxiv.org/pdf/1602.01783.pdf]
     """
 
     def __init__(self, env, policy, discount=0.99, lr=0.01, baseline=None):
@@ -36,8 +35,9 @@ class VPG(PolicyGradientAlgorithm):
 
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
+
     def train(self, n_itr, n_trj, max_trj_len, adaptive=True, desired_kl=2e-3,
-              explore_bonus=1e-4):
+              explore_bonus=1e-4, logger=None):
         env = self.env
         policy = self.policy
         for _ in range(n_itr):
@@ -79,12 +79,16 @@ class VPG(PolicyGradientAlgorithm):
                 elif mean_kl < desired_kl / 2:
                     lr_multiplier = 1 * 1.5
                 else:
-                    lr_multiplier = 1
+                    lr_multiplier = 1.0
 
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] *= lr_multiplier
 
-            print(
-                'Average Return: %f, iteration: %d' %
-                (np.mean(([p["rewards"].sum().data.numpy() for p in paths])), _)
-            )
+            mean_reward = np.mean(([p["rewards"].sum().data[0] for p in paths]))
+            mean_entropy = entropy.mean().data[0]
+
+            if logger is not None:
+                logger.record("Reward", mean_reward)
+                logger.record("Mean KL", mean_kl)
+                logger.record("Entropy", mean_entropy)
+                logger.dump()
