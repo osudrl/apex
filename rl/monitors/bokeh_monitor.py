@@ -2,8 +2,9 @@
 
 import os, sys, time
 from functools import partial
-from rl.utils import Monitor
 from threading import Thread
+
+from rl.utils import Monitor
 
 def monitor_loop(monitor, log_file, header):
     while True:
@@ -15,7 +16,6 @@ def monitor_loop(monitor, log_file, header):
         else:
             vals = line.rstrip('\n').split('\t')
             for i in range(len(vals)):
-                print("%s: %s" % (header[i], vals[i]))
                 monitor.update(header[i], vals[i])
             time.sleep(0.1)
 

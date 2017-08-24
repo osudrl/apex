@@ -27,9 +27,7 @@ algo = VPG(
 This script shows the basics of defining a model and setting up an algorithm. The recommended way to train the model, log diagnostics, and visualize the current policy all at once is to use the ```rl.utils.run_experiment()``` function.
 
 ```python
-logger = Logger(args)
-
-run_experiment(algo, args, render=True, logger=logger)
+run_experiment(algo, args, log=True, render=True)
 ```
 
 This sets up the logging, launches a progress monitor in your browser, renders the policy continuously in a seperate thread, and executes ```algo.train()``` according to your hyperparameters in ```args```.
@@ -58,7 +56,7 @@ This file structure makes it easy to compare models generated using the same hyp
 ## Monitoring live training progress
 
 ### With bokeh
-To manually monitor training progress in a browser using bokeh, run the following command, giving it the path to the active log file.
+Calling ```run_experiment()``` with ```monitor=True``` automatically launches a bokeh instance. To manually monitor training progress in a browser using bokeh, run the following command, giving it the path to the active log file.
 ```bash
 bokeh serve --show bokeh_monitor.py --args path/to/file.log
 ```
@@ -73,9 +71,10 @@ Comming soon.
 
 ### To Do
 - [ ] Make algorithms handle their own argument parsing
-- [ ] Launch monitor from run_experiment
 - [ ] Package everything
-- [ ] Clean up utils/
+- [ ] Clean up /utils/
+- [ ] Make baselines and models take in an env
+
 
 
 

@@ -73,7 +73,7 @@ class Monitor():
         if x is None:
             x = self.xtick[name]
             self.xtick[name] += 1
-        print(x)
+
         self.doc.add_next_tick_callback(
             partial(self._update, name=name, x=x, y=y)
         )

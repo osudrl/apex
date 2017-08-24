@@ -9,7 +9,7 @@ from rllab.envs.mujoco.walker2d_env import Walker2DEnv
 from rllab.envs.gym_env import GymEnv
 from rllab.envs.normalized_env import normalize
 
-from rl.utils import run_experiment, Logger
+from rl.utils import run_experiment
 from rl.policies import GaussianMLP
 from rl.baselines import FeatureEncodingBaseline
 from rl.algos import VPG
@@ -37,8 +37,6 @@ parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    logger = Logger(args)
-
     env = normalize(Walker2DEnv())
 
     #env.seed(args.seed)
@@ -57,4 +55,4 @@ if __name__ == "__main__":
         lr=args.lr,
     )
 
-    run_experiment(algo, args, render=True, logger=logger)
+    run_experiment(algo, args, log=True, monitor=True, render=True)

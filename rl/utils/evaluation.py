@@ -13,7 +13,12 @@ def renderpolicy(env, policy, trj_len, explore=False, speedup=1, dt=0.05):
 
         action = policy.get_action(obs_var, explore).data.numpy()
 
-        obs = env.step(action.ravel())[0].ravel()[None, :]
+        obs, _, done, _ = env.step(action.ravel())
+        obs = obs.ravel()[None, :]
+
+        if done:
+            break
+
         env.render()
         time.sleep(dt / speedup)
 
