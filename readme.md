@@ -10,20 +10,26 @@ An example of running an experiment using vanilla policy gradient is shown in ``
 
 
 ### Logging
-For the logger to work properly, you want to supply all of your hyperparameters via command line arguments through argparser, and pass the resulting object to an instance of ```rl.utils.Logger```. Beyond your algorithm hyperparameters, the Logger expects that you supply an argument named ```logdir```, containing the root directory you want to store your logfiles in, and an argument named ```seed```, which is used to seed the pseudorandom number generators.
+For the logger to work properly, you want to supply all of your hyperparameters via command line arguments through argparser, and pass the resulting object to an instance of ```rl.utils.Logger```. Algorithms take care of their own diagnostic logging; if you don't wont to log anything, simply don't pass a logger object to ```algo.train()```.
+
+Beyond your algorithm hyperparameters, the Logger expects that you supply an argument named ```logdir```, containing the root directory you want to store your logfiles in, and an argument named ```seed```, which is used to seed the pseudorandom number generators.
 
 An basic command line script illustrating this is:
 ```bash
 python examples/vpg.py --logdir experiments/ --seed l337
 ```
 
-The resulting
+The resulting directory tree would look something like this:
 ```
 experiments/
 └── e2374a18f0
     ├── experiment.info
-    └── seed1.log
+    └── seed1337.log
 ```
+With ```e2374a18f0``` being a hash uniquely generated from the hyperparameter values used, ```experiment.info``` being a plaintext file listing those hyperparameters, and ```seed1337.log``` being a tab-seperated-value file containing the logged diagnostics (e.g. reward, kl divergence, etc) for each iteration.
+
+This file structure makes it easy to compare models generated using the same hyperparameters but different seeds, and neatly seperates experiments by hyperparameter settings.
+
 ## Monitoring live training progress
 
 ### With bokeh
