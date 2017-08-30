@@ -19,7 +19,7 @@ class FeatureEncodingBaseline():
 
     def encode(self, observations):
         obs = torch.clamp(observations, -10, 10).data
-        t = torch.range(0, len(observations) - 1) / 100
+        t = torch.arange(0, len(observations)) / 100
         ones = torch.ones(t.size())
 
         t = t.unsqueeze(1)

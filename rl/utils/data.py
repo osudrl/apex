@@ -20,3 +20,20 @@ class SplitDataset(Dataset):
 
     def __getitem__(self, idx):
         return (self.X[idx], self.y[idx])
+
+
+class RLDataset(Dataset):
+    def __init__(self, observations, actions, advantages):
+        self.observations = observations.data
+        self.actions = actions.data
+        self.advantages = advantages.data
+
+    def __len__(self):
+        return self.advantages.numel()
+
+    def __getitem__(self, idx):
+        return (
+            self.observations[idx],
+            self.actions[idx],
+            self.advantages[idx]
+        )

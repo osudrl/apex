@@ -13,7 +13,7 @@ def run_experiment(algo, args, log=True, monitor=False, render=False):
 
     train_p = mp.Process(target=algo.train,
                          args=(args.n_itr, args.n_trj, args.max_trj_len),
-                         kwargs=dict(adaptive=True, logger=logger))
+                         kwargs=dict(logger=logger))
     train_p.start()
 
     if render:

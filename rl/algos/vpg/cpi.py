@@ -10,7 +10,6 @@ import numpy as np
 
 
 class CPI(PolicyGradientAlgorithm):
-
     def __init__(self, env, policy, tau=0.97, discount=0.99, lr=0.01,
                  baseline=None):
         self.env = env
@@ -63,9 +62,10 @@ class CPI(PolicyGradientAlgorithm):
                 distribution
             )
 
-            policy_loss = ratio * advantages
+            policy_loss = -(ratio * advantages).mean()
+            entropy_penalty = -(explore_bonus * entropy).mean()
 
-            total_loss = -(policy_loss + explore_bonus * entropy).mean()
+            total_loss = policy_loss + entropy_penalty
 
             self.optimizer.zero_grad()
             total_loss.backward()

@@ -71,17 +71,16 @@ Comming soon.
 
 ### To Do
 - [ ] Save models
-- [ ] Make algorithms handle their own argument parsing
+- [ ] Merge PPO and VPG
 - [ ] Package everything
 - [ ] Clean up /utils/
 - [ ] Make baselines and models take in an env
+- [ ] Refactor baselines. Name them critics and compose them in policies
 - [ ] use __all__ idiom
 
 
 ### Notes
 I'm not satisfied with the semantic clarity of how distribution is encapsulated/abstracted. I'll probably change it to something less confusing to read.
-
-
 
 
 ## Soon to be implemented:

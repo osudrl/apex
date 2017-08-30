@@ -12,7 +12,7 @@ from rllab.envs.normalized_env import normalize
 from rl.utils import run_experiment
 from rl.policies import GaussianMLP
 from rl.baselines import FeatureEncodingBaseline
-from rl.algos import VPG, CPI
+from rl.algos import PPO
 
 import gym
 import torch
@@ -20,7 +20,7 @@ import torch
 
 parser = argparse.ArgumentParser()
 
-CPI.add_arguments(parser)
+PPO.add_arguments(parser)
 
 parser.add_argument("--seed", type=int, default=1,
                     help="RNG seed")
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     policy = GaussianMLP(obs_dim, action_dim, (32,))
     baseline = FeatureEncodingBaseline(obs_dim)
 
-    algo = CPI(
+    algo = PPO(
         env=env,
         policy=policy,
         baseline=baseline,
@@ -53,6 +53,6 @@ if __name__ == "__main__":
         algo=algo,
         args=args,
         log=True,
-        monitor=True,
+        monitor=False,
         render=True
     )
