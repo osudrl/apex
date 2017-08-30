@@ -33,7 +33,7 @@ class DiagonalGaussian(Distribution):
 
     def copy(self):
         return DiagonalGaussian(
-            Variable(self.mu.data.clone()),
-            Variable(self.sigma.data.clone()),
-            Variable(self.log_sigma.data.clone())
+            self.mu.detach(),
+            self.sigma.detach(),
+            self.log_sigma.detach()
         )

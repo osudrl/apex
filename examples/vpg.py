@@ -12,28 +12,21 @@ from rllab.envs.normalized_env import normalize
 from rl.utils import run_experiment
 from rl.policies import GaussianMLP
 from rl.baselines import FeatureEncodingBaseline
-from rl.algos import VPG
+from rl.algos import VPG, CPI
 
 import gym
 import torch
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n_itr", type=int, default=1000,
-                    help="number of iterations of the learning algorithm")
-parser.add_argument("--max_trj_len", type=int, default=200,
-                    help="maximum trajectory length")
-parser.add_argument("--n_trj", type=int, default=100,
-                    help="number of sample trajectories per iteration")
-parser.add_argument("--lr", type=int, default=0.01,
-                    help="Adam learning rate")
-parser.add_argument("--desired_kl", type=int, default=0.01,
-                    help="Desired change in mean kl per iteration")
+
+CPI.add_arguments(parser)
 
 parser.add_argument("--seed", type=int, default=1,
                     help="random seed for experiment")
 parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
                     help="Where to log diagnostics to")
+
 args = parser.parse_args()
 
 if __name__ == "__main__":
@@ -45,14 +38,21 @@ if __name__ == "__main__":
     obs_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    policy = GaussianMLP(obs_dim, action_dim, (8,))
+    policy = GaussianMLP(obs_dim, action_dim, (32,))
     baseline = FeatureEncodingBaseline(obs_dim)
 
-    algo = VPG(
+    algo = CPI(
         env=env,
         policy=policy,
         baseline=baseline,
         lr=args.lr,
+        tau=args.tau
     )
 
-    run_experiment(algo, args, log=True, monitor=True, render=True)
+    run_experiment(
+        algo=algo,
+        args=args,
+        log=True,
+        monitor=True,
+        render=True
+    )

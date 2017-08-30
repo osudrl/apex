@@ -27,7 +27,7 @@ algo = VPG(
 This script shows the basics of defining a model and setting up an algorithm. The recommended way to train the model, log diagnostics, and visualize the current policy all at once is to use the ```rl.utils.run_experiment()``` function.
 
 ```python
-run_experiment(algo, args, log=True, render=True)
+run_experiment(algo, args, log=True, render=True, monitor=True)
 ```
 
 This sets up the logging, launches a progress monitor in your browser, renders the policy continuously in a seperate thread, and executes ```algo.train()``` according to your hyperparameters in ```args```.
@@ -70,10 +70,16 @@ Comming soon.
 
 
 ### To Do
+- [ ] Save models
 - [ ] Make algorithms handle their own argument parsing
 - [ ] Package everything
 - [ ] Clean up /utils/
 - [ ] Make baselines and models take in an env
+- [ ] use __all__ idiom
+
+
+### Notes
+I'm not satisfied with the semantic clarity of how distribution is encapsulated/abstracted. I'll probably change it to something less confusing to read.
 
 
 

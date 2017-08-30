@@ -1,9 +1,10 @@
+import atexit, os
+import os.path as osp
+from subprocess import Popen
 import torch.multiprocessing as mp
 from .evaluation import renderloop
 from .logging import Logger
-from subprocess import Popen
-import atexit, os
-import os.path as osp
+
 
 def run_experiment(algo, args, log=True, monitor=False, render=False):
     logger = Logger(args) if log else None
@@ -22,7 +23,7 @@ def run_experiment(algo, args, log=True, monitor=False, render=False):
 
     if monitor:
         assert log, \
-        "Log must also be set to True is monitor is set to True"
+        "Log must also be set to True if monitor is set to True"
 
         active_log = logger.output_file.name
         bokeh_dir = osp.join(os.getcwd(), 'rl', 'monitors', 'bokeh_monitor.py')
@@ -33,7 +34,6 @@ def run_experiment(algo, args, log=True, monitor=False, render=False):
         )
 
         atexit.register(monitor_proc.kill)
-
 
     train_p.join()
 

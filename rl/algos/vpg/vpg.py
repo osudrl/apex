@@ -35,6 +35,20 @@ class VPG(PolicyGradientAlgorithm):
 
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
+    @staticmethod
+    def add_arguments(parser):
+        parser.add_argument("--n_itr", type=int, default=1000,
+                            help="number of iterations of the learning algorithm")
+        parser.add_argument("--max_trj_len", type=int, default=200,
+                            help="maximum trajectory length")
+        parser.add_argument("--n_trj", type=int, default=100,
+                            help="number of sample trajectories per iteration")
+        parser.add_argument("--lr", type=int, default=0.01,
+                            help="Adam learning rate")
+        parser.add_argument("--desired_kl", type=int, default=0.01,
+                            help="Desired change in mean kl per iteration")
+        parser.add_argument("--tau", type=int, default=0.97,
+                            help="Generalized advantage estimate discount")
 
     def train(self, n_itr, n_trj, max_trj_len, adaptive=True, desired_kl=2e-3,
               explore_bonus=1e-4, logger=None):
