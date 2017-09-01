@@ -23,10 +23,11 @@ class SplitDataset(Dataset):
 
 
 class RLDataset(Dataset):
-    def __init__(self, observations, actions, advantages):
+    def __init__(self, observations, actions, advantages, returns):
         self.observations = observations.data
         self.actions = actions.data
         self.advantages = advantages.data
+        self.returns = returns.data
 
     def __len__(self):
         return self.advantages.numel()
@@ -35,5 +36,6 @@ class RLDataset(Dataset):
         return (
             self.observations[idx],
             self.actions[idx],
-            self.advantages[idx]
+            self.advantages[idx],
+            self.returns[idx]
         )

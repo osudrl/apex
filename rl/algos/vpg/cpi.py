@@ -1,4 +1,6 @@
 """Implements conservative policy iteration."""
+from copy import deepcopy
+
 import torch
 import torch.optim as optim
 
@@ -16,11 +18,6 @@ class CPI(PolicyGradientAlgorithm):
         self.policy = policy
         self.discount = discount
         self.tau = tau
-
-        if baseline is None:
-            self.baseline = ZeroBaseline()
-        else:
-            self.baseline = baseline
 
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
@@ -49,18 +46,24 @@ class CPI(PolicyGradientAlgorithm):
             observations = torch.cat([p["observations"] for p in paths])
             actions = torch.cat([p["actions"] for p in paths])
             advantages = torch.cat([p["advantages"] for p in paths])
+            returns = torch.cat([p["returns"] for p in paths])
 
             advantages = center(advantages)
 
-            distribution = policy.get_distribution(observations)
-            old_distribution = distribution.copy()
+            old_policy = deepcopy(policy)
 
-            entropy = distribution.entropy()
+            pd = policy.get_pdparams(observations)
+            old_pd = old_policy.get_pdparams(observations)
 
-            ratio = old_distribution.likelihood_ratio(
+            entropy = policy.distribution.entropy(pd)
+
+            ratio = policy.distribution.likelihood_ratio(
                 actions,
-                distribution
+                old_pd,
+                pd
             )
+
+            ratio = policy.distribution.log_likelihood(actions, pd)
 
             policy_loss = -(ratio * advantages).mean()
             entropy_penalty = -(explore_bonus * entropy).mean()
@@ -71,8 +74,14 @@ class CPI(PolicyGradientAlgorithm):
             total_loss.backward()
             self.optimizer.step()
 
-            self.baseline.fit(paths)
+            for _ in range(10):
+                critic = policy.get_critic(observations)
+                self.optimizer.zero_grad()
+                critic_loss = (critic - returns).pow(2).mean()
+                critic_loss.backward()
+                self.optimizer.step()
 
+            """
             new_distribution = policy.get_distribution(observations)
 
             kl_oldnew = old_distribution.kl_divergence(new_distribution)
@@ -90,12 +99,15 @@ class CPI(PolicyGradientAlgorithm):
 
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] *= lr_multiplier
+            """
 
             mean_reward = np.mean(([p["rewards"].sum().data[0] for p in paths]))
             mean_entropy = entropy.mean().data[0]
 
+            print(mean_reward)
+
             if logger is not None:
                 logger.record("Reward", mean_reward)
-                logger.record("Mean KL", mean_kl)
-                logger.record("Entropy", mean_entropy)
+                #logger.record("Mean KL", mean_kl)
+                #logger.record("Entropy", mean_entropy)
                 logger.dump()

@@ -1,4 +1,6 @@
 """Proximal Policy Optimization with the clip objective."""
+from copy import deepcopy
+
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -12,17 +14,11 @@ import numpy as np
 
 
 class PPO(PolicyGradientAlgorithm):
-    def __init__(self, env, policy, tau=0.95, discount=0.99, lr=3e-4,
-                 baseline=None):
+    def __init__(self, env, policy, tau=0.95, discount=0.99, lr=3e-4):
         self.env = env
         self.policy = policy
         self.discount = discount
         self.tau = tau
-
-        if baseline is None:
-            self.baseline = ZeroBaseline()
-        else:
-            self.baseline = baseline
 
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
@@ -51,38 +47,53 @@ class PPO(PolicyGradientAlgorithm):
             observations = torch.cat([p["observations"] for p in paths])
             actions = torch.cat([p["actions"] for p in paths])
             advantages = torch.cat([p["advantages"] for p in paths])
+            returns = torch.cat([p["returns"] for p in paths])
 
             advantages = center(advantages)
+            batch_size = observations.size()[0]
 
-            dataset = RLDataset(observations, actions, advantages)
+            dataset = RLDataset(observations, actions, advantages, returns)
             dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+            old_policy = deepcopy(policy)
             for _ in range(epochs):
-                for data in dataloader:
-                    obs_batch, action_batch, advantage_batch = map(Variable, data)
-                    distribution = policy.get_distribution(obs_batch)
-                    old_distribution = distribution.copy()
+                losses = []
 
-                    entropy = distribution.entropy()
+                for batch in dataloader:
+                    self.optimizer.zero_grad()
+                    obs, ac, adv, ret = map(Variable, batch)
 
-                    ratio = old_distribution.likelihood_ratio(
-                        action_batch,
-                        distribution
+                    pd = policy.get_pdparams(obs)
+                    old_pd = old_policy.get_pdparams(obs)
+
+                    ratio = policy.distribution.likelihood_ratio(
+                        ac,
+                        old_pd,
+                        pd
                     )
 
-                    cpi_loss = ratio * advantage_batch
+                    cpi_loss = ratio * adv
                     clip_loss = ratio.clamp(1.0 - epsilon, 1.0 + epsilon) \
-                                * advantage_batch
-
+                                * adv
                     ppo_loss = -torch.min(cpi_loss, clip_loss).mean()
+
+                    critic = policy.get_critic(obs)
+                    critic_loss = (critic - ret).pow(2).mean()
+
+                    entropy = policy.distribution.entropy(pd)
                     entropy_penalty = -(explore_bonus * entropy).mean()
 
-                    total_loss = ppo_loss + entropy_penalty
+                    total_loss = ppo_loss #+ critic_loss + entropy_penalty
 
-                    self.optimizer.zero_grad()
-                    total_loss.backward()
+                    ppo_loss.backward()
                     self.optimizer.step()
 
-            self.baseline.fit(paths)
+                    losses.append([ppo_loss.data.clone().numpy()[0],
+                                  entropy_penalty.data.numpy()[0],
+                                  critic_loss.data.numpy()[0],
+                                  ratio.data.mean()])
+
+                print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
             mean_reward = np.mean(([p["rewards"].sum().data[0] for p in paths]))
 

@@ -13,7 +13,7 @@ class Distribution():
     def sample(self):
         raise NotImplementedError
 
-    def likelihood_ratio(self, x, new):
-        old_logli = self.log_likelihood(x)
-        new_logli = new.log_likelihood(x)
+    def likelihood_ratio(self, actions, old, new):
+        old_logli = self.log_likelihood(actions, old)
+        new_logli = self.log_likelihood(actions, new)
         return torch.exp(new_logli - old_logli)

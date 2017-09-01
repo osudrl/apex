@@ -20,11 +20,13 @@ class PolicyGradientAlgorithm():
         rewards = []
         returns = []
         advantages = []
+        values = []
 
         obs = env.reset().ravel()[None, :]
-        for _ in range(max_trj_len):
-            obs_var = Variable(torch.Tensor(obs))
+        obs_var = Variable(torch.Tensor(obs))
 
+        values.append(policy.get_critic(obs_var))
+        for _ in range(max_trj_len):
             action = policy.get_action(obs_var)
 
             next_obs, reward, done, _ = env.step(action.data.numpy().ravel())
@@ -34,24 +36,21 @@ class PolicyGradientAlgorithm():
             rewards.append(Variable(torch.Tensor([reward])))
 
             obs = next_obs.ravel()[None, :]
+            obs_var = Variable(torch.Tensor(obs))
+
+            values.append(policy.get_critic(obs_var))
 
             if done:
                 break
 
         R = Variable(torch.zeros(1, 1))
         advantage = Variable(torch.zeros(1, 1))
-        baseline = Variable(self.baseline.predict(torch.cat(observations)))
-
-        # BUG: incorrect if done != true, will fix soon, really minor
-        # add 0 to baseline to prevent GAE from going out of bounds
-        baseline = torch.cat([baseline, R])
-
         for t in reversed(range(len(rewards))):
             R = self.discount * R + rewards[t]
 
             # generalized advantage estimation
             # see: https://arxiv.org/abs/1506.02438
-            delta = rewards[t] + self.discount * baseline[t + 1] - baseline[t]
+            delta = rewards[t] + self.discount * values[t + 1] - values[t]
             advantage = advantage * self.discount * self.tau + delta
 
             returns.append(R)

@@ -10,7 +10,7 @@ from rllab.envs.gym_env import GymEnv
 from rllab.envs.normalized_env import normalize
 
 from rl.utils import run_experiment
-from rl.policies import GaussianMLP
+from rl.policies import GaussianA2C
 from rl.baselines import FeatureEncodingBaseline
 from rl.algos import VPG, CPI
 
@@ -38,13 +38,11 @@ if __name__ == "__main__":
     obs_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    policy = GaussianMLP(obs_dim, action_dim, (32,))
-    baseline = FeatureEncodingBaseline(obs_dim)
+    policy = GaussianA2C(obs_dim, action_dim, (32,))
 
     algo = CPI(
         env=env,
         policy=policy,
-        baseline=baseline,
         lr=args.lr,
         tau=args.tau
     )
@@ -53,6 +51,6 @@ if __name__ == "__main__":
         algo=algo,
         args=args,
         log=True,
-        monitor=True,
-        render=True
+        monitor=False,
+        render=False
     )

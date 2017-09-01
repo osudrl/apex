@@ -10,8 +10,7 @@ from rllab.envs.gym_env import GymEnv
 from rllab.envs.normalized_env import normalize
 
 from rl.utils import run_experiment
-from rl.policies import GaussianMLP
-from rl.baselines import FeatureEncodingBaseline
+from rl.policies import GaussianA2C
 from rl.algos import PPO
 
 import gym
@@ -29,22 +28,28 @@ parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
 
 args = parser.parse_args()
 
-if __name__ == "__main__":
-    env = normalize(Walker2DEnv())
+def normc_init(m):
+    if isinstance(m, torch.nn.Linear):
+        out = torch.randn(m.weight.data.size())
+        out *= 1 / (out.pow(2)).sum(dim=1, keepdim=True).sqrt()
+        m.weight.data = out
+        m.bias.data *= 0
 
+if __name__ == "__main__":
+    #env = normalize(Walker2DEnv())
+    env = normalize(GymEnv("Walker2d-v1"))
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
     obs_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
-    policy = GaussianMLP(obs_dim, action_dim, (32,))
-    baseline = FeatureEncodingBaseline(obs_dim)
+    policy = GaussianA2C(obs_dim, action_dim, (32,))
+    #policy.apply(normc_init)
 
     algo = PPO(
         env=env,
         policy=policy,
-        baseline=baseline,
         lr=args.lr,
         tau=args.tau
     )
@@ -54,5 +59,5 @@ if __name__ == "__main__":
         args=args,
         log=True,
         monitor=False,
-        render=True
+        render=False
     )
