@@ -41,7 +41,9 @@ class PPO(PolicyGradientAlgorithm):
               explore_bonus=0.0, batch_size=64, logger=None):
         env = self.env
         policy = self.policy
-        for _ in range(n_itr):
+        for itr in range(n_itr):
+            print("********** Iteration %i ************" % itr)
+
             paths = [self.rollout(env, policy, max_trj_len) for _ in range(n_trj)]
 
             observations = torch.cat([p["observations"] for p in paths])
@@ -50,7 +52,6 @@ class PPO(PolicyGradientAlgorithm):
             returns = torch.cat([p["returns"] for p in paths])
 
             advantages = center(advantages)
-            batch_size = observations.size()[0]
 
             dataset = RLDataset(observations, actions, advantages, returns)
             dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -83,9 +84,9 @@ class PPO(PolicyGradientAlgorithm):
                     entropy = policy.distribution.entropy(pd)
                     entropy_penalty = -(explore_bonus * entropy).mean()
 
-                    total_loss = ppo_loss #+ critic_loss + entropy_penalty
+                    total_loss = ppo_loss + critic_loss + entropy_penalty
 
-                    ppo_loss.backward()
+                    total_loss.backward()
                     self.optimizer.step()
 
                     losses.append([ppo_loss.data.clone().numpy()[0],
