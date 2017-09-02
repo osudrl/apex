@@ -33,7 +33,7 @@ class PolicyGradientAlgorithm():
 
             observations.append(obs_var)
             actions.append(action)
-            rewards.append(Variable(torch.Tensor([reward])))
+            rewards.append(Variable(torch.Tensor([[reward]])))
 
             obs = next_obs.ravel()[None, :]
             obs_var = Variable(torch.Tensor(obs))

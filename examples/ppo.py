@@ -1,4 +1,12 @@
 """Python file for automatically running experiments from command line."""
+import sys, warnings, traceback, torch
+def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
+    sys.stderr.write(warnings.formatwarning(message, category, filename, lineno, line))
+    traceback.print_stack(sys._getframe(2))
+warnings.showwarning = warn_with_traceback; warnings.simplefilter('always', UserWarning);
+torch.utils.backcompat.broadcast_warning.enabled = True
+torch.utils.backcompat.keepdim_warning.enabled = True
+
 import argparse
 
 #from rllab.envs.box2d.cartpole_env import CartpoleEnv

@@ -38,7 +38,7 @@ class PPO(PolicyGradientAlgorithm):
                             help="Adjust learning rate based on kl divergence")
 
     def train(self, n_itr, n_trj, max_trj_len, epsilon=0.2, epochs=10,
-              explore_bonus=0.0, batch_size=64, logger=None):
+              explore_bonus=0.0, batch_size=0, logger=None):
         env = self.env
         policy = self.policy
         for itr in range(n_itr):
@@ -52,6 +52,9 @@ class PPO(PolicyGradientAlgorithm):
             returns = torch.cat([p["returns"] for p in paths])
 
             advantages = center(advantages)
+
+            batch_size = batch_size or advantages.size()[0]
+            print(batch_size)
 
             dataset = RLDataset(observations, actions, advantages, returns)
             dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
