@@ -71,49 +71,47 @@ Comming soon.
 
 ### To Do
 - [ ] Save models
-- [ ] Merge PPO and VPG
+- [ ] Merge CPI and VPG
 - [ ] Package everything
 - [ ] Clean up /utils/
 - [ ] Make baselines and models take in an env
-- [ ] Refactor baselines. Name them critics and compose them in policies
-- [ ] use __all__ idiom
+- [ ] use \_\_all\_\_ idiom
 
 
 ### Notes
 I'm not satisfied with the semantic clarity of how distribution is encapsulated/abstracted. I'll probably change it to something less confusing to read.
 
 
-## Soon to be implemented:
-
-* PPO
-* A3C
-* Parallelism
-* Beta distribution policy
-
-Bells and whistles:
-* GAE and TD(lambda) estimators
-* Variable step size for VPG (aka poor man's natural gradient)
+## Implemented:
+* [GAE](https://arxiv.org/abs/1506.02438)/TD(lambda) estimators
+* Variable step size for VPG (~roughly analagous to natural gradient, see PPO paper)
 * Entropy based exploration bonus
-* Observation and advantage centering
-* Pytorch wrapper for OpenAI Gym environments
+* advantage centering (observation normalization planned soon)
+* [PPO](https://arxiv.org/abs/1707.06347), VPG with ratio objective and with log likelihood objective
 
-To be implemented long term:
+### To be implemented soon:
 
-* DDPG
-* NAF
-* SVG
-* I2A
-* PGPE?
-* Noisy Nets for Exploration
+* [A2C](https://arxiv.org/abs/1602.01783) 
+* Parallelism
+* [Beta distribution policy](http://proceedings.mlr.press/v70/chou17a/chou17a.pdf)
+* [Parameter noise exploration](https://arxiv.org/abs/1706.01905)
+
+
+### To be implemented long term:
+
+* [DDPG](https://arxiv.org/abs/1509.02971)
+* [NAF](https://arxiv.org/abs/1603.00748)
+* [SVG](https://arxiv.org/abs/1510.09142)
+* [I2A](https://arxiv.org/abs/1707.06203)
+* [PGPE](http://ieeexplore.ieee.org/document/5708821/?reload=true)
+* [Value Distribution](https://arxiv.org/pdf/1707.06887.pdf)
+* Oracle methods (e.g. [GPS](https://arxiv.org/abs/1610.00529))
 * CUDA support (should be trivial but I don't have a GPU to test on currently)
 
-Maybe implemented in future:
+### Maybe implemented:
 
-* TRPO
-* DXNN
-* ACER and other off-policy methods
+* [TRPO](https://arxiv.org/abs/1502.05477)
+* [DXNN](https://arxiv.org/abs/1008.2412)
+* [ACER](https://arxiv.org/abs/1611.01224) and other off-policy methods
 * Model-based methods
 
-Implemented:
-* VPG plus + baseline confirmed to be correct and fast.
-* No baseline implementation to test against, but adaptive VPG appears correct.
