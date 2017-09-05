@@ -76,20 +76,20 @@ Comming soon.
 - [ ] Clean up /utils/
 - [ ] Make baselines and models take in an env
 - [ ] use \_\_all\_\_ idiom
-
+- [ ] fix bug with GAE not updating critic correctly
 
 ### Notes
 I'm not satisfied with the semantic clarity of how distribution is encapsulated/abstracted. I'll probably change it to something less confusing to read.
 
 
-## Implemented:
+## Features:
 * [GAE](https://arxiv.org/abs/1506.02438)/TD(lambda) estimators
 * Variable step size for VPG (~roughly analagous to natural gradient, see PPO paper)
 * Entropy based exploration bonus
 * advantage centering (observation normalization planned soon)
 * [PPO](https://arxiv.org/abs/1707.06347), VPG with ratio objective and with log likelihood objective
 
-### To be implemented soon:
+#### To be implemented soon:
 
 * [A2C](https://arxiv.org/abs/1602.01783) 
 * Parallelism
@@ -97,7 +97,7 @@ I'm not satisfied with the semantic clarity of how distribution is encapsulated/
 * [Parameter noise exploration](https://arxiv.org/abs/1706.01905)
 
 
-### To be implemented long term:
+#### To be implemented long term:
 
 * [DDPG](https://arxiv.org/abs/1509.02971)
 * [NAF](https://arxiv.org/abs/1603.00748)
@@ -108,7 +108,7 @@ I'm not satisfied with the semantic clarity of how distribution is encapsulated/
 * Oracle methods (e.g. [GPS](https://arxiv.org/abs/1610.00529))
 * CUDA support (should be trivial but I don't have a GPU to test on currently)
 
-### Maybe implemented:
+#### Maybe implemented in future:
 
 * [TRPO](https://arxiv.org/abs/1502.05477)
 * [DXNN](https://arxiv.org/abs/1008.2412)
