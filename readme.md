@@ -77,6 +77,7 @@ Comming soon.
 - [ ] Make baselines and models take in an env
 - [ ] use \_\_all\_\_ idiom
 - [ ] fix bug with GAE not updating critic correctly
+- [ ] Sphinx documentation and github wiki
 
 ### Notes
 I'm not satisfied with the semantic clarity of how distribution is encapsulated/abstracted. I'll probably change it to something less confusing to read.
