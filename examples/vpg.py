@@ -30,7 +30,9 @@ parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    env = normalize(Walker2DEnv())
+    #env = normalize(Walker2DEnv())
+
+    env = gym.make("Walker2d-v1")
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
@@ -52,5 +54,5 @@ if __name__ == "__main__":
         args=args,
         log=True,
         monitor=False,
-        render=False
+        render=True
     )

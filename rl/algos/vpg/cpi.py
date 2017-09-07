@@ -81,10 +81,7 @@ class CPI(PolicyGradientAlgorithm):
                 critic_loss.backward()
                 self.optimizer.step()
 
-            """
-            new_distribution = policy.get_distribution(observations)
-
-            kl_oldnew = old_distribution.kl_divergence(new_distribution)
+            kl_oldnew = policy.distribution.kl_divergence(old_pd, pd)
 
             mean_kl = kl_oldnew.mean().data[0]
 
@@ -99,15 +96,12 @@ class CPI(PolicyGradientAlgorithm):
 
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] *= lr_multiplier
-            """
 
             mean_reward = np.mean(([p["rewards"].sum().data[0] for p in paths]))
             mean_entropy = entropy.mean().data[0]
 
-            print(mean_reward)
-
             if logger is not None:
                 logger.record("Reward", mean_reward)
-                #logger.record("Mean KL", mean_kl)
-                #logger.record("Entropy", mean_entropy)
+                logger.record("Mean KL", mean_kl)
+                logger.record("Entropy", mean_entropy)
                 logger.dump()

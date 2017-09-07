@@ -25,7 +25,7 @@ class PolicyGradientAlgorithm():
         obs = env.reset().ravel()[None, :]
         obs_var = Variable(torch.Tensor(obs))
 
-        values.append(policy.get_critic(obs_var))
+        values.append(self.critic(obs_var))
         for _ in range(max_trj_len):
             action = policy.get_action(obs_var)
 
@@ -38,7 +38,7 @@ class PolicyGradientAlgorithm():
             obs = next_obs.ravel()[None, :]
             obs_var = Variable(torch.Tensor(obs))
 
-            values.append(policy.get_critic(obs_var))
+            values.append(self.critic(obs_var))
 
             if done:
                 break
@@ -61,5 +61,6 @@ class PolicyGradientAlgorithm():
             returns=torch.cat(returns[::-1]),
             advantages=torch.cat(advantages[::-1]),
             observations=torch.cat(observations),
-            actions=torch.cat(actions)
+            actions=torch.cat(actions),
+            tdlamret=torch.cat(advantages[::-1]) + torch.cat(values[:-1])
         )

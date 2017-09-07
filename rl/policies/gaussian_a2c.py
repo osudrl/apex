@@ -20,7 +20,7 @@ class GaussianA2C(nn.Module):
     """
 
     def __init__(self, obs_dim, action_dim,  hidden_dims=(32, 32),
-                 init_std=1.0, nonlin=F.tanh, optimizer=optim.Adam):
+                 init_std=1.0, nonlin=F.tanh):
 
         super(GaussianA2C, self).__init__()
 
@@ -93,4 +93,4 @@ class GaussianA2C(nn.Module):
 
     def get_critic(self, states):
         _, _, _, critic = self(states)
-        return critic * 0
+        return critic

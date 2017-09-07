@@ -17,8 +17,8 @@ class GaussianMLP(nn.Module):
     learned (but state invariant) standard deviation.
     """
 
-    def __init__(self, obs_dim, action_dim,  hidden_dims=(32, 32),
-                 init_std=1.0, nonlin=F.tanh, optimizer=optim.Adam):
+    def __init__(self, obs_dim, action_dim,  hidden_dims=(64, 64),
+                 init_std=1.0, nonlin=F.tanh):
 
         super(GaussianMLP, self).__init__()
 
@@ -53,22 +53,25 @@ class GaussianMLP(nn.Module):
 
         return means, log_stds, stds
 
-    def _update(self, observations):
-        means, log_stds, stds = self(observations)
-
-        self.distribution.mu = means
-        self.distribution.log_sigma = log_stds
-        self.distribution.sigma = stds
-
     def get_action(self, obs, stochastic=True):
-        self._update(obs)
+        means, log_stds, stds = self(obs)
+
+        params = dict(
+            mu=means,
+            sigma=stds,
+            log_sigma=log_stds
+        )
 
         if not stochastic:
-            return self.distribution.mu
+            return params["mu"]
 
-        return self.distribution.sample()
+        return self.distribution.sample(params)
 
-    def get_distribution(self, observations):
-        self._update(observations)
+    def get_pdparams(self, observations):
+        means, log_stds, stds = self(observations)
 
-        return self.distribution
+        return dict(
+            mu=means,
+            sigma=stds,
+            log_sigma=log_stds
+        )

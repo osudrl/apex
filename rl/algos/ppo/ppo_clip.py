@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
 from rl.utils import center, RLDataset
-from rl.baselines import ZeroBaseline
+from rl.baselines import ZeroBaseline, Critic
 from ..base import PolicyGradientAlgorithm
 
 import numpy as np
@@ -20,7 +20,11 @@ class PPO(PolicyGradientAlgorithm):
         self.discount = discount
         self.tau = tau
 
-        self.optimizer = optim.Adam(policy.parameters(), lr=lr)
+        self.critic = Critic(env.observation_space.shape[0])
+        self.optimizer = optim.Adam(
+            list(policy.parameters()) + list(self.critic.parameters()),
+            lr=lr)
+
 
     @staticmethod
     def add_arguments(parser):
@@ -38,7 +42,7 @@ class PPO(PolicyGradientAlgorithm):
                             help="Adjust learning rate based on kl divergence")
 
     def train(self, n_itr, n_trj, max_trj_len, epsilon=0.2, epochs=10,
-              explore_bonus=0.0, batch_size=0, logger=None):
+              explore_bonus=0.0, batch_size=64, logger=None):
         env = self.env
         policy = self.policy
         for itr in range(n_itr):
@@ -54,7 +58,7 @@ class PPO(PolicyGradientAlgorithm):
             advantages = center(advantages)
 
             batch_size = batch_size or advantages.size()[0]
-            print(batch_size)
+            print("timesteps in batch: %i" % advantages.size()[0])
 
             dataset = RLDataset(observations, actions, advantages, returns)
             dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -62,7 +66,7 @@ class PPO(PolicyGradientAlgorithm):
             old_policy = deepcopy(policy)
             for _ in range(epochs):
                 losses = []
-
+                l = []
                 for batch in dataloader:
                     self.optimizer.zero_grad()
                     obs, ac, adv, ret = map(Variable, batch)
@@ -81,13 +85,14 @@ class PPO(PolicyGradientAlgorithm):
                                 * adv
                     ppo_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-                    critic = policy.get_critic(obs)
+                    critic = self.critic(obs)
                     critic_loss = (critic - ret).pow(2).mean()
+                    l.append(critic_loss.data[0])
 
                     entropy = policy.distribution.entropy(pd)
                     entropy_penalty = -(explore_bonus * entropy).mean()
 
-                    total_loss = ppo_loss + critic_loss + entropy_penalty
+                    total_loss = ppo_loss + entropy_penalty# + critic_loss
 
                     total_loss.backward()
                     self.optimizer.step()
@@ -98,6 +103,7 @@ class PPO(PolicyGradientAlgorithm):
                                   ratio.data.mean()])
 
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
+                print(sum(l)/len(l))
 
             mean_reward = np.mean(([p["rewards"].sum().data[0] for p in paths]))
 
