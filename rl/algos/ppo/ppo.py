@@ -4,6 +4,7 @@ from copy import deepcopy
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.autograd import Variable
 
 from rl.utils import center, RLDataset
@@ -25,7 +26,6 @@ class PPO(PolicyGradientAlgorithm):
             list(policy.parameters()) + list(self.critic.parameters()),
             lr=lr)
 
-
     @staticmethod
     def add_arguments(parser):
         parser.add_argument("--n_itr", type=int, default=1000,
@@ -42,68 +42,74 @@ class PPO(PolicyGradientAlgorithm):
                             help="Adjust learning rate based on kl divergence")
 
     def train(self, n_itr, n_trj, max_trj_len, epsilon=0.2, epochs=10,
-              explore_bonus=0.0, batch_size=64, logger=None):
+              explore_bonus=0.0, batch_size=0, logger=None):
         env = self.env
         policy = self.policy
+        old_policy = deepcopy(policy)
+
+        critic = self.critic
+
         for itr in range(n_itr):
             print("********** Iteration %i ************" % itr)
 
             paths = [self.rollout(env, policy, max_trj_len) for _ in range(n_trj)]
 
-            observations = torch.cat([p["observations"] for p in paths])
-            actions = torch.cat([p["actions"] for p in paths])
-            advantages = torch.cat([p["advantages"] for p in paths])
-            returns = torch.cat([p["returns"] for p in paths])
+            observations = torch.cat([p["observations"] for p in paths]).detach()
+            actions = torch.cat([p["actions"] for p in paths]).detach()
+            advantages = torch.cat([p["advantages"] for p in paths]).detach()
+            returns = torch.cat([p["returns"] for p in paths]).detach()
 
             advantages = center(advantages)
 
-            batch_size = batch_size or advantages.size()[0]
+            batch_size = batch_size or advantages.numel()
             print("timesteps in batch: %i" % advantages.size()[0])
 
-            dataset = RLDataset(observations, actions, advantages, returns)
-            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
+            if hasattr(policy, 'obs_filter'):
+                old_policy.obs_filter = policy.obs_filter
 
-            old_policy = deepcopy(policy)
             for _ in range(epochs):
                 losses = []
-                l = []
-                for batch in dataloader:
-                    self.optimizer.zero_grad()
-                    obs, ac, adv, ret = map(Variable, batch)
+                sampler = BatchSampler(
+                    SubsetRandomSampler(range(advantages.numel())),
+                    batch_size,
+                    drop_last=False
+                )
 
-                    pd = policy.get_pdparams(obs)
-                    old_pd = old_policy.get_pdparams(obs)
+                for indices in sampler:
+                    indices = torch.LongTensor(indices)
+
+                    pd = policy.get_pdparams(observations[indices])
+                    old_pd = old_policy.get_pdparams(observations[indices])
 
                     ratio = policy.distribution.likelihood_ratio(
-                        ac,
+                        actions[indices],
                         old_pd,
                         pd
                     )
 
-                    cpi_loss = ratio * adv
+                    cpi_loss = ratio * advantages[indices]
                     clip_loss = ratio.clamp(1.0 - epsilon, 1.0 + epsilon) \
-                                * adv
+                                * advantages[indices]
                     ppo_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-                    critic = self.critic(obs)
-                    critic_loss = (critic - ret).pow(2).mean()
-                    l.append(critic_loss.data[0])
+                    critic_loss = (critic(observations[indices]) - returns[indices]).pow(2).mean()
 
                     entropy = policy.distribution.entropy(pd)
                     entropy_penalty = -(explore_bonus * entropy).mean()
 
-                    total_loss = ppo_loss + entropy_penalty# + critic_loss
+                    total_loss = ppo_loss + entropy_penalty + critic_loss
 
+                    self.optimizer.zero_grad()
                     total_loss.backward()
                     self.optimizer.step()
 
                     losses.append([ppo_loss.data.clone().numpy()[0],
-                                  entropy_penalty.data.numpy()[0],
-                                  critic_loss.data.numpy()[0],
-                                  ratio.data.mean()])
+                                   entropy_penalty.data.numpy()[0],
+                                   critic_loss.data.numpy()[0],
+                                   ratio.data.mean()])
 
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
-                print(sum(l)/len(l))
 
             mean_reward = np.mean(([p["rewards"].sum().data[0] for p in paths]))
 

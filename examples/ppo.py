@@ -37,17 +37,6 @@ parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
 
 args = parser.parse_args()
 
-"""
-This is how schulman et al initialize their weights.
-"""
-def normc_init(m):
-    if isinstance(m, torch.nn.Linear):
-        out = torch.randn(m.weight.data.size())
-        out *= 1 / (out.pow(2)).sum(dim=1, keepdim=True).sqrt()
-        m.weight.data = out
-        m.bias.data *= 0
-
-
 if __name__ == "__main__":
     env = normalize(Walker2DEnv())
     #env = normalize(GymEnv("Walker2d-v1"))
@@ -61,7 +50,6 @@ if __name__ == "__main__":
     action_dim = env.action_space.shape[0]
 
     policy = GaussianMLP(obs_dim, action_dim)
-    policy.apply(normc_init)
 
     algo = PPO(
         env=env,

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
+from .running_stat import ObsNorm
 
 import numpy as np
 
@@ -24,6 +25,14 @@ class GaussianA2C(nn.Module):
 
         super(GaussianA2C, self).__init__()
 
+        def weights_init(m):
+            classname = m.__class__.__name__
+            if classname.find('Conv') != -1 or classname.find('Linear') != -1:
+                nn.init.orthogonal(m.weight.data)
+                if m.bias is not None:
+                    m.bias.data.fill_(0)
+
+        self.obs_filter = ObsNorm((1, obs_dim), clip=5)
         self.critic = None
 
         self.distribution = DiagonalGaussian()
@@ -49,9 +58,12 @@ class GaussianA2C(nn.Module):
 
         self.vf = nn.Linear(hidden_dims[-1], 1) # value function estimator
 
+        self.apply(weights_init)
+
         self.nonlin = nonlin
 
     def forward(self, x):
+        x.data = self.obs_filter(x.data)
         output = x
         for l in self.hidden_layers_actor:
             output = self.nonlin(l(output))

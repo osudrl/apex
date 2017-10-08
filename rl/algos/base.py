@@ -12,7 +12,7 @@ class PolicyGradientAlgorithm():
     def add_arguments(parser):
         raise NotImplementedError
 
-    def rollout(self, env, policy, max_trj_len):
+    def rollout(self, env, policy, max_trj_len, critic_target="td_lambda"):
         """Collect a single rollout."""
 
         observations = []
@@ -56,11 +56,18 @@ class PolicyGradientAlgorithm():
             returns.append(R)
             advantages.append(advantage)
 
+        # GAE paper, footnote 2
+        if critic_target == "td_lambda":
+            returns = torch.cat(advantages[::-1]) + torch.cat(values[:-1])
+
+        # GAE paper, equation 28
+        elif critic_target == "td_one":
+            returns = torch.cat(returns[::-1])
+
         return dict(
+            returns=returns,
             rewards=torch.stack(rewards),
-            returns=torch.cat(returns[::-1]),
             advantages=torch.cat(advantages[::-1]),
             observations=torch.cat(observations),
             actions=torch.cat(actions),
-            tdlamret=torch.cat(advantages[::-1]) + torch.cat(values[:-1])
         )
