@@ -21,7 +21,7 @@ class DiagonalGaussian(Distribution):
         return kl.sum(1, keepdim=True)
 
     def entropy(self, params):
-        return (params["log_sigma"] + np.log(np.sqrt(2 * np.pi * np.e))).sum(1, keepdim=True)
+        return (params["log_sigma"] + np.log(np.sqrt(2 * np.pi * np.e))).sum(-1).mean()
 
     def sample(self, params):
         action = torch.normal(params["mu"], params["sigma"])

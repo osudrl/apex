@@ -51,6 +51,7 @@ class GaussianA2C(nn.Module):
             self.hidden_layers_critic += [nn.Linear(in_dim, out_dim)]
 
         self.means = nn.Linear(hidden_dims[-1], action_dim)
+        self.means.weight.data.mul_(0.01)
 
         self.log_stds = nn.Parameter(
             torch.ones(1, action_dim) * np.log(init_std)
@@ -59,7 +60,6 @@ class GaussianA2C(nn.Module):
         self.vf = nn.Linear(hidden_dims[-1], 1) # value function estimator
 
         self.apply(weights_init)
-
         self.nonlin = nonlin
 
     def forward(self, x):

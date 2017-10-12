@@ -23,7 +23,7 @@ class PPO(PolicyGradientAlgorithm):
 
         self.critic = Critic(env.observation_space.shape[0])
         self.optimizer = optim.Adam(
-            list(policy.parameters()) + list(self.critic.parameters()),
+            policy.parameters(),
             lr=lr)
 
     @staticmethod
@@ -47,8 +47,6 @@ class PPO(PolicyGradientAlgorithm):
         policy = self.policy
         old_policy = deepcopy(policy)
 
-        critic = self.critic
-
         for itr in range(n_itr):
             print("********** Iteration %i ************" % itr)
 
@@ -59,7 +57,7 @@ class PPO(PolicyGradientAlgorithm):
             advantages = torch.cat([p["advantages"] for p in paths]).detach()
             returns = torch.cat([p["returns"] for p in paths]).detach()
 
-            advantages = center(advantages)
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
 
             batch_size = batch_size or advantages.numel()
             print("timesteps in batch: %i" % advantages.size()[0])
@@ -79,33 +77,34 @@ class PPO(PolicyGradientAlgorithm):
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
 
-                    pd = policy.get_pdparams(observations[indices])
-                    old_pd = old_policy.get_pdparams(observations[indices])
-
-                    ratio = policy.distribution.likelihood_ratio(
-                        actions[indices],
-                        old_pd,
-                        pd
+                    values, action_log_probs, _ = policy.evaluate_actions(
+                        observations[indices],
+                        actions[indices]
                     )
+
+                    _, old_action_log_probs, _ = old_policy.evaluate_actions(
+                        observations[indices],
+                        actions[indices]
+                    )
+
+                    ratio = torch.exp(action_log_probs - old_action_log_probs)
 
                     cpi_loss = ratio * advantages[indices]
                     clip_loss = ratio.clamp(1.0 - epsilon, 1.0 + epsilon) \
                                 * advantages[indices]
-                    ppo_loss = -torch.min(cpi_loss, clip_loss).mean()
+                    actor_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-                    critic_loss = (critic(observations[indices]) - returns[indices]).pow(2).mean()
+                    critic_loss = (returns[indices] - values).pow(2).mean()
 
-                    entropy = policy.distribution.entropy(pd)
-                    entropy_penalty = -(explore_bonus * entropy).mean()
-
-                    total_loss = ppo_loss + entropy_penalty + critic_loss
+                    #entropy = policy.distribution.entropy(pd)
+                    #entropy_penalty = -explore_bonus * entropy
 
                     self.optimizer.zero_grad()
-                    total_loss.backward()
+                    (actor_loss + critic_loss).backward()
                     self.optimizer.step()
 
-                    losses.append([ppo_loss.data.clone().numpy()[0],
-                                   entropy_penalty.data.numpy()[0],
+                    losses.append([actor_loss.data.clone().numpy()[0],
+                                   #entropy_penalty.data.numpy()[0],
                                    critic_loss.data.numpy()[0],
                                    ratio.data.mean()])
 

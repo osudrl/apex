@@ -25,9 +25,8 @@ class PolicyGradientAlgorithm():
         obs = env.reset().ravel()[None, :]
         obs_var = Variable(torch.Tensor(obs))
 
-        values.append(self.critic(obs_var))
         for _ in range(max_trj_len):
-            action = policy.get_action(obs_var)
+            value, action = policy.act(obs_var)
 
             next_obs, reward, done, _ = env.step(action.data.numpy().ravel())
 
@@ -38,10 +37,11 @@ class PolicyGradientAlgorithm():
             obs = next_obs.ravel()[None, :]
             obs_var = Variable(torch.Tensor(obs))
 
-            values.append(self.critic(obs_var))
+            values.append(value)
 
             if done:
                 break
+        values.append(policy.act(obs_var)[0])
 
         R = Variable(torch.zeros(1, 1))
         advantage = Variable(torch.zeros(1, 1))
@@ -53,9 +53,10 @@ class PolicyGradientAlgorithm():
             delta = rewards[t] + self.discount * values[t + 1] - values[t]
             advantage = advantage * self.discount * self.tau + delta
 
-            returns.append(R)
+            #returns.append(R)
+            returns.append(advantage + values[t])
             advantages.append(advantage)
-
+        """
         # GAE paper, footnote 2
         if critic_target == "td_lambda":
             returns = torch.cat(advantages[::-1]) + torch.cat(values[:-1])
@@ -63,7 +64,8 @@ class PolicyGradientAlgorithm():
         # GAE paper, equation 28
         elif critic_target == "td_one":
             returns = torch.cat(returns[::-1])
-
+        """
+        returns = torch.cat(returns[::-1])
         return dict(
             returns=returns,
             rewards=torch.stack(rewards),
