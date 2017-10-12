@@ -3,12 +3,9 @@ from copy import deepcopy
 
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.autograd import Variable
 
-from rl.utils import center, RLDataset
-from rl.baselines import ZeroBaseline, Critic
 from ..base import PolicyGradientAlgorithm
 
 import numpy as np
@@ -21,7 +18,6 @@ class PPO(PolicyGradientAlgorithm):
         self.discount = discount
         self.tau = tau
 
-        self.critic = Critic(env.observation_space.shape[0])
         self.optimizer = optim.Adam(
             policy.parameters(),
             lr=lr)
