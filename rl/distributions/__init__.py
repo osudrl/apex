@@ -1,1 +1,1 @@
-from .diagonal_gaussian import DiagonalGaussian
+from .gaussian import DiagonalGaussian

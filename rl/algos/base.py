@@ -33,7 +33,6 @@ class PolicyGradientAlgorithm():
             observations.append(obs_var)
             actions.append(action)
 
-            print(torch.Tensor([[reward]])).size())
             rewards.append(Variable(torch.Tensor([[reward]])))
 
             obs = next_obs.ravel()[None, :]
@@ -43,6 +42,7 @@ class PolicyGradientAlgorithm():
 
             if done:
                 break
+
         values.append(policy.act(obs_var)[0])
 
         R = Variable(torch.zeros(1, 1))
@@ -67,11 +67,10 @@ class PolicyGradientAlgorithm():
         elif critic_target == "td_one":
             returns = torch.cat(returns[::-1])
         """
-        returns = torch.cat(returns[::-1])
         return dict(
-            returns=returns,
-            rewards=torch.stack(rewards),
-            advantages=torch.cat(advantages[::-1]),
-            observations=torch.cat(observations),
-            actions=torch.cat(actions),
+            rewards=torch.cat(rewards),
+            returns=torch.cat(returns).detach(),
+            advantages=torch.cat(advantages).detach(),
+            observations=torch.cat(observations).detach(),
+            actions=torch.cat(actions).detach(),
         )

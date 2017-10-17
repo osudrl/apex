@@ -48,10 +48,10 @@ class PPO(PolicyGradientAlgorithm):
 
             paths = [self.rollout(env, policy, max_trj_len) for _ in range(n_trj)]
 
-            observations = torch.cat([p["observations"] for p in paths]).detach()
-            actions = torch.cat([p["actions"] for p in paths]).detach()
-            advantages = torch.cat([p["advantages"] for p in paths]).detach()
-            returns = torch.cat([p["returns"] for p in paths]).detach()
+            observations = torch.cat([p["observations"] for p in paths])
+            actions = torch.cat([p["actions"] for p in paths])
+            returns = torch.cat([p["returns"] for p in paths])
+            advantages = torch.cat([p["advantages"] for p in paths])
 
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
 
@@ -60,6 +60,7 @@ class PPO(PolicyGradientAlgorithm):
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
             if hasattr(policy, 'obs_filter'):
+                #policy.obs_filter.update(observations.data)
                 old_policy.obs_filter = policy.obs_filter
 
             for _ in range(epochs):
