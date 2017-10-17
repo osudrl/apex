@@ -18,9 +18,7 @@ class PPO(PolicyGradientAlgorithm):
         self.discount = discount
         self.tau = tau
 
-        self.optimizer = optim.Adam(
-            policy.parameters(),
-            lr=lr)
+        self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
     @staticmethod
     def add_arguments(parser):
@@ -38,7 +36,7 @@ class PPO(PolicyGradientAlgorithm):
                             help="Adjust learning rate based on kl divergence")
 
     def train(self, n_itr, n_trj, max_trj_len, epsilon=0.2, epochs=10,
-              explore_bonus=0.0, batch_size=0, logger=None):
+              explore_bonus=0.0, batch_size=64, logger=None):
         env = self.env
         policy = self.policy
         old_policy = deepcopy(policy)
@@ -60,7 +58,7 @@ class PPO(PolicyGradientAlgorithm):
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
             if hasattr(policy, 'obs_filter'):
-                #policy.obs_filter.update(observations.data)
+                policy.obs_filter.update(observations.data)
                 old_policy.obs_filter = policy.obs_filter
 
             for _ in range(epochs):
@@ -83,6 +81,7 @@ class PPO(PolicyGradientAlgorithm):
                         observations[indices],
                         actions[indices]
                     )
+
                     old_action_log_probs = Variable(old_action_log_probs.data)
 
                     ratio = torch.exp(action_log_probs - old_action_log_probs)
@@ -93,9 +92,6 @@ class PPO(PolicyGradientAlgorithm):
                     actor_loss = -torch.min(cpi_loss, clip_loss).mean()
 
                     critic_loss = (returns[indices] - values).pow(2).mean()
-
-                    #entropy = policy.distribution.entropy(pd)
-                    #entropy_penalty = -explore_bonus * entropy
 
                     self.optimizer.zero_grad()
                     (actor_loss + critic_loss).backward()

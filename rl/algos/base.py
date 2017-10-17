@@ -69,8 +69,8 @@ class PolicyGradientAlgorithm():
         """
         return dict(
             rewards=torch.cat(rewards),
-            returns=torch.cat(returns).detach(),
-            advantages=torch.cat(advantages).detach(),
+            returns=torch.cat(returns[::-1]).detach(),
+            advantages=torch.cat(advantages[::-1]).detach(),
             observations=torch.cat(observations).detach(),
             actions=torch.cat(actions).detach(),
         )
