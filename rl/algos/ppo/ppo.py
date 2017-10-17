@@ -82,6 +82,7 @@ class PPO(PolicyGradientAlgorithm):
                         observations[indices],
                         actions[indices]
                     )
+                    old_action_log_probs = Variable(old_action_log_probs.data)
 
                     ratio = torch.exp(action_log_probs - old_action_log_probs)
 

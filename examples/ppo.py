@@ -48,9 +48,9 @@ if __name__ == "__main__":
     #torch.manual_seed(args.seed)
 
     obs_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
+    action_space = env.action_space
 
-    policy = GaussianMLP(obs_dim, action_dim)
+    policy = GaussianMLP(obs_dim, action_space)
 
     algo = PPO(
         env=env,

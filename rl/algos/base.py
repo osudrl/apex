@@ -32,6 +32,8 @@ class PolicyGradientAlgorithm():
 
             observations.append(obs_var)
             actions.append(action)
+
+            print(torch.Tensor([[reward]])).size())
             rewards.append(Variable(torch.Tensor([[reward]])))
 
             obs = next_obs.ravel()[None, :]
