@@ -43,14 +43,9 @@ class PPO(PolicyGradientAlgorithm):
 
         for itr in range(n_itr):
             print("********** Iteration %i ************" % itr)
-
-            paths = [self.rollout(env, policy, max_trj_len) for _ in range(n_trj)]
-
-            observations = torch.cat([p["observations"] for p in paths])
-            actions = torch.cat([p["actions"] for p in paths])
-            returns = torch.cat([p["returns"] for p in paths])
-            advantages = torch.cat([p["advantages"] for p in paths])
-
+            observations, actions, returns, values, epr = self.sample_steps(env, policy, 2048)
+            
+            advantages = returns - values
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
 
             batch_size = batch_size or advantages.numel()
@@ -58,7 +53,6 @@ class PPO(PolicyGradientAlgorithm):
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
             if hasattr(policy, 'obs_filter'):
-                policy.obs_filter.update(observations.data)
                 old_policy.obs_filter = policy.obs_filter
 
             for _ in range(epochs):
@@ -72,26 +66,31 @@ class PPO(PolicyGradientAlgorithm):
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
 
+                    obs_batch = observations[indices]
+                    action_batch = actions[indices]
+
+                    return_batch = Variable(returns[indices])
+                    advantage_batch = Variable(advantages[indices])
+
                     values, action_log_probs, _ = policy.evaluate_actions(
-                        observations[indices],
-                        actions[indices]
+                        Variable(obs_batch),
+                        Variable(action_batch)
                     )
 
                     _, old_action_log_probs, _ = old_policy.evaluate_actions(
-                        observations[indices],
-                        actions[indices]
+                        Variable(obs_batch, volatile=True),
+                        Variable(action_batch, volatile=True)
                     )
 
                     old_action_log_probs = Variable(old_action_log_probs.data)
 
                     ratio = torch.exp(action_log_probs - old_action_log_probs)
 
-                    cpi_loss = ratio * advantages[indices]
-                    clip_loss = ratio.clamp(1.0 - epsilon, 1.0 + epsilon) \
-                                * advantages[indices]
+                    cpi_loss = ratio * advantage_batch
+                    clip_loss = ratio.clamp(1.0 - epsilon, 1.0 + epsilon) * advantage_batch
                     actor_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-                    critic_loss = (returns[indices] - values).pow(2).mean()
+                    critic_loss = (return_batch - values).pow(2).mean()
 
                     self.optimizer.zero_grad()
                     (actor_loss + critic_loss).backward()
@@ -104,8 +103,6 @@ class PPO(PolicyGradientAlgorithm):
 
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
-            mean_reward = np.mean(([p["rewards"].sum().data[0] for p in paths]))
-
             if logger is not None:
-                logger.record("Reward", mean_reward)
+                logger.record("Reward", epr)
                 logger.dump()

@@ -3,6 +3,32 @@ import torch
 
 import numpy as np
 
+class Rollout():
+    def __init__(self, num_steps, obs_dim, action_dim, first_state):
+        self.states = torch.zeros(num_steps + 1, obs_dim)
+        self.states[0] = first_state
+
+        self.actions = torch.zeros(num_steps, action_dim)
+        self.rewards = torch.zeros(num_steps, 1)
+        self.values = torch.zeros(num_steps + 1, 1)
+        self.returns = torch.zeros(num_steps + 1, 1)
+        self.masks = torch.ones(num_steps + 1, 1)
+
+    def insert(self, step, state, action, value, reward, mask):
+        self.states[step + 1] = state # why?
+        self.actions[step] = action
+        self.values[step] = value
+        self.rewards[step] = reward
+        self.masks[step] = mask
+    
+    def calculate_returns(self, next_value, gamma, tau):
+        self.values[-1] = next_value
+        gae = 0
+        for step in reversed(range(self.rewards.size(0))):
+            delta = self.rewards[step] + gamma * self.values[step + 1] * self.masks[step] - self.values[step]
+            gae = delta + gamma * tau * gae * self.masks[step]
+            self.returns[step] = gae + self.values[step]
+
 
 class PolicyGradientAlgorithm():
     def train():
@@ -12,7 +38,52 @@ class PolicyGradientAlgorithm():
     def add_arguments(parser):
         raise NotImplementedError
 
-    def rollout(self, env, policy, max_trj_len, critic_target="td_lambda"):
+    def sample_steps(self, env, policy, num_steps):
+        """Collect a set number of frames, as in the original paper."""
+        rewards = []
+        episode_reward = 0
+
+        obs_dim = env.observation_space.shape[0]
+        action_dim = env.action_space.shape[0]
+        
+        state = env.reset()
+        state = torch.Tensor(state)
+
+        rollout = Rollout(num_steps, obs_dim, action_dim, state)
+        for step in range(num_steps):
+            value, action = policy.act(Variable(state))
+
+            state, reward, done, _ = env.step(action.data.numpy())
+
+            episode_reward += reward
+            if done:
+                state = env.reset()
+                rewards.append(episode_reward)
+                episode_reward = 0
+
+            state = torch.Tensor(state)
+            reward = torch.Tensor([reward])
+
+            mask = torch.Tensor([0.0 if done else 1.0])
+            #final_reward *= mask
+            #final_reward += (1 - masks) * episode_rewards
+            #episode_reward *= mask
+
+            rollout.insert(step, state, action.data, value.data, reward, mask)
+        
+        if hasattr(self.policy, 'obs_filter'):
+            self.policy.obs_filter.update(rollout.states[:-1])
+
+        next_value, _ = self.policy(Variable(state))
+        rollout.calculate_returns(next_value.data, .99, .95)
+        
+        return (rollout.states[:-1], 
+               rollout.actions, 
+               rollout.returns[:-1], 
+               rollout.values,
+               sum(rewards)/len(rewards))
+
+    def rollout(self, env, policy, num_frames, critic_target="td_lambda"):
         """Collect a single rollout."""
 
         observations = []
@@ -23,41 +94,40 @@ class PolicyGradientAlgorithm():
         values = []
 
         obs = env.reset().ravel()[None, :]
-        obs_var = Variable(torch.Tensor(obs))
+        obs = torch.Tensor(obs)
 
-        for _ in range(max_trj_len):
-            value, action = policy.act(obs_var)
+        for _ in range(num_frames):
+            value, action = policy.act(Variable(obs))
 
             next_obs, reward, done, _ = env.step(action.data.numpy().ravel())
 
-            observations.append(obs_var)
-            actions.append(action)
+            observations.append(obs)
+            actions.append(action.data)
 
-            rewards.append(Variable(torch.Tensor([[reward]])))
+            rewards.append(torch.Tensor([[reward]]))
 
             obs = next_obs.ravel()[None, :]
-            obs_var = Variable(torch.Tensor(obs))
+            obs = torch.Tensor(obs)
 
-            values.append(value)
+            values.append(value.data)
 
             if done:
                 break
 
-        values.append(policy.act(obs_var)[0])
+        values.append(policy.act(Variable(obs))[0].data)
 
-        R = Variable(torch.zeros(1, 1))
-        advantage = Variable(torch.zeros(1, 1))
+        R = torch.zeros(1, 1)
+        advantage = torch.zeros(1, 1)
         for t in reversed(range(len(rewards))):
             R = self.discount * R + rewards[t]
 
             # generalized advantage estimation
             # see: https://arxiv.org/abs/1506.02438
             delta = rewards[t] + self.discount * values[t + 1] - values[t]
-            advantage = advantage * self.discount * self.tau + delta
+            gae = delta + gae * self.discount * self.tau
 
             #returns.append(R)
-            returns.append(advantage + values[t])
-            advantages.append(advantage)
+            returns.append(gae + values[t])
         """
         # GAE paper, footnote 2
         if critic_target == "td_lambda":
@@ -69,8 +139,8 @@ class PolicyGradientAlgorithm():
         """
         return dict(
             rewards=torch.cat(rewards),
-            returns=torch.cat(returns[::-1]).detach(),
-            advantages=torch.cat(advantages[::-1]).detach(),
-            observations=torch.cat(observations).detach(),
-            actions=torch.cat(actions).detach(),
+            returns=torch.cat(returns[::-1]),
+            advantages=torch.cat(advantages[::-1]),
+            observations=torch.cat(observations),
+            actions=torch.cat(actions),
         )
