@@ -18,6 +18,8 @@ class PPO(PolicyGradientAlgorithm):
         self.discount = discount
         self.tau = tau
 
+        self.last_state = None
+
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
     @staticmethod

@@ -14,6 +14,8 @@ class Rollout():
         self.returns = torch.zeros(num_steps + 1, 1)
         self.masks = torch.ones(num_steps + 1, 1)
 
+        self.initialized = True
+
     def insert(self, step, state, action, value, reward, mask):
         self.states[step + 1] = state # why?
         self.actions[step] = action
@@ -21,12 +23,12 @@ class Rollout():
         self.rewards[step] = reward
         self.masks[step] = mask
     
-    def calculate_returns(self, next_value, gamma, tau):
+    def calculate_returns(self, next_value, gamma=0.99, tau=0.95):
         self.values[-1] = next_value
         gae = 0
         for step in reversed(range(self.rewards.size(0))):
             delta = self.rewards[step] + gamma * self.values[step + 1] * self.masks[step] - self.values[step]
-            gae = delta + gamma * tau * gae * self.masks[step]
+            gae = delta + gamma * tau * self.masks[step] * gae
             self.returns[step] = gae + self.values[step]
 
 
@@ -45,11 +47,14 @@ class PolicyGradientAlgorithm():
 
         obs_dim = env.observation_space.shape[0]
         action_dim = env.action_space.shape[0]
-        
-        state = env.reset()
-        state = torch.Tensor(state)
 
+        if self.last_state is None:
+            state = torch.Tensor(env.reset())
+        else:
+            state = self.last_state
+                    
         rollout = Rollout(num_steps, obs_dim, action_dim, state)
+
         for step in range(num_steps):
             value, action = policy.act(Variable(state))
 
@@ -61,26 +66,26 @@ class PolicyGradientAlgorithm():
                 rewards.append(episode_reward)
                 episode_reward = 0
 
-            state = torch.Tensor(state)
             reward = torch.Tensor([reward])
 
             mask = torch.Tensor([0.0 if done else 1.0])
-            #final_reward *= mask
-            #final_reward += (1 - masks) * episode_rewards
-            #episode_reward *= mask
 
+            state = torch.Tensor(state)
             rollout.insert(step, state, action.data, value.data, reward, mask)
-        
+
+        next_value, _ = self.policy(Variable(state))
+
         if hasattr(self.policy, 'obs_filter'):
             self.policy.obs_filter.update(rollout.states[:-1])
 
-        next_value, _ = self.policy(Variable(state))
-        rollout.calculate_returns(next_value.data, .99, .95)
+        rollout.calculate_returns(next_value.data)
+
+        self.last_state = rollout.states[-1]
         
         return (rollout.states[:-1], 
                rollout.actions, 
                rollout.returns[:-1], 
-               rollout.values,
+               rollout.values[:-1],
                sum(rewards)/len(rewards))
 
     def rollout(self, env, policy, num_frames, critic_target="td_lambda"):

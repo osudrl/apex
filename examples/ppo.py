@@ -44,8 +44,8 @@ if __name__ == "__main__":
 
     env = gym.make("Walker2d-v1")
 
-    #env.seed(args.seed)
-    #torch.manual_seed(args.seed)
+    env.seed(args.seed)
+    torch.manual_seed(args.seed)
 
     obs_dim = env.observation_space.shape[0]
     action_space = env.action_space
