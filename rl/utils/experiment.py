@@ -2,23 +2,23 @@ import atexit, os
 import os.path as osp
 from subprocess import Popen
 import torch.multiprocessing as mp
-from .evaluation import renderloop
+from .render import renderloop
 from .logging import Logger
 
 
-def run_experiment(algo, args, log=True, monitor=False, render=False):
+def run_experiment(algo, policy, env_fn, args, renv, log=True, monitor=False, render=False):
     logger = Logger(args) if log else None
 
-    algo.policy.share_memory()
+    policy.share_memory()
 
     train_p = mp.Process(target=algo.train,
-                         args=(args.n_itr, args.n_trj, args.max_trj_len),
+                         args=(env_fn, policy, args.n_itr),
                          kwargs=dict(logger=logger))
     train_p.start()
 
     if render:
         render_p = mp.Process(target=renderloop,
-                              args=(algo.env, algo.policy, args.max_trj_len))
+                              args=(renv, policy))
         render_p.start()
 
     if monitor:

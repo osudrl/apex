@@ -1,10 +1,11 @@
 """CURRENTLY OUTDATED. WILL UPDATE IN FUTURE"""
+"""
 import torch
 from torch import Tensor
 from torch.autograd import Variable as Var
 from torch.utils.data import DataLoader
 
-from rl.utils import SplitDataset, ProgBar, RealtimePlot
+from rl.utils import ProgBar, RealtimePlot
 
 from rl.envs import controller
 
@@ -67,3 +68,4 @@ class DAgger():
                 self.rtplot.plot(running_loss / len(dataloader))
 
         self.rtplot.done()
+"""

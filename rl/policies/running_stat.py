@@ -1,4 +1,3 @@
-"""NOT MY CODE; Written by @ikastrikov, temporarily appropriated for my uses"""
 import random
 
 import torch

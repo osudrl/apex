@@ -1,6 +1,5 @@
-"""Implements conservative policy iteration."""
-from copy import deepcopy
-
+"""Implementation of vanilla policy gradient."""
+"""
 import torch
 import torch.optim as optim
 
@@ -11,13 +10,29 @@ from ..base import PolicyGradientAlgorithm
 import numpy as np
 
 
-class CPI(PolicyGradientAlgorithm):
-    def __init__(self, env, policy, tau=0.97, discount=0.99, lr=0.01,
-                 baseline=None):
+class VPG(PolicyGradientAlgorithm):
+    \"""
+    Implements vanilla policy gradient aka REINFORCE.
+
+    See: http://www-anw.cs.umass.edu/~barto/courses/cs687/williams92simple.pdf
+
+    Includes adaptive learning rate implementation mentioned in
+    Schulman et al 2017.
+    [https://arxiv.org/pdf/1707.06347.pdf]
+
+    Includes entropy bonus mentioned in Mnih et al 2016.
+    [https://arxiv.org/pdf/1602.01783.pdf]
+    \"""
+
+    def __init__(self, env, policy, discount=0.99, lr=0.01, baseline=None):
         self.env = env
         self.policy = policy
         self.discount = discount
-        self.tau = tau
+
+        if baseline is None:
+            self.baseline = ZeroBaseline()
+        else:
+            self.baseline = baseline
 
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
 
@@ -46,42 +61,29 @@ class CPI(PolicyGradientAlgorithm):
             observations = torch.cat([p["observations"] for p in paths])
             actions = torch.cat([p["actions"] for p in paths])
             advantages = torch.cat([p["advantages"] for p in paths])
-            returns = torch.cat([p["returns"] for p in paths])
 
+            # TODO: verify centering advantages over whole batch instead of per
+            # path actually makes sense
             advantages = center(advantages)
 
-            old_policy = deepcopy(policy)
+            distribution = policy.get_distribution(observations)
 
-            pd = policy.get_pdparams(observations)
-            old_pd = old_policy.get_pdparams(observations)
+            logprobs = distribution.log_likelihood(actions)
+            entropy = distribution.entropy()
 
-            entropy = policy.distribution.entropy(pd)
-
-            ratio = policy.distribution.likelihood_ratio(
-                actions,
-                old_pd,
-                pd
-            )
-
-            ratio = policy.distribution.log_likelihood(actions, pd)
-
-            policy_loss = -(ratio * advantages).mean()
-            entropy_penalty = -(explore_bonus * entropy).mean()
-
-            total_loss = policy_loss + entropy_penalty
+            policy_loss = logprobs * advantages
+            total_loss = -(policy_loss + explore_bonus * entropy).mean()
 
             self.optimizer.zero_grad()
             total_loss.backward()
             self.optimizer.step()
 
-            for _ in range(10):
-                critic = policy.get_critic(observations)
-                self.optimizer.zero_grad()
-                critic_loss = (critic - returns).pow(2).mean()
-                critic_loss.backward()
-                self.optimizer.step()
+            self.baseline.fit(paths)
 
-            kl_oldnew = policy.distribution.kl_divergence(old_pd, pd)
+            old_distribution = distribution.copy()
+            new_distribution = policy.get_distribution(observations)
+
+            kl_oldnew = old_distribution.kl_divergence(new_distribution)
 
             mean_kl = kl_oldnew.mean().data[0]
 
@@ -105,3 +107,4 @@ class CPI(PolicyGradientAlgorithm):
                 logger.record("Mean KL", mean_kl)
                 logger.record("Entropy", mean_entropy)
                 logger.dump()
+"""

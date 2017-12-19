@@ -1,22 +1,9 @@
 """Python file for automatically running experiments from command line."""
-"""
-import sys, warnings, traceback, torch
-def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-    sys.stderr.write(warnings.formatwarning(message, category, filename, lineno, line))
-    traceback.print_stack(sys._getframe(2))
-warnings.showwarning = warn_with_traceback; warnings.simplefilter('always', UserWarning);
-torch.utils.backcompat.broadcast_warning.enabled = True
-torch.utils.backcompat.keepdim_warning.enabled = True
-"""
 import argparse
 
-#from rllab.envs.box2d.cartpole_env import CartpoleEnv
-#from rllab.envs.box2d.double_pendulum_env import DoublePendulumEnv
-from rllab.envs.mujoco.walker2d_env import Walker2DEnv
-from rllab.envs.mujoco.hopper_env import HopperEnv
-from rllab.envs.gym_env import GymEnv
-from rllab.envs.normalized_env import normalize
-from rllab.envs.mujoco.walker2d_env import Walker2DEnv
+from baselines.common.vec_env.vec_normalize import VecNormalize
+from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
+from baselines import bench
 
 
 from rl.utils import run_experiment
@@ -25,7 +12,23 @@ from rl.algos import PPO
 
 import gym
 import torch
+import os
 
+
+#TODO: remove reliance on: Monitor, DummyVecEnv, VecNormalized
+def make_env(env_id, seed, rank, log_dir):
+    def _thunk():
+        env = gym.make(env_id)
+        env.seed(seed + rank)
+        env = bench.Monitor(env,
+                            os.path.join(log_dir,
+                            os.path.join(log_dir, 
+                            str(rank))), 
+                            allow_early_resets=True
+        )
+        return env
+
+    return _thunk
 
 parser = argparse.ArgumentParser()
 
@@ -39,30 +42,30 @@ parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    #env = normalize(Walker2DEnv())
-    #env = normalize(GymEnv("Walker2d-v1"))
+    env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
 
-    env = gym.make("Walker2d-v1")
 
-    env.seed(args.seed)
-    torch.manual_seed(args.seed)
+    renv = make_env("Walker2d-v1", args.seed, 0, "/tmp/gym/rl/")
+    renv = DummyVecEnv([renv])
+    renv = VecNormalize(renv, ret=False)
 
-    obs_dim = env.observation_space.shape[0]
-    action_space = env.action_space
+    #env.seed(args.seed)
+    #torch.manual_seed(args.seed)
 
-    policy = GaussianMLP(obs_dim, action_space)
+    obs_dim = env_fn().observation_space.shape[0]
+    action_dim = env_fn().action_space.shape[0]
 
-    algo = PPO(
-        env=env,
-        policy=policy,
-        lr=args.lr,
-        tau=args.tau
-    )
+    policy = GaussianMLP(obs_dim, action_dim)
+
+    algo = PPO(args=args)
 
     run_experiment(
         algo=algo,
+        policy=policy,
+        env_fn=env_fn,
+        renv=renv,
         args=args,
         log=True,
-        monitor=True,
-        render=False
+        monitor=False,
+        render=True
     )

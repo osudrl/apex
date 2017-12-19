@@ -11,13 +11,13 @@ def monitor_loop(monitor, log_file, header):
         where = log_file.tell()
         line = log_file.readline()
         if not line:
-            time.sleep(1)
+            time.sleep(.5)
             log_file.seek(where)
         else:
             vals = line.rstrip('\n').split('\t')
             for i in range(len(vals)):
                 monitor.update(header[i], vals[i])
-            time.sleep(0.1)
+            time.sleep(0.2)
 
 monitor = Monitor()
 

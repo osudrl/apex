@@ -1,3 +1,4 @@
+"""
 from torch.autograd import Variable
 import torch
 
@@ -41,7 +42,7 @@ class PolicyGradientAlgorithm():
         raise NotImplementedError
 
     def sample_steps(self, env, policy, num_steps):
-        """Collect a set number of frames, as in the original paper."""
+        \"""Collect a set number of frames, as in the original paper.\"""
         rewards = []
         episode_reward = 0
 
@@ -73,10 +74,7 @@ class PolicyGradientAlgorithm():
             state = torch.Tensor(state)
             rollout.insert(step, state, action.data, value.data, reward, mask)
 
-        next_value, _ = self.policy(Variable(state))
-
-        if hasattr(self.policy, 'obs_filter'):
-            self.policy.obs_filter.update(rollout.states[:-1])
+        next_value, _ = policy(Variable(state))
 
         rollout.calculate_returns(next_value.data)
 
@@ -89,7 +87,7 @@ class PolicyGradientAlgorithm():
                sum(rewards)/len(rewards))
 
     def rollout(self, env, policy, num_frames, critic_target="td_lambda"):
-        """Collect a single rollout."""
+        \"""Collect a single rollout.\"""
 
         observations = []
         actions = []
@@ -98,8 +96,7 @@ class PolicyGradientAlgorithm():
         advantages = []
         values = []
 
-        obs = env.reset().ravel()[None, :]
-        obs = torch.Tensor(obs)
+        obs = torch.Tensor(env.reset())
 
         for _ in range(num_frames):
             value, action = policy.act(Variable(obs))
@@ -111,8 +108,7 @@ class PolicyGradientAlgorithm():
 
             rewards.append(torch.Tensor([[reward]]))
 
-            obs = next_obs.ravel()[None, :]
-            obs = torch.Tensor(obs)
+            obs = torch.Tensor(next_obs)
 
             values.append(value.data)
 
@@ -133,7 +129,7 @@ class PolicyGradientAlgorithm():
 
             #returns.append(R)
             returns.append(gae + values[t])
-        """
+        \"""
         # GAE paper, footnote 2
         if critic_target == "td_lambda":
             returns = torch.cat(advantages[::-1]) + torch.cat(values[:-1])
@@ -141,7 +137,7 @@ class PolicyGradientAlgorithm():
         # GAE paper, equation 28
         elif critic_target == "td_one":
             returns = torch.cat(returns[::-1])
-        """
+        \"""
         return dict(
             rewards=torch.cat(rewards),
             returns=torch.cat(returns[::-1]),
@@ -149,3 +145,4 @@ class PolicyGradientAlgorithm():
             observations=torch.cat(observations),
             actions=torch.cat(actions),
         )
+"""

@@ -1,3 +1,5 @@
+"""This screws up visualize.py"""
+"""
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
@@ -57,3 +59,4 @@ def policyplot(env, policy, trj_len):
         axes[a].plot(np.arange(trj_len), y[:, a])
 
     plt.show()
+"""
