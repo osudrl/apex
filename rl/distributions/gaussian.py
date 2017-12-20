@@ -2,23 +2,21 @@ import math
 
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
 
 class DiagonalGaussian(nn.Module):
-    def __init__(self, num_inputs, num_outputs, init_std=1):
+    def __init__(self, num_outputs, init_std=1):
         super(DiagonalGaussian, self).__init__()
-        self.fc_mean = nn.Linear(64, num_outputs)
 
         self.logstd = nn.Parameter(
             torch.ones(1, num_outputs) * math.log(init_std)
         )
 
     def forward(self, x):
-        x = self.fc_mean(x)
         action_mean = x
 
-        x = self.logstd
-        action_logstd = x
+        action_logstd = self.logstd
 
         return action_mean, action_logstd
 

@@ -55,18 +55,8 @@ This file structure makes it easy to compare models generated using the same hyp
 
 ## Monitoring live training progress
 
-### With bokeh
-Calling ```run_experiment()``` with ```monitor=True``` automatically launches a bokeh instance. To manually monitor training progress in a browser using bokeh, run the following command, giving it the path to the active log file.
-```bash
-bokeh serve --show bokeh_monitor.py --args path/to/file.log
-```
-This should open a tab to http://localhost:5006/bokeh_monitor in your browser. If all goes well, you should see something like this image:
-
-![alt-text](docs/bokeh_monitor.png)
-
-### With matplotlib
-
-Comming soon.
+### With Vizdom
+I've deprecated the bokeh monitor. Info on monitoring with vizdom coming soon. TODO: make a plotting config file format (e.g. use timesteps vs iterations on the x axis, use a fixed vs variable x axis, choose what kind of filtering to do).
 
 
 ### To Do
@@ -74,13 +64,16 @@ Comming soon.
 - [ ] Merge CPI and VPG
 - [ ] Package everything
 - [ ] Clean up /utils/
-- [ ] Make baselines and models take in an env
-- [ ] use \_\_all\_\_ idiom
-- [ ] fix bug with GAE not updating critic correctly
 - [ ] Sphinx documentation and github wiki
+- [ ] Fix some hacks having to do with support for parallelism 
+(namely Vectorize, Normalize and Monitor)
 
 ### Notes
 I'm not satisfied with the semantic clarity of how distribution is encapsulated/abstracted. I'll probably change it to something less confusing to read.
+
+Update: Now that I've changed it... I'll probably change it back.
+
+Also a little glossary of ambiguous sounding RL terms:
 
 
 ## Features:
@@ -92,14 +85,16 @@ I'm not satisfied with the semantic clarity of how distribution is encapsulated/
 
 #### To be implemented soon:
 
+* Some form of massively parallel Evolutionary Algorithm as a baseline
 * [A2C](https://arxiv.org/abs/1602.01783) 
 * Parallelism
 * [Beta distribution policy](http://proceedings.mlr.press/v70/chou17a/chou17a.pdf)
-* [Parameter noise exploration](https://arxiv.org/abs/1706.01905)
+* [Parameter noise exploration](https://arxiv.org/abs/1706.01905) (maybe)
 
 
 #### To be implemented long term:
 
+* [GPO](https://arxiv.org/abs/1711.01012)
 * [DDPG](https://arxiv.org/abs/1509.02971)
 * [NAF](https://arxiv.org/abs/1603.00748)
 * [SVG](https://arxiv.org/abs/1510.09142)

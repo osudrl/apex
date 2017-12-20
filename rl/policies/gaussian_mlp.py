@@ -17,7 +17,7 @@ class GaussianMLP(FFPolicy):
     def __init__(self, num_inputs, action_dim, init_std=1):
         super(GaussianMLP, self).__init__()
 
-        actor_dims = (64,)
+        actor_dims = (64, 64)
         critic_dims = (64, 64)
 
         # create actor network
@@ -27,6 +27,8 @@ class GaussianMLP(FFPolicy):
             in_dim = actor_dims[l]
             out_dim = actor_dims[l + 1]
             self.actor_layers += [nn.Linear(in_dim, out_dim)]
+        
+        self.mean = nn.Linear(actor_dims[-1], action_dim)
 
         # create critic network
         self.critic_layers = nn.ModuleList()
@@ -38,7 +40,7 @@ class GaussianMLP(FFPolicy):
 
         self.vf = nn.Linear(critic_dims[-1], 1)
 
-        self.dist = DiagonalGaussian(64, action_dim)
+        self.dist = DiagonalGaussian(action_dim, init_std)
 
         self.train()
         self.reset_parameters()
@@ -58,5 +60,6 @@ class GaussianMLP(FFPolicy):
         x = inputs
         for l in self.actor_layers:
             x = F.tanh(l(x))
+        x = self.mean(x)
 
         return value, x

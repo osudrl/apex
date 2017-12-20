@@ -1,1 +1,2 @@
-from .slip_env import SlipEnv
+from .vectorize import *
+from .normalize import *

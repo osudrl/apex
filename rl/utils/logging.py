@@ -4,13 +4,21 @@ A simple live-updating logger for logging training progress.
 Based largely off Berkely's DRL course HW4, which is itself inspired by rllab.
 https://github.com/berkeleydeeprlcourse/homework/blob/master/hw4/logz.py
 """
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+plt.style.use('ggplot')
+
 from functools import partial
 import os.path as osp, shutil, time, atexit, os, subprocess, hashlib, sys
-
+import configparser
 from collections import OrderedDict
+import numpy as np
+
+from scipy.signal import medfilt
 
 class Logger():
-    def __init__(self, args):
+    def __init__(self, args, viz=True):
         self.ansi = dict(
             gray=30,
             red=31,
@@ -23,7 +31,17 @@ class Logger():
             crimson=38
         )
 
-        self.output_file = self._get_directory(args)
+        self.args = args
+
+        if viz:
+            from visdom import Visdom
+            self.viz = Visdom()
+            self.wins = []
+            self.viz_config = self.config_monitor()
+        else:
+            self.viz = None
+
+        self.output_dir = self._get_directory(args)
         self.init = True
         self.header = []
         self.current_row = {}
@@ -78,7 +96,7 @@ class Logger():
         # remove "ACTIVE_" prefix on program exit
         atexit.register(rename)
 
-        return open(active_path, 'w')
+        return active_path
 
     def record(self, key, val):
         """
@@ -88,6 +106,8 @@ class Logger():
         """
         if self.init:
             self.header.append(key)
+            if self.viz is not None:
+                self.wins.append(None)
         else:
             assert key in self.header, \
             "Key %s not in header. All keys must be set in first iteration" % key
@@ -110,21 +130,95 @@ class Logger():
                 valstr = val
 
             sys.stdout.write("| %15s | %15s |" % (key, valstr) + "\n")
-            vals.append(val)
+            vals.append(float(val))
         sys.stdout.write("-" * 37 + "\n")
         sys.stdout.flush()
 
+        output_file = None
         if self.init:
-            self.output_file.write("\t".join(self.header))
-            self.output_file.write("\n")
+            output_file = open(self.output_dir, "w")
 
-        self.output_file.write("\t".join(map(str, vals)))
-        self.output_file.write("\n")
-        self.output_file.flush()
+            output_file.write("\t".join(self.header))
+            output_file.write("\n")
+        else:
+            output_file = open(self.output_dir, "a")
+
+        output_file.write("\t".join(map(str, vals)))
+        output_file.write("\n")
+        output_file.flush()
+        output_file.close()
 
         self.current_row.clear()
 
         self.init = False
+
+        if self.viz is not None:
+            self.plot()
+
+    def config_monitor(self, config_path=None):
+        if config_path is None:
+            config_path = os.path.join(os.path.dirname(__file__), "../config/monitor.ini")
+
+        config = configparser.ConfigParser()
+        config.read(config_path)
+
+        return config["monitor"]
+
+    def plot(self):
+        def running_mean(x, N):
+            N = min(N, len(x))
+            cumsum = np.cumsum(np.insert(x, 0, 0)) 
+            return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+        data, header = self._load_data()
+
+        for i in range(len(header)):
+            y = data[:, i]
+            # do some kind of window based smoothing
+            y = running_mean(y, 5) 
+
+            xscale = 1 if self.viz_config["xlabel"] == "Iterations" \
+                       else self.args.num_steps / 1e6
+
+            x = np.arange(y.size) * xscale
+
+            fig = plt.figure(figsize=(5,4))
+
+            plt.plot(x, y, "C%i" % i)
+
+            if self.viz_config["xlim"] == "Fixed":
+                plt.xlim(0, self.args.n_itr * xscale)
+
+            plt.ylabel(header[i])
+            plt.xlabel(self.viz_config["xlabel"])
+            plt.title(self.viz_config["xlabel"])
+
+            plt.show()
+            plt.draw()
+
+            image = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+            image = image.reshape(fig.canvas.get_width_height()[::-1] + (3, ))
+            image = np.transpose(image, (2, 0, 1))
+
+            plt.close(fig)
+
+            self.wins[i] = self.viz.image(image, win=self.wins[i])
+
+    def _load_data(self):
+        log_file = open(self.output_dir, 'r')
+
+        header = log_file.readline().rstrip('\n').split('\t')
+
+        data = []
+        for line in log_file:
+            vals = line.rstrip('\n').split('\t')
+            vals = [float(val) for val in vals]
+            data.append(vals)
+        
+        data = np.array(data)
+
+        log_file.close()
+        return data, header
 
     def _generate_info_file(self, file, arg_dict):
         for key, val in arg_dict.items():

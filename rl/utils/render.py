@@ -14,10 +14,7 @@ def renderpolicy(env, policy, explore=True, speedup=1, dt=0.05):
 
         state = torch.Tensor(state)
 
-        if hasattr(env, "render"):
-            env.render()
-        else:
-            env.venv.envs[0].render()
+        env.render()
 
         time.sleep(dt / speedup)
 

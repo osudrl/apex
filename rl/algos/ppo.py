@@ -7,11 +7,9 @@ from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.autograd import Variable
 
 #from .base import PolicyGradientAlgorithm
-from rl.utils.cgviz import make_dot
 from .visualize import visdom_plot
 
-from baselines.common.vec_env.vec_normalize import VecNormalize
-from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
+from rl.envs import Vectorize, Normalize
 
 import numpy as np
 import os
@@ -60,26 +58,20 @@ class PPO:
                  num_steps=None):
 
         self.last_state = None
-
-        self.gamma = gamma or args.gamma
-        self.tau = tau or args.tau
-        self.lr = lr or args.lr
-        self.eps = eps or args.eps
+ 
+        self.gamma         = gamma         or args.gamma
+        self.tau           = tau           or args.tau
+        self.lr            = lr            or args.lr
+        self.eps           = eps           or args.eps
         self.entropy_coeff = entropy_coeff or args.entropy_coeff
-        self.clip = clip or args.clip
-        self.batch_size = batch_size or args.batch_size
-        self.epochs = epochs or args.epochs
-        self.num_steps = num_steps or args.num_steps
-
-
-        if True:
-            from visdom import Visdom
-            self.viz = Visdom()
-            self.win = None
+        self.clip          = clip          or args.clip
+        self.batch_size    = batch_size    or args.batch_size
+        self.epochs        = epochs        or args.epochs
+        self.num_steps     = num_steps     or args.num_steps
 
     @staticmethod
     def add_arguments(parser):
-        parser.add_argument("--n_itr", type=int, default=1000,
+        parser.add_argument("--n_itr", type=int, default=500,
                             help="number of iterations of the learning algorithm")
         
         parser.add_argument("--lr", type=float, default=3e-4,
@@ -159,10 +151,13 @@ class PPO:
               env_fn,
               policy, 
               n_itr,
+              normalize=True,
               logger=None):
 
-        env = DummyVecEnv([env_fn])
-        env = VecNormalize(env, ret=False)
+        env = Vectorize([env_fn]) # this will be useful for parallelism later
+
+        if normalize:
+            env = Normalize(env, ret=False)
 
         old_policy = deepcopy(policy)
 
@@ -216,6 +211,7 @@ class PPO:
 
                     critic_loss = (return_batch - values).pow(2).mean()
 
+                    #entropy_penalty = 
 
                     optimizer.zero_grad()
                     (actor_loss + critic_loss).backward()
@@ -232,12 +228,6 @@ class PPO:
                 logger.record("Reward", epr)
                 logger.dump()
 
-            try:
-                # Sometimes monitor doesn't properly flush the outputs
-                self.win = visdom_plot(self.viz, self.win, "/tmp/gym/rl/", "Walker2d-v1", "ppo")
-            except IOError:
-                pass
-
             if itr % 10 == 0:
                 save_path = os.path.join("./trained_models", "ppo")
                 try:
@@ -245,7 +235,11 @@ class PPO:
                 except OSError:
                     pass
 
-                save_model = [policy, env.ob_rms]
+                if normalize:
+                    save_model = [policy, env.ob_rms]
+                else:
+                    save_model = policy
+                
                 torch.save(save_model, os.path.join("./trained_models", "Walker2d-v1" + ".pt"))
 
             

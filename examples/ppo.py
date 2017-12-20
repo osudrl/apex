@@ -1,14 +1,13 @@
 """Python file for automatically running experiments from command line."""
 import argparse
 
-from baselines.common.vec_env.vec_normalize import VecNormalize
-from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from baselines import bench
 
 
 from rl.utils import run_experiment
 from rl.policies import GaussianMLP
 from rl.algos import PPO
+from rl.envs import Normalize, Vectorize
 
 import gym
 import torch
@@ -46,8 +45,8 @@ if __name__ == "__main__":
 
 
     renv = make_env("Walker2d-v1", args.seed, 0, "/tmp/gym/rl/")
-    renv = DummyVecEnv([renv])
-    renv = VecNormalize(renv, ret=False)
+    renv = Vectorize([renv])
+    renv = Normalize(renv, ret=False)
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
@@ -56,6 +55,7 @@ if __name__ == "__main__":
     action_dim = env_fn().action_space.shape[0]
 
     policy = GaussianMLP(obs_dim, action_dim)
+    print(policy)
 
     algo = PPO(args=args)
 
