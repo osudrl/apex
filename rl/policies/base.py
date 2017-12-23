@@ -13,7 +13,6 @@ class FFPolicy(nn.Module):
         action = self.dist.sample(x, deterministic=deterministic)
         return value, action.detach()
 
-    def evaluate_actions(self, inputs, actions):
+    def evaluate(self, inputs):
         value, x = self(inputs)
-        action_log_probs, dist_entropy = self.dist.evaluate_actions(x, actions)
-        return value, action_log_probs, dist_entropy
+        return value, self.dist.evaluate(x)

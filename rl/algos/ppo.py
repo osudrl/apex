@@ -7,7 +7,6 @@ from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.autograd import Variable
 
 #from .base import PolicyGradientAlgorithm
-from .visualize import visdom_plot
 
 from rl.envs import Vectorize, Normalize
 
@@ -71,7 +70,7 @@ class PPO:
 
     @staticmethod
     def add_arguments(parser):
-        parser.add_argument("--n_itr", type=int, default=500,
+        parser.add_argument("--n_itr", type=int, default=1000,
                             help="number of iterations of the learning algorithm")
         
         parser.add_argument("--lr", type=float, default=3e-4,
@@ -98,7 +97,7 @@ class PPO:
         parser.add_argument("--epochs", type=int, default=10,
                             help="Number of optimization epochs per PPO update")
 
-        parser.add_argument("--num_steps", type=int, default=2048,
+        parser.add_argument("--num_steps", type=int, default=5096,
                             help="Number of sampled timesteps per gradient estimate")
         
 
@@ -145,7 +144,7 @@ class PPO:
                rollout.actions, 
                rollout.returns[:-1], 
                rollout.values[:-1],
-               sum(rewards)/len(rewards))
+               sum(rewards)/(len(rewards)+1))
 
     def train(self,
               env_fn,
@@ -191,19 +190,19 @@ class PPO:
                     return_batch = Variable(returns[indices])
                     advantage_batch = Variable(advantages[indices])
 
-                    values, action_log_probs, _ = policy.evaluate_actions(
-                        Variable(obs_batch),
-                        Variable(action_batch)
-                    )
+                    values, pdf = policy.evaluate(Variable(obs_batch))
 
-                    _, old_action_log_probs, _ = old_policy.evaluate_actions(
-                        Variable(obs_batch, volatile=True),
+                    _, old_pdf = old_policy.evaluate(Variable(obs_batch, volatile=True))
+                    
+                    log_probs = pdf.log_prob(Variable(action_batch))
+                    
+                    old_log_probs = old_pdf.log_prob(
                         Variable(action_batch, volatile=True)
                     )
 
-                    old_action_log_probs = Variable(old_action_log_probs.data)
-
-                    ratio = torch.exp(action_log_probs - old_action_log_probs)
+                    old_log_probs = Variable(old_log_probs.data)
+                    
+                    ratio = torch.exp(log_probs - old_log_probs)
 
                     cpi_loss = ratio * advantage_batch
                     clip_loss = ratio.clamp(1.0 - self.clip, 1.0 + self.clip) * advantage_batch

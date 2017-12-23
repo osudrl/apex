@@ -14,37 +14,20 @@ class DiagonalGaussian(nn.Module):
         )
 
     def forward(self, x):
-        action_mean = x
+        mean = x
 
-        action_logstd = self.logstd
-
-        return action_mean, action_logstd
+        std = self.logstd.exp()
+        
+        return mean, std
 
     def sample(self, x, deterministic):
-        action_mean, action_logstd = self(x)
-
-        action_std = action_logstd.exp()
-
         if deterministic is False:
-            action = torch.normal(action_mean, action_std)
+            action = self.evaluate(x).sample()
         else:
-            action = action_mean
+            action, _ = self(x)
 
         return action
 
-    def logp(self, x, mean, std, log_std):
-        logp = -0.5 * ((x - mean) / std).pow(2) - 0.5 * math.log(2 * math.pi) - log_std
-        return logp.sum(1, keepdim=True)
-
-    def entropy(self, logp):
-        return (0.5 + math.log(2 * math.pi) + logp).sum(-1).mean()
-
-    def evaluate_actions(self, x, actions):
-        action_mean, action_logstd = self(x)
-
-        action_std = action_logstd.exp()
-
-        action_log_probs = self.logp(actions, action_mean, action_std, action_logstd)
-        dist_entropy = self.entropy(action_log_probs)
-
-        return action_log_probs, dist_entropy
+    def evaluate(self, x):
+        mean, std = self(x)
+        return torch.distributions.Normal(mean, std)

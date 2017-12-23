@@ -15,6 +15,8 @@ import configparser
 from collections import OrderedDict
 import numpy as np
 
+matplotlib.rcParams.update({'font.size': 8})
+
 from scipy.signal import medfilt
 
 class Logger():
@@ -78,7 +80,7 @@ class Logger():
         filename = "seed" + seed + ".log"
 
         # currently logged-to directories will be pre-pended with "ACTIVE_"
-        active_path = osp.join(output_dir, "ACTIVE_" + filename)
+        active_path = osp.join(output_dir, filename)
 
         # Create a file with all the hyperparam settings in plaintext
         info_path = osp.join(output_dir, "experiment.info")
@@ -86,15 +88,6 @@ class Logger():
 
         print(self._colorize("Logging data to %s" % active_path,
                              'green', bold=True))
-
-        rename = partial(
-            os.rename,
-            src=active_path,
-            dst=osp.join(output_dir, filename)
-        )
-
-        # remove "ACTIVE_" prefix on program exit
-        atexit.register(rename)
 
         return active_path
 
@@ -166,7 +159,8 @@ class Logger():
 
     def plot(self):
         def running_mean(x, N):
-            N = min(N, len(x))
+            if len(x) < N:
+                return x
             cumsum = np.cumsum(np.insert(x, 0, 0)) 
             return (cumsum[N:] - cumsum[:-N]) / float(N)
 
@@ -175,10 +169,10 @@ class Logger():
         for i in range(len(header)):
             y = data[:, i]
             # do some kind of window based smoothing
-            y = running_mean(y, 5) 
+            y = running_mean(y, 30) 
 
             xscale = 1 if self.viz_config["xlabel"] == "Iterations" \
-                       else self.args.num_steps / 1e6
+                       else (self.args.num_steps / 1e6)
 
             x = np.arange(y.size) * xscale
 
@@ -191,7 +185,7 @@ class Logger():
 
             plt.ylabel(header[i])
             plt.xlabel(self.viz_config["xlabel"])
-            plt.title(self.viz_config["xlabel"])
+            plt.title(header[i])
 
             plt.show()
             plt.draw()

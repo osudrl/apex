@@ -3,28 +3,23 @@ import argparse
 
 from baselines import bench
 
-
 from rl.utils import run_experiment
 from rl.policies import GaussianMLP
 from rl.algos import PPO
-from rl.envs import Normalize, Vectorize
 
 import gym
 import torch
 import os
 
-
 #TODO: remove reliance on: Monitor, DummyVecEnv, VecNormalized
 def make_env(env_id, seed, rank, log_dir):
-    def _thunk():
+    def _thunk(log=True):
         env = gym.make(env_id)
         env.seed(seed + rank)
-        env = bench.Monitor(env,
-                            os.path.join(log_dir,
-                            os.path.join(log_dir, 
-                            str(rank))), 
-                            allow_early_resets=True
-        )
+        filename = os.path.join(log_dir,os.path.join(log_dir,str(rank))) \
+                   if log else None
+
+        env = bench.Monitor(env, filename, allow_early_resets=True)
         return env
 
     return _thunk
@@ -43,11 +38,6 @@ args = parser.parse_args()
 if __name__ == "__main__":
     env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
 
-
-    renv = make_env("Walker2d-v1", args.seed, 0, "/tmp/gym/rl/")
-    renv = Vectorize([renv])
-    renv = Normalize(renv, ret=False)
-
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
@@ -55,7 +45,6 @@ if __name__ == "__main__":
     action_dim = env_fn().action_space.shape[0]
 
     policy = GaussianMLP(obs_dim, action_dim)
-    print(policy)
 
     algo = PPO(args=args)
 
@@ -63,7 +52,6 @@ if __name__ == "__main__":
         algo=algo,
         policy=policy,
         env_fn=env_fn,
-        renv=renv,
         args=args,
         log=True,
         monitor=False,
