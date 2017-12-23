@@ -49,7 +49,7 @@ class GaussianMLP(FFPolicy):
         self.apply(normc_init)
 
         if self.dist.__class__.__name__ == "DiagGaussian":
-            self.dist.fc_mean.weight.data.mul_(0.01)
+            self.mean.weight.data.mul_(0.01)
 
     def forward(self, inputs):
         x = inputs

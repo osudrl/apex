@@ -6,10 +6,15 @@ from torch.autograd import Variable
 
 
 class Beta(nn.Module):
-    def __init__(self):
+    def __init__(self, action_dim):
         super(Beta, self).__init__()
 
-    def forward(self, alpha, beta):
+        self.action_dim = action_dim
+
+    def forward(self, alpha_beta):
+        print(alpha_beta.size())
+        alpha = alpha_beta[0, :self.action_dim]
+        beta = alpha_beta[0, self.action_dim:]
         return alpha, beta
 
     def sample(self, x, deterministic):

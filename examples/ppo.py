@@ -4,7 +4,7 @@ import argparse
 from baselines import bench
 
 from rl.utils import run_experiment
-from rl.policies import GaussianMLP
+from rl.policies import GaussianMLP, BetaMLP
 from rl.algos import PPO
 
 import gym
@@ -44,7 +44,8 @@ if __name__ == "__main__":
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
-    policy = GaussianMLP(obs_dim, action_dim)
+    #policy = GaussianMLP(obs_dim, action_dim)
+    policy = BetaMLP(obs_dim, action_dim)
 
     algo = PPO(args=args)
 
