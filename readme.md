@@ -2,6 +2,10 @@
 
 This is a small, modular library that contains some implementations of continuous reinforcement learning algorithms. Fully compatible with OpenAI gym.
 
+## Acknowledgements
+
+Thanks to @ikostrikov's whose great implementations I used to debug my own, and inspired a lot of changes to my original code. Also thanks to @rll for rllab, which inspired a lot of the high level interface and logging for this library, and to @OpenAI for the original PPO tensorflow implementation.
+
 
 ## Running experiments
 
@@ -61,19 +65,15 @@ I've deprecated the bokeh monitor. Info on monitoring with vizdom coming soon. T
 
 ### To Do
 - [ ] Save models
-- [ ] Merge CPI and VPG
+- [ ] Fix ignored implementations (VPG, DAgger)
 - [ ] Package everything
-- [ ] Clean up /utils/
 - [ ] Sphinx documentation and github wiki
+- [ ] Make logger as robust and pythonic as possible
 - [ ] Fix some hacks having to do with support for parallelism 
 (namely Vectorize, Normalize and Monitor)
+- [ ] ADD PARALLELISM/DISTRIBUTED IMPLEMENTATIONS
 
 ### Notes
-I'm not satisfied with the semantic clarity of how distribution is encapsulated/abstracted. I'll probably change it to something less confusing to read.
-
-Update: Now that I've changed it... I'll probably change it back.
-
-Also a little glossary of ambiguous sounding RL terms:
 
 
 ## Features:

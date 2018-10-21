@@ -12,7 +12,6 @@ class Beta(nn.Module):
         self.action_dim = action_dim
 
     def forward(self, alpha_beta):
-        print(alpha_beta.size())
         alpha = alpha_beta[0, :self.action_dim]
         beta = alpha_beta[0, self.action_dim:]
         return alpha, beta
@@ -22,6 +21,7 @@ class Beta(nn.Module):
             action = self.evaluate(x).sample()
         else:
             alpha, beta = self(x)
+            # expected value of a beta distribution:
             return alpha / (alpha + beta)
 
         return action

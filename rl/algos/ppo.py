@@ -202,7 +202,7 @@ class PPO:
 
                     old_log_probs = Variable(old_log_probs.data)
                     
-                    ratio = torch.exp(log_probs - old_log_probs)
+                    ratio = (log_probs - old_log_probs).exp()
 
                     cpi_loss = ratio * advantage_batch
                     clip_loss = ratio.clamp(1.0 - self.clip, 1.0 + self.clip) * advantage_batch
