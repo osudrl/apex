@@ -117,7 +117,7 @@ class PPO:
         rollout = Rollout(num_steps, obs_dim, action_dim, state)
 
         for step in range(num_steps):
-            value, action = policy.act(Variable(state))
+            value, action = policy.act(state)
 
             state, reward, done, _ = env.step(action.data.numpy())
 
@@ -134,7 +134,7 @@ class PPO:
             state = torch.Tensor(state)
             rollout.insert(step, state, action.data, value.data, reward, mask)
 
-        next_value, _ = policy(Variable(state))
+        next_value, _ = policy(state)
 
         rollout.calculate_returns(next_value.data, self.gamma, self.tau)
 
@@ -192,13 +192,13 @@ class PPO:
 
                     values, pdf = policy.evaluate(Variable(obs_batch))
 
-                    _, old_pdf = old_policy.evaluate(Variable(obs_batch, volatile=True))
+                    with torch.no_grad():
+                        _, old_pdf = old_policy.evaluate(Variable(obs_batch))
                     
                     log_probs = pdf.log_prob(Variable(action_batch))
                     
-                    old_log_probs = old_pdf.log_prob(
-                        Variable(action_batch, volatile=True)
-                    )
+                    with torch.no_grad():
+                        old_log_probs = old_pdf.log_prob(Variable(action_batch))
 
                     old_log_probs = Variable(old_log_probs.data)
                     
@@ -216,9 +216,9 @@ class PPO:
                     (actor_loss + critic_loss).backward()
                     optimizer.step()
 
-                    losses.append([actor_loss.data.clone().numpy()[0],
+                    losses.append([actor_loss.data.clone().numpy(),
                                    #entropy_penalty.data.numpy()[0],
-                                   critic_loss.data.numpy()[0],
+                                   critic_loss.data.numpy(),
                                    ratio.data.mean()])
 
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from rl.distributions import DiagonalGaussian
 from .base import FFPolicy
@@ -54,12 +53,12 @@ class GaussianMLP(FFPolicy):
     def forward(self, inputs):
         x = inputs
         for l in self.critic_layers:
-            x = F.tanh(l(x))
+            x = torch.tanh(l(x))
         value = self.vf(x)
 
         x = inputs
         for l in self.actor_layers:
-            x = F.tanh(l(x))
+            x = torch.tanh(l(x))
         x = self.mean(x)
 
         return value, x
