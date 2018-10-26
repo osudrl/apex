@@ -7,6 +7,8 @@ from rl.utils import run_experiment
 from rl.policies import GaussianMLP, BetaMLP
 from rl.algos import PPO
 
+from cassieXie.simple_env import cassieRLEnv
+
 import gym
 import torch
 import os
@@ -36,7 +38,7 @@ parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
+    env_fn = cassieRLEnv#make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
@@ -56,5 +58,5 @@ if __name__ == "__main__":
         args=args,
         log=False,
         monitor=False,
-        render=True
+        render=False
     )

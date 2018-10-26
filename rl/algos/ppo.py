@@ -161,6 +161,7 @@ class PPO:
         old_policy = deepcopy(policy)
 
         optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
+
         for itr in range(n_itr):
             print("********** Iteration %i ************" % itr)
             observations, actions, returns, values, epr = self.sample_steps(env, policy, self.num_steps)
@@ -169,6 +170,7 @@ class PPO:
             advantages = (advantages - advantages.mean()) / (advantages.std() + self.eps)
 
             batch_size = self.batch_size or advantages.numel()
+
             print("timesteps in batch: %i" % advantages.size()[0])
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
@@ -187,20 +189,16 @@ class PPO:
                     obs_batch = observations[indices]
                     action_batch = actions[indices]
 
-                    return_batch = Variable(returns[indices])
-                    advantage_batch = Variable(advantages[indices])
+                    return_batch = returns[indices]
+                    advantage_batch = advantages[indices]
 
-                    values, pdf = policy.evaluate(Variable(obs_batch))
+                    values, pdf = policy.evaluate(obs_batch)
 
                     with torch.no_grad():
-                        _, old_pdf = old_policy.evaluate(Variable(obs_batch))
+                        _, old_pdf = old_policy.evaluate(obs_batch)
+                        old_log_probs = old_pdf.log_prob(action_batch)
                     
-                    log_probs = pdf.log_prob(Variable(action_batch))
-                    
-                    with torch.no_grad():
-                        old_log_probs = old_pdf.log_prob(Variable(action_batch))
-
-                    old_log_probs = Variable(old_log_probs.data)
+                    log_probs = pdf.log_prob(action_batch)
                     
                     ratio = (log_probs - old_log_probs).exp()
 
@@ -210,14 +208,14 @@ class PPO:
 
                     critic_loss = (return_batch - values).pow(2).mean()
 
-                    #entropy_penalty = 
+                    entropy_penalty = 0.01 * pdf.entropy().mean()
 
                     optimizer.zero_grad()
                     (actor_loss + critic_loss).backward()
                     optimizer.step()
 
                     losses.append([actor_loss.data.clone().numpy(),
-                                   #entropy_penalty.data.numpy()[0],
+                                   #entropy_penalty.data.numpy(),
                                    critic_loss.data.numpy(),
                                    ratio.data.mean()])
 

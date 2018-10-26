@@ -20,7 +20,7 @@ def run_experiment(algo, policy, env_fn, args, log=True, monitor=False, render=F
 
     if render:
         # TODO: add normalize as a commandline argument
-        renv_fn = partial(env_fn, False)
+        renv_fn = partial(env_fn)
 
         renv = Normalize(Vectorize([renv_fn]))
         render_p = mp.Process(target=renderloop,
