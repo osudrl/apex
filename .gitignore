@@ -1,8 +1,8 @@
 cassieXie/
 trained_models/
 MUJOCO_LOG.TXT
-cassie/mujoco/mjkey.txt
-cassie/mujoco/mjpro150/
+cassie/cassiemujoco/mjkey.txt
+cassie/cassiemujoco/mjpro150/
 cassie/pickled
 
 # Byte-compiled / optimized / DLL files

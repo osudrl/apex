@@ -1,12 +1,12 @@
-import numpy as np
+# import numpy as np
 
-from cassie_env import CassieEnv
+# from cassie_env import CassieEnv
 
-from mujoco.cassiemujoco import *
-from trajectory.trajectory import CassieTrajectory
+# from mujoco.cassiemujoco import *
+# from trajectory.trajectory import CassieTrajectory
 
 
-traj = CassieTrajectory("trajectory/stepdata.bin")
+# traj = CassieTrajectory("trajectory/stepdata.bin")
 
 
 # env = CassieEnv("trajectory/stepdata.bin")

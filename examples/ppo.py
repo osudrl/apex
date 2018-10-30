@@ -7,7 +7,9 @@ from rl.utils import run_experiment
 from rl.policies import GaussianMLP, BetaMLP
 from rl.algos import PPO
 
-from cassieXie.simple_env import cassieRLEnv
+#from cassieXie.simple_env import cassieRLEnv
+
+from cassie import CassieEnv
 
 import gym
 import torch
@@ -26,6 +28,11 @@ def make_env(env_id, seed, rank, log_dir):
 
     return _thunk
 
+def make_cassie_env(traj_dir):
+    def _thunk():
+        return CassieEnv(traj_dir)
+    return _thunk
+
 parser = argparse.ArgumentParser()
 
 PPO.add_arguments(parser)
@@ -38,7 +45,9 @@ parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    env_fn = cassieRLEnv#make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
+    #env_fn = cassieRLEnv#make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
+
+    env_fn = make_cassie_env("cassie/trajectory/stepdata.bin")
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)

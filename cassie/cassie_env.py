@@ -1,9 +1,8 @@
-# TODO remove star import 
-from mujoco.cassiemujoco import *
+from .cassiemujoco import pd_in_t, CassieSim, CassieVis
 
-from mujoco.cassiemujoco import pd_in_t
+from .trajectory import CassieTrajectory
 
-from trajectory.trajectory import CassieTrajectory
+from math import floor
 
 import numpy as np 
 import os
@@ -11,7 +10,6 @@ import random
 
 #import pickle
 
-# TODO: make phaselen 
 class CassieEnv:
     def __init__(self, traj_path):
         self.sim = CassieSim()
@@ -27,6 +25,9 @@ class CassieEnv:
 
         self.u = pd_in_t()
 
+        self.simrate = 60 # simulate 60 mujoco steps with same pd target
+                          # Brings simulation from 2000Hz to roughly 30Hz
+
         self.time    = 0 # number of time steps in current episode
         self.phase   = 0 # portion of the phase the robot is in
         self.counter = 0 # number of phase cycles completed in episode
@@ -36,7 +37,7 @@ class CassieEnv:
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = 27
+        self.phaselen = floor(len(self.trajectory) / self.simrate) - 1
 
         self.time_limit = 400
 
@@ -47,7 +48,7 @@ class CassieEnv:
     def step_simulation(self, action):
 
         # maybe make ref traj only send relevant idxs?
-        ref_pos, ref_vel = self.get_ref_trajectory()
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
 
         target = action + ref_pos[self.pos_idx]
 
@@ -118,29 +119,31 @@ class CassieEnv:
         # TODO: see magnitude of state variables to gauge contribution to reward
         weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
-        joint_error = 0
-        com_error   = 0
+        joint_error       = 0
+        com_error         = 0
+        orientation_error = 0
+        spring_error      = 0
 
         # each joint pos
-        for i in self.pos_idx:
-            target = ref_pos[i]
-            actual = qpos[i]
+        for i, j in enumerate(self.pos_idx):
+            target = ref_pos[j]
+            actual = qpos[j]
 
             joint_error += 30 * weight[i] * (target - actual) ** 2
 
         # center of mass: x, y, z
-        for i in [0, 1, 2]:
-            target = ref_pos[i]
-            actual = qpos[i]
+        for j in [0, 1, 2]:
+            target = ref_pos[j]
+            actual = qpos[j]
 
             com_error += (target - actual) ** 2
         
         # COM orientation: qx, qy, qz
-        for i in [4, 5, 6]:
-            target = ref_pos[i]
-            actual = qpos[i]
+        for j in [4, 5, 6]:
+            target = ref_pos[j]
+            actual = qpos[j]
 
-            orienation_error += (target - actual) ** 2
+            orientation_error += (target - actual) ** 2
 
         # left and right shin springs
         for i in [15, 29]:
@@ -163,8 +166,7 @@ class CassieEnv:
         if phase >= self.phaselen:
             phase = 0
 
-        # 2 * 30 appears to come from the iteration step of 60
-        pose = np.copy(self.trajectory.qpos[phase * 2 * 30])
+        pose = np.copy(self.trajectory.qpos[phase * self.simrate])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles?
@@ -177,7 +179,7 @@ class CassieEnv:
         # regardless of reference trajectory?
         pose[1] = 0
 
-        vel = np.copy(self.trajectory.qvel[phase * 2 * 30])
+        vel = np.copy(self.trajectory.qvel[phase * self.simrate])
 
         return pose, vel
 

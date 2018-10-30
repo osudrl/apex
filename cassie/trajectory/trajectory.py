@@ -32,3 +32,6 @@ class CassieTrajectory:
     def sample(self):
         i = random.randrange(len(self.time))
         return (self.time[i], self.qpos[i], self.qvel[i])
+
+    def __len__(self):
+        return len(self.time)
