@@ -12,6 +12,7 @@ __pycache__/
 
 # C extensions
 *.so
+!libcassiemujoco.so
 
 # Distribution / packaging
 .Python
