@@ -9,9 +9,10 @@ from rl.algos import PPO
 
 #from cassieXie.simple_env import cassieRLEnv
 
+# NOTE: importing cassie for some reason breaks openai gym, BUG ?
 from cassie import CassieEnv
 
-import gym
+#import gym
 import torch
 import os
 
@@ -45,7 +46,7 @@ parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
 args = parser.parse_args()
 
 if __name__ == "__main__":
-    #env_fn = cassieRLEnv#make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
+    #env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
 
     env_fn = make_cassie_env("cassie/trajectory/stepdata.bin")
 
@@ -65,7 +66,7 @@ if __name__ == "__main__":
         policy=policy,
         env_fn=env_fn,
         args=args,
-        log=False,
-        monitor=False,
-        render=False
+        log=True,
+        monitor=True,
+        render=False # NOTE: CassieVis() hangs when launched in seperate thread. BUG?
     )

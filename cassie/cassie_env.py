@@ -44,6 +44,8 @@ class CassieEnv:
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
+    
+        #self.name = 
 
     def step_simulation(self, action):
 
@@ -74,8 +76,7 @@ class CassieEnv:
         self.sim.step_pd(self.u)
 
     def step(self, action):
-        # TODO: why 60? 
-        for _ in range(60):
+        for _ in range(self.simrate):
             self.step_simulation(action)
 
         height = self.sim.qpos()[2]
@@ -213,5 +214,5 @@ class CassieEnv:
     def render(self):
         if self.vis is None:
             self.vis = CassieVis()
-        
+
         self.vis.draw(self.sim)

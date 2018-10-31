@@ -211,15 +211,16 @@ class PPO:
                     entropy_penalty = 0.01 * pdf.entropy().mean()
 
                     optimizer.zero_grad()
-                    (actor_loss + critic_loss).backward()
+                    (actor_loss + critic_loss + entropy_penalty).backward()
                     optimizer.step()
 
                     losses.append([actor_loss.data.clone().numpy(),
-                                   #entropy_penalty.data.numpy(),
+                                   pdf.entropy().mean().data.numpy(),
                                    critic_loss.data.numpy(),
                                    ratio.data.mean()])
 
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
+
 
             if logger is not None:
                 logger.record("Reward", epr)
@@ -237,6 +238,6 @@ class PPO:
                 else:
                     save_model = policy
                 
-                torch.save(save_model, os.path.join("./trained_models", "Walker2d-v1" + ".pt"))
+                torch.save(save_model, os.path.join("./trained_models", "model2" + ".pt"))
 
             

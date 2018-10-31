@@ -62,25 +62,33 @@ This file structure makes it easy to compare models generated using the same hyp
 ### With Vizdom
 I've deprecated the bokeh monitor. Info on monitoring with vizdom coming soon. TODO: make a plotting config file format (e.g. use timesteps vs iterations on the x axis, use a fixed vs variable x axis, choose what kind of filtering to do).
 
+Run ```$ python -m visdom.server``` then navigate to ```http://localhost:8097/```` in your browser
+
+Requires matplotlib >= 2.0
+
 
 ### To Do
 - [ ] Save models
-- [ ] Fix ignored implementations (VPG, DAgger)
 - [ ] Package everything
 - [ ] Sphinx documentation and github wiki
 - [ ] Make logger as robust and pythonic as possible
 - [ ] Fix some hacks having to do with support for parallelism 
 (namely Vectorize, Normalize and Monitor)
 - [ ] ADD PARALLELISM/DISTRIBUTED IMPLEMENTATIONS
+- [ ] Add kl divergence, entropy, etc to logging
+- [ ] pure matlab logger
+- [ ] fix minor bug from filtering
 
 ### Notes
 
+Troubleshooting: X module not found? Make sure PYTHONPATH is configured. Make sure you run 
+examples from root directory.
 
 ## Features:
 * [GAE](https://arxiv.org/abs/1506.02438)/TD(lambda) estimators
 * Variable step size for VPG (~roughly analagous to natural gradient, see PPO paper)
 * Entropy based exploration bonus
-* advantage centering (observation normalization planned soon)
+* advantage centering (observation normalization WIP)
 * [PPO](https://arxiv.org/abs/1707.06347), VPG with ratio objective and with log likelihood objective
 
 #### To be implemented soon:
