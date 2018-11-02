@@ -227,7 +227,7 @@ class PPO:
 
 
             if logger is not None:
-                logger.record("Reward", epr)
+                logger.record("Reward: " + self.name, epr)
                 logger.dump()
 
             if itr % 10 == 0:
@@ -237,11 +237,16 @@ class PPO:
                 except OSError:
                     pass
 
+                filetype = ".pt" # pytorch model
+
                 if normalize:
-                    save_model = [policy, env.ob_rms]
+                    # ret_rms is not necessary to run policy, but is necessary to interpret rewards
+                    save_model = [policy, (env.ob_rms, env.ret_rms)]
+                    
+                    filetype = ".ptn" # "normalized" pytorch model
                 else:
                     save_model = policy
                 
-                torch.save(save_model, os.path.join("./trained_models", self.name + ".pt"))
+                torch.save(save_model, os.path.join("./trained_models", self.name + filetype))
 
             

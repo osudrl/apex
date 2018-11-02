@@ -5,7 +5,7 @@ import time
 
 from cassie import CassieEnv
 from rl.envs import Normalize, Vectorize
-from rl.policies import GaussianMLP
+from rl.policies import GaussianMLP, EnsemblePolicy
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -15,24 +15,16 @@ import numpy as np
 np.set_printoptions(precision=2, suppress=True)
 
 
-# TODO: move this into 
-class EnsemblePolicy:
-    def __init__(self, vpolicy):
-        self.vpolicy = vpolicy # policy vector aka a list of torch models
-
-    # take average action over ensemble of actions
-    def act(self, x, deterministic=False):
-        return None, sum([policy.act(x, deterministic)[1] for policy in self.vpolicy]) / len(self.vpolicy)
-
 # TODO: add .dt to all environments. OpenAI should do the same...
 def visualize(env, policy, trj_len, deterministic=True, dt=0.033, speedup=1):
+    R = []
+    r_ep = 0
+    done = False
 
     with torch.no_grad():
         state = torch.Tensor(env.reset())
 
-        R = []
-        r_ep = 0
-        done = False
+        
         for t in range(trj_len):
             _, action = policy.act(state, deterministic)
 
@@ -58,7 +50,7 @@ def visualize(env, policy, trj_len, deterministic=True, dt=0.033, speedup=1):
 
             
 
-def cassie_policyplot(env, policy, trj_len):
+def cassie_policyplot(env, policy, trj_len, title=None):
     cassie_action = ["hip roll", "hip yaw", "hip pitch", "knee", "foot"]
 
     obs_dim = env.observation_space.shape[0]
@@ -66,7 +58,7 @@ def cassie_policyplot(env, policy, trj_len):
 
     y_delta = np.zeros((trj_len, action_dim))
     y_ref   = np.zeros((trj_len, action_dim))
-    X       = np.zeros((trj_len, obs_dim))
+    X       = np.zeros((trj_len, action_dim)) # not real X
 
     with torch.no_grad():
         state = torch.Tensor(env.reset())
@@ -74,12 +66,14 @@ def cassie_policyplot(env, policy, trj_len):
         for t in range(trj_len):
             _, action = policy.act(state, True)
 
-            X[t, :] = state.data.numpy()
+            #X[t, :] = state.data.numpy()
             y_delta[t, :] = action.data.numpy() # policy delta
 
             # oooof this is messy/hackish
             ref_pos, _ = env.venv.envs[0].get_ref_state(env.venv.envs[0].phase)
             y_ref[t, :] = ref_pos[env.venv.envs[0].pos_idx] # base PD target
+
+            X[t, :] = np.copy(env.venv.envs[0].sim.qpos())[env.venv.envs[0].pos_idx]
 
             state, reward, done, _ = env.step(action.data.numpy())
 
@@ -91,6 +85,9 @@ def cassie_policyplot(env, policy, trj_len):
 
     fig, axes = plt.subplots(plot_rows, plot_cols, figsize=(20, 10))
 
+    if title is not None:
+        fig.suptitle(title, fontsize=16)
+
     for r in range(plot_rows):     # 2 legs
         for c in range(plot_cols): # 5 actions
             a = r * plot_cols + c
@@ -98,11 +95,18 @@ def cassie_policyplot(env, policy, trj_len):
             axes[r][c].plot(np.arange(trj_len), y_ref[:, a], "C1", label="reference")
             axes[r][c].plot(np.arange(trj_len), y_delta[:, a] + y_ref[:, a], "C2--", label="summed")
 
+            axes[r][c].plot(np.arange(trj_len), X[:, a], "g--", label="result")
+
             axes[0][c].set_xlabel(cassie_action[c])
             axes[0][c].xaxis.set_label_position('top') 
         axes[r][0].set_ylabel(["left leg", "right leg"][r])
     
     plt.tight_layout()
+
+    if title is not None:
+        plt.subplots_adjust(top=0.93)
+
+
     axes[0][0].legend(loc='upper left')
     plt.show()
 
@@ -160,30 +164,36 @@ if __name__ == "__main__":
     # other possibility: maybe norm parameters converge on their own over time? Although if they did
     # an ensemble probably wouldn't change behavior
 
+    # SOLUTION: give trained policies an ob_rms parameter to normalize their own observations,
+    # keep normalization calculation in environment for parallelization
+
 
 
     #### Stable policy
-    stable_policy, stable_ob_rms = torch.load("trained_models/model_old.pt")
+    # stable_policy, stable_ob_rms = torch.load("trained_models/model_old.pt")
 
     env_fn = make_env_fn()
-    env = Normalize(Vectorize([env_fn]))
-    env.ob_rms = stable_ob_rms
+    env = Normalize(Vectorize([env_fn]), ret=False)
 
-    #visualize(env, stable_policy, 75)
-    #cassie_policyplot(env, stable_policy, 75)
+    # env.ob_rms = stable_ob_rms
 
-    # !!BUG: changing env.ob_rms on the fly does not behave as expected!!
+    # visualize(env, stable_policy, 75)
+    # cassie_policyplot(env, stable_policy, 75)
+
+    # NOTE: reward normalization affects stuff
 
 
     ### Sample policy
-    policy1, ob_rms1 = torch.load("trained_models/model1.pt")
+    #policy1, ob_rms1 = torch.load("trained_models/model1.pt")
 
     # env_fn = make_env_fn()
     # env = Normalize(Vectorize([env_fn]))
-    env.ob_rms = ob_rms1
+    # env.ob_rms = ob_rms1
 
-    #visualize(env, policy1, 100)
-    #cassie_policyplot(env, policy1, 75)
+    # visualize(env, policy1, 100)
+    # cassie_policyplot(env, policy1, 75, "stable policy")
+
+    
 
     #### Ensemble policy
     vpolicy = []
@@ -193,8 +203,8 @@ if __name__ == "__main__":
     for i in range(1, 11):
         policy, rms = torch.load("trained_models/model{}.pt".format(i))
 
-        print(np.copy(rms.mean).mean())
-        print(np.copy(rms.var).mean())
+        #print(np.copy(rms.mean).mean())
+        #print(np.copy(rms.var).mean())
 
         mmean += np.copy(rms.mean)
         mvar += np.copy(rms.var)
@@ -203,7 +213,11 @@ if __name__ == "__main__":
 
         env.ob_rms = rms
 
-        # visualize(env, policy, 100)
+        print("visualizing policy {}".format(i))
+
+        visualize(env, policy, 100)
+        #exit()
+        #cassie_policyplot(env, policy, 100, "policy {}".format(i))
 
     mmean /= 10
     mvar /= 10
