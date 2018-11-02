@@ -68,6 +68,8 @@ class PPO:
         self.epochs        = epochs        or args.epochs
         self.num_steps     = num_steps     or args.num_steps
 
+        self.name = args.name
+
     @staticmethod
     def add_arguments(parser):
         parser.add_argument("--n_itr", type=int, default=1000,
@@ -144,7 +146,9 @@ class PPO:
                rollout.actions, 
                rollout.returns[:-1], 
                rollout.values[:-1],
-               sum(rewards)/(len(rewards)+1))
+               sum(rewards)/(len(rewards)+1)) 
+               # TODO: remove that +1^. Divide by 0 only happens when last trajectory gets discarded
+               # because it never flags done
 
     def train(self,
               env_fn,
@@ -238,6 +242,6 @@ class PPO:
                 else:
                     save_model = policy
                 
-                torch.save(save_model, os.path.join("./trained_models", "model2" + ".pt"))
+                torch.save(save_model, os.path.join("./trained_models", self.name + ".pt"))
 
             
