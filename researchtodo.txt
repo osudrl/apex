@@ -1,0 +1,18 @@
+1. Implement multiprocessing
+2. Test ensemble models
+3. Modify input state
+4. Modify input state via imitation learning
+5. Using model ensemble as expert for IL 
+6. Investigate enforcing symmetry (maybe ensembles fix this?)
+7. Investigate more complex network architectures
+8. Investigate combining behaviors/dynamic reference trajectories/goal states as input
+9. Investigate meta RL for learning new behaviors
+10. Correlated noise
+11. Push policies to be distinct/optimize ensemble as one network? etc
+12. Add (sinusoid encoded?) clock input instead of ref trajectory
+
+**13**. Investigate reward function. It behaves unintuitively 
+**14**. How observations are normalized greatly affects policy behavior, and could break ensembles
+        Can the normalization parameters be averaged? Or should all policies in the ensemble use the same
+        normalization. Is normalization even necessary? Is online updates of the normalization parameters
+        necessary?

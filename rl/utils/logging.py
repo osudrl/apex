@@ -17,7 +17,7 @@ import numpy as np
 
 matplotlib.rcParams.update({'font.size': 8})
 
-from scipy.signal import medfilt
+#from scipy.signal import medfilt
 
 class Logger():
     def __init__(self, args, viz=True):
