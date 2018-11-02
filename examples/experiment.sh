@@ -1,1 +1,4 @@
-python dagger_test.py --dagger_itr 100 --epochs 100 --seed $RANDOM
+for i in {1..10}
+do
+    python examples/ppo.py  --name "model$i" --seed $RANDOM &
+done
