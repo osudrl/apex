@@ -42,6 +42,7 @@ parser.add_argument("--seed", type=int, default=1,
                     help="RNG seed")
 parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
                     help="Where to log diagnostics to")
+parser.add_argument("--name", type=str, default="model1")
 
 args = parser.parse_args()
 
@@ -53,7 +54,7 @@ if __name__ == "__main__":
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
-    obs_dim = env_fn().observation_space.shape[0]
+    obs_dim = env_fn().observation_space.shape[0] # TODO: could make obs and ac space static properties
     action_dim = env_fn().action_space.shape[0]
 
     policy = GaussianMLP(obs_dim, action_dim)
@@ -61,6 +62,8 @@ if __name__ == "__main__":
 
     algo = PPO(args=args)
 
+    # TODO: make log, monitor and render command line arguments
+    # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)
     run_experiment(
         algo=algo,
         policy=policy,
@@ -69,4 +72,5 @@ if __name__ == "__main__":
         log=True,
         monitor=True,
         render=False # NOTE: CassieVis() hangs when launched in seperate thread. BUG?
+                     # Also, waitpid() hangs on patrick's desktop in mp.Process. BUG?
     )

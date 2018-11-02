@@ -77,7 +77,7 @@ Requires matplotlib >= 2.0
 - [ ] ADD PARALLELISM/DISTRIBUTED IMPLEMENTATIONS
 - [ ] Add kl divergence, entropy, etc to logging
 - [ ] pure matlab logger
-- [ ] fix minor bug from filtering
+- [ ] fix minor plotting bug from doing running average
 
 ### Notes
 
