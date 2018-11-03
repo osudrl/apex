@@ -50,7 +50,7 @@ def visualize(env, policy, trj_len, deterministic=True, dt=0.033, speedup=1):
 
             
 
-def cassie_policyplot(env, policy, trj_len, title=None):
+def cassie_policyplot(env, policy, trj_len, render=False, title=None):
     cassie_action = ["hip roll", "hip yaw", "hip pitch", "knee", "foot"]
 
     obs_dim = env.observation_space.shape[0]
@@ -78,6 +78,10 @@ def cassie_policyplot(env, policy, trj_len, title=None):
             state, reward, done, _ = env.step(action.data.numpy())
 
             state = torch.Tensor(state)
+
+            if render:
+                env.render()
+                time.sleep(0.033)
 
     # one row for each leg
     plot_rows = 2 
@@ -200,8 +204,8 @@ if __name__ == "__main__":
 
     mmean = 0
     mvar = 0
-    for i in range(1, 11):
-        policy, rms = torch.load("trained_models/model{}.pt".format(i))
+    for i in range(1, 16):
+        policy, rms = torch.load("trained_models/modelv{}.pt".format(i))
 
         #print(np.copy(rms.mean).mean())
         #print(np.copy(rms.var).mean())
@@ -214,10 +218,9 @@ if __name__ == "__main__":
         env.ob_rms = rms
 
         print("visualizing policy {}".format(i))
-
+        # if i == 15:
         visualize(env, policy, 100)
-        #exit()
-        #cassie_policyplot(env, policy, 100, "policy {}".format(i))
+            #cassie_policyplot(env, policy, 100, "policy {}".format(i))
 
     mmean /= 10
     mvar /= 10
@@ -232,5 +235,5 @@ if __name__ == "__main__":
     # but still, weird
     policy = EnsemblePolicy(vpolicy)
 
-    visualize(env, policy, 100)
-    cassie_policyplot(env, policy, 75)
+    #visualize(env, policy, 100)
+    cassie_policyplot(env, policy, 75, render=True)

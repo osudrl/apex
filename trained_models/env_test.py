@@ -8,14 +8,14 @@ from cassie.cassiemujoco import *
 from cassie.trajectory import CassieTrajectory
 
 
-traj = CassieTrajectory("cassie/trajectory/simplejump.bin")
+traj = CassieTrajectory("cassie/trajectory/stepdata-2018.bin")
 
 
-env = CassieEnv("cassie/trajectory/stepdata.bin", simrate=120)
+env = CassieEnv("cassie/trajectory/stepdata.bin")
 
 
 u = pd_in_t()
-
+print(len(traj))
 # test actual trajectory
 def test_ref():
     csim = CassieSim()
@@ -31,10 +31,10 @@ def test_ref():
         
         y = csim.step_pd(u)
 
-        if t % 60 == 0:
-            cvis.draw(csim)
 
-            input()
+        cvis.draw(csim)
+
+        input()
 
         print(t, end='\r')
 
@@ -88,4 +88,5 @@ def test_wrap():
 def state_plot():
     pass
     
-test_wrap()
+#test_wrap()
+test_ref()

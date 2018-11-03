@@ -161,14 +161,14 @@ class CassieEnv:
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
-        print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-                    0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-                    0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-                    0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-                    0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
-                    reward
-                )
-            )  
+        # print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
+        #             0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
+        #             0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
+        #             0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
+        #             0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
+        #             reward
+        #         )
+        #     )  
 
         return reward
 
