@@ -62,6 +62,20 @@ if __name__ == "__main__":
 
     algo = PPO(args=args)
 
+
+    # Zhaoming params:
+    # batch_size = 128
+    # lr = 1e-3
+    # num_epoch = 32
+    # num_steps = 2048
+    # max_episode_length = 2048 # not used
+    # min_episode = 5           # not used
+    # time_horizon = 200,000    # not used
+
+    # differences between Zhaoming RL and my RL:
+    # Zhaoming: no GAE, different normalization scheme, seperate optimization for actor and critic, learning rate scheduling
+
+
     # TODO: make log, monitor and render command line arguments
     # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)
     run_experiment(

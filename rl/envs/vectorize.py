@@ -17,11 +17,13 @@ class Vectorize:
         results = [env.step(a) for (a,env) in zip(action_n, self.envs)]
         obs, rews, dones, infos = map(np.array, zip(*results))
 
+        # TODO: decide whether to uncomment this
+
         self.ts += 1
-        for (i, done) in enumerate(dones):
-            if done:
-                obs[i] = self.envs[i].reset()
-                self.ts[i] = 0
+        # for (i, done) in enumerate(dones):
+        #     if done:
+        #         obs[i] = self.envs[i].reset()
+        #         self.ts[i] = 0
 
         return np.array(obs), np.array(rews), np.array(dones), infos
 
