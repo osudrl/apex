@@ -19,7 +19,6 @@ class Beta(nn.Module):
         if deterministic is False:
             action = self.evaluate(x).sample()
         else:
-            # NOTE: is mean expected value for beta? should check this
             # E = alpha / (alpha + beta)
             return self.evaluate(x).mean
 

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.functional as F
 
 from rl.distributions import Beta
 from .base import FFPolicy
@@ -13,7 +14,7 @@ def normc_init(m):
             m.bias.data.fill_(0)
 
 class BetaMLP(FFPolicy):
-    def __init__(self, num_inputs, action_dim):
+    def __init__(self, num_inputs, action_dim, nonlinearity="tanh"):
         super(BetaMLP, self).__init__()
 
         actor_dims = (64, 64)
@@ -40,6 +41,11 @@ class BetaMLP(FFPolicy):
         self.vf = nn.Linear(critic_dims[-1], 1)
 
         self.dist = Beta(action_dim)
+
+        if nonlinearity == "relu":
+            self.nonlinearity = F.relu
+        else:
+            self.nonlinearity = torch.tanh
 
         self.train()
         self.reset_parameters()

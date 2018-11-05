@@ -10,7 +10,8 @@ class DiagonalGaussian(nn.Module):
         super(DiagonalGaussian, self).__init__()
 
         self.logstd = nn.Parameter(
-            torch.ones(1, num_outputs) * math.log(init_std)
+            torch.ones(1, num_outputs) * math.log(init_std),
+            requires_grad=True
         )
 
     def forward(self, x):
