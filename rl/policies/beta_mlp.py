@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from rl.distributions import Beta
 from .base import FFPolicy
@@ -48,18 +47,18 @@ class BetaMLP(FFPolicy):
     def reset_parameters(self):
         self.apply(normc_init)
 
-        if self.dist.__class__.__name__ == "DiagGaussian":
-            self.dist.fc_mean.weight.data.mul_(0.01)
+        #if self.dist.__class__.__name__ == "DiagGaussian":
+        #    self.dist.fc_mean.weight.data.mul_(0.01)
 
     def forward(self, inputs):
         x = inputs
         for l in self.critic_layers:
-            x = F.tanh(l(x))
+            x = torch.tanh(l(x))
         value = self.vf(x)
 
         x = inputs
         for l in self.actor_layers:
-            x = F.tanh(l(x))
+            x = torch.tanh(l(x))
         x = self.alpha_beta(x)
 
         return value, x
