@@ -114,7 +114,8 @@ class PPO:
         if self.last_state is None:
             state = torch.Tensor(env.reset())
         else:
-            state = self.last_state
+            # BUG: without unsqueeze this drops a dimension due to indexing
+            state = self.last_state.unsqueeze(0)
                     
         rollout = Rollout(num_steps, obs_dim, action_dim, state)
 

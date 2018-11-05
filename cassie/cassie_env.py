@@ -11,12 +11,18 @@ import random
 #import pickle
 
 class CassieEnv:
-    def __init__(self, traj_path):
+    def __init__(self, traj_path, simrate=60, clock_based=False):
         self.sim = CassieSim()
         self.vis = None
 
-        self.observation_space = np.zeros(80)
-        self.action_space      = np.zeros(10)
+        self.clock_based = clock_based
+
+        if clock_based:
+            self.observation_space = np.zeros(42)
+            self.action_space      = np.zeros(10)
+        else:
+            self.observation_space = np.zeros(80)
+            self.action_space      = np.zeros(10)
 
         self.trajectory = CassieTrajectory(traj_path)
 
@@ -25,8 +31,8 @@ class CassieEnv:
 
         self.u = pd_in_t()
 
-        self.simrate = 60 # simulate 60 mujoco steps with same pd target
-                          # Brings simulation from 2000Hz to roughly 30Hz
+        self.simrate = simrate # simulate X mujoco steps with same pd target
+                               # 60 brings simulation from 2000Hz to roughly 30Hz
 
         self.time    = 0 # number of time steps in current episode
         self.phase   = 0 # portion of the phase the robot is in
@@ -180,22 +186,22 @@ class CassieEnv:
         if phase >= self.phaselen:
             phase = 0
 
-        pose = np.copy(self.trajectory.qpos[phase * self.simrate])
+        pos = np.copy(self.trajectory.qpos[phase * self.simrate])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles?
-        pose[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
+        pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
         
         # ^ should only matter for COM error calculation,
         # gets dropped out of state variable for input reasons
 
         # setting lateral distance target to 0?
         # regardless of reference trajectory?
-        pose[1] = 0
+        pos[1] = 0
 
         vel = np.copy(self.trajectory.qvel[phase * self.simrate])
 
-        return pose, vel
+        return pos, vel
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
@@ -218,11 +224,19 @@ class CassieEnv:
         pos_index = np.array([1,2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
         vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
+        ext_state = np.concatenate(ref_pos[pos_index], ref_vel[vel_index])
+
+        if self.clock_based:
+            qpos[pos_idx] -= ref_pos[pos_idx]
+            qvel[vel_idx] -= ref_vel[vel_idx]
+
+            clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
+                     np.cos(2 * np.pi *  self.phase / self.phaselen)]
+
 
         return np.concatenate([qpos[pos_index], 
                                qvel[vel_index], 
-                               ref_pos[pos_index], 
-                               ref_vel[vel_index]])
+                               ext_state])
 
     def render(self):
         if self.vis is None:
