@@ -18,7 +18,6 @@ class Vectorize:
         obs, rews, dones, infos = map(np.array, zip(*results))
 
         # TODO: decide whether to uncomment this
-
         self.ts += 1
         # for (i, done) in enumerate(dones):
         #     if done:

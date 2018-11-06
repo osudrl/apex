@@ -1,4 +1,5 @@
 # TODO: organize this file
+import argparse
 import pickle
 import torch
 import time
@@ -146,17 +147,43 @@ def make_env_fn():
     return _thunk
 
 
+parser = argparse.ArgumentParser(description="Run a model, including visualization and plotting.")
+parser.add_argument("-p", "--model_path", type=str, default="/trained_models/model1.ptn",
+                    help="File path for model to test")
+parser.add_argument("-x", "--no-visualize", dest="visualize", default=True, action='store_false',
+                    help="Don't render the policy.")
+parser.add_argument("-g", "--graph", dest="plot", default=False, action='store_true',
+                    help="Graph the output of the policy.")
+
+parser.add_argument("--glen", type=int, default=150,
+                    help="Length of trajectory to graph.")
+parser.add_argument("--vlen", type=int, default=75,
+                    help="Length of trajectory to visualize")
+
+parser.add_argument("--noise", default=False, action="store_true",
+                    help="Visualize policy with exploration.")
+
+args = parser.parse_args()
+
+
+# TODO: add command line arguments for normalization on/off, and for ensemble policy?
+
 if __name__ == "__main__":
+    policy, rms = torch.load(args.model_path)
 
-    # policy, ob_rms = torch.load("trained_models/model2.pt")
+    env_fn = make_env_fn()
+    env = Normalize(Vectorize([env_fn]), ret=True)
 
-    # policy = GaussianMLP(env.observation_space.shape[0], env.action_space.shape[0])
+    env.ob_rms, env.ret_rms = rms
+
+    if args.visualize:
+        visualize(env, policy, args.vlen, deterministic=not args.noise)
     
-    # env_fn = make_env_fn()
+    if args.plot:
+        cassie_policyplot(env, policy, args.glen)
 
-    # env = Normalize(Vectorize([env_fn]))
+    exit()
 
-    # env.ob_rms = ob_rms
 
     # TODO: try averaging obs_norm? to seperate obs normalization for each
     # averaging obs_norm probably wont work as all policies are expecting different normalization parameters
@@ -171,33 +198,7 @@ if __name__ == "__main__":
     # SOLUTION: give trained policies an ob_rms parameter to normalize their own observations,
     # keep normalization calculation in environment for parallelization
 
-
-
-    #### Stable policy
-    # stable_policy, stable_ob_rms = torch.load("trained_models/model_old.pt")
-
-    env_fn = make_env_fn()
-    env = Normalize(Vectorize([env_fn]), ret=False)
-
-    # env.ob_rms = stable_ob_rms
-
-    # visualize(env, stable_policy, 75)
-    # cassie_policyplot(env, stable_policy, 75)
-
     # NOTE: reward normalization affects stuff
-
-
-    ### Sample policy
-    #policy1, ob_rms1 = torch.load("trained_models/model1.pt")
-
-    # env_fn = make_env_fn()
-    # env = Normalize(Vectorize([env_fn]))
-    # env.ob_rms = ob_rms1
-
-    # visualize(env, policy1, 100)
-    # cassie_policyplot(env, policy1, 75, "stable policy")
-
-    
 
     #### Ensemble policy
     vpolicy = []

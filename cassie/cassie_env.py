@@ -224,7 +224,7 @@ class CassieEnv:
         pos_index = np.array([1,2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
         vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
-        ext_state = np.concatenate(ref_pos[pos_index], ref_vel[vel_index])
+        ext_state = np.concatenate([ref_pos[pos_index], ref_vel[vel_index]])
 
         if self.clock_based:
             qpos[pos_idx] -= ref_pos[pos_idx]

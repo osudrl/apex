@@ -6,12 +6,12 @@ from torch.autograd import Variable
 
 
 class DiagonalGaussian(nn.Module):
-    def __init__(self, num_outputs, init_std=1):
+    def __init__(self, num_outputs, init_std=1, learn_std=True):
         super(DiagonalGaussian, self).__init__()
 
         self.logstd = nn.Parameter(
             torch.ones(1, num_outputs) * math.log(init_std),
-            requires_grad=True
+            requires_grad=learn_std
         )
 
     def forward(self, x):

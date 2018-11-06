@@ -14,7 +14,7 @@ def normc_init(m):
             m.bias.data.fill_(0)
 
 class BetaMLP(FFPolicy):
-    def __init__(self, num_inputs, action_dim, nonlinearity="tanh"):
+    def __init__(self, num_inputs, action_dim, nonlinearity="tanh", normc_init=False):
         super(BetaMLP, self).__init__()
 
         actor_dims = (64, 64)
@@ -47,14 +47,18 @@ class BetaMLP(FFPolicy):
         else:
             self.nonlinearity = torch.tanh
 
+        # weight initialization scheme used in PPO paper experiments
+        self.normc_init = normc_init
+
         self.train()
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.apply(normc_init)
+        if self.normc_init:
+            self.apply(normc_init)
 
-        #if self.dist.__class__.__name__ == "DiagGaussian":
-        #    self.dist.fc_mean.weight.data.mul_(0.01)
+            if self.dist.__class__.__name__ == "DiagGaussian":
+                self.dist.fc_mean.weight.data.mul_(0.01)
 
     def forward(self, inputs):
         x = inputs
