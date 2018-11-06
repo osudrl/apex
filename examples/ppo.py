@@ -14,6 +14,7 @@ from cassie import CassieEnv
 
 #import gym
 import torch
+import numpy as np
 import os
 
 #TODO: remove reliance on: Monitor, DummyVecEnv, VecNormalized
@@ -42,9 +43,32 @@ parser.add_argument("--seed", type=int, default=1,
                     help="RNG seed")
 parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
                     help="Where to log diagnostics to")
-parser.add_argument("--name", type=str, default="model1")
+parser.add_argument("--name", type=str, default="model")
 
 args = parser.parse_args()
+
+# Xie et al params:
+# batch_size = 128, hardcoded to 128
+# lr = 1e-3, but gets set to 1e-4 in the code
+# num_epoch = 32, hardcoded to 64
+# num_steps = 2048, but gets multipled by 10,000?
+# ^ but samples are hardcoded to 300 in the code...
+# ^ but memory that optimization gets drawn from is set to 
+# ^ 3000...
+# max_episode_length = 2048 # not used
+# min_episode = 5           # not used
+# time_horizon = 200,000    # not used
+
+# differences between Xie et al RL and my RL:
+# Xie et al: no GAE, different normalization scheme, seperate optimization for actor and critic, learning rate scheduling
+# optimizer reset every run
+# learning rate scheduling not used
+
+args.batch_size = 128
+args.lr = 1e-4
+args.epochs = 64
+
+args.name = "Xiehyperparams"
 
 if __name__ == "__main__":
     #env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
@@ -57,24 +81,10 @@ if __name__ == "__main__":
     obs_dim = env_fn().observation_space.shape[0] # TODO: could make obs and ac space static properties
     action_dim = env_fn().action_space.shape[0]
 
-    policy = GaussianMLP(obs_dim, action_dim)
+    policy = GaussianMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False)
     #policy = BetaMLP(obs_dim, action_dim)
 
     algo = PPO(args=args)
-
-
-    # Zhaoming params:
-    # batch_size = 128
-    # lr = 1e-3
-    # num_epoch = 32
-    # num_steps = 2048
-    # max_episode_length = 2048 # not used
-    # min_episode = 5           # not used
-    # time_horizon = 200,000    # not used
-
-    # differences between Zhaoming RL and my RL:
-    # Zhaoming: no GAE, different normalization scheme, seperate optimization for actor and critic, learning rate scheduling
-
 
     # TODO: make log, monitor and render command line arguments
     # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)

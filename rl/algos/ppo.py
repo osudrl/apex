@@ -213,7 +213,7 @@ class PPO:
 
                     critic_loss = (return_batch - values).pow(2).mean()
 
-                    entropy_penalty = entropy_coeff * pdf.entropy().mean()
+                    entropy_penalty = self.entropy_coeff * pdf.entropy().mean()
 
                     optimizer.zero_grad()
                     (actor_loss + critic_loss + entropy_penalty).backward()

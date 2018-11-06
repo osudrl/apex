@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 
 from rl.distributions import DiagonalGaussian
 from .base import FFPolicy
@@ -14,7 +14,7 @@ def normc_init(m):
             m.bias.data.fill_(0)
 
 class GaussianMLP(FFPolicy):
-    def __init__(self, num_inputs, action_dim, init_std=1, nonlinearity="tanh"):
+    def __init__(self, num_inputs, action_dim, init_std=1, learn_std=True, nonlinearity="tanh", normc_init=False):
         super(GaussianMLP, self).__init__()
 
         actor_dims = (64, 64)
@@ -40,21 +40,25 @@ class GaussianMLP(FFPolicy):
 
         self.vf = nn.Linear(critic_dims[-1], 1)
 
-        self.dist = DiagonalGaussian(action_dim, init_std)
+        self.dist = DiagonalGaussian(action_dim, init_std, learn_std)
 
         if nonlinearity == "relu":
             self.nonlinearity = F.relu
         else:
             self.nonlinearity = torch.tanh
+        
+        # weight initialization scheme used in PPO paper experiments
+        self.normc_init = normc_init
 
         self.train()
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.apply(normc_init)
+        if normc_init:
+            self.apply(normc_init)
 
-        if self.dist.__class__.__name__ == "DiagGaussian":
-            self.mean.weight.data.mul_(0.01)
+            if self.dist.__class__.__name__ == "DiagGaussian":
+                self.mean.weight.data.mul_(0.01)
 
     def forward(self, inputs):
         x = inputs
@@ -66,5 +70,7 @@ class GaussianMLP(FFPolicy):
         for l in self.actor_layers:
             x = self.nonlinearity(l(x))
         x = self.mean(x)
+
+        x = torch.tanh(x) # NOTE: not sure what this is for, but Xie et al does it?
 
         return value, x
