@@ -163,24 +163,45 @@ parser.add_argument("--vlen", type=int, default=75,
 parser.add_argument("--noise", default=False, action="store_true",
                     help="Visualize policy with exploration.")
 
+parser.add_argument("--new", default=False, action="store_true",
+                   help="Visualize new (untrained) policy")
+
 args = parser.parse_args()
 
 
 # TODO: add command line arguments for normalization on/off, and for ensemble policy?
 
 if __name__ == "__main__":
-    policy, rms = torch.load(args.model_path)
+    if args.new:
+        env_fn = make_env_fn()
+        env = Vectorize([env_fn])
 
-    env_fn = make_env_fn()
-    env = Normalize(Vectorize([env_fn]), ret=True)
+        obs_dim = env_fn().observation_space.shape[0] 
+        action_dim = env_fn().action_space.shape[0]
 
-    env.ob_rms, env.ret_rms = rms
+        policy = GaussianMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False)
 
-    if args.visualize:
-        visualize(env, policy, args.vlen, deterministic=not args.noise)
-    
-    if args.plot:
-        cassie_policyplot(env, policy, args.glen)
+        if args.visualize:
+            visualize(env, policy, args.vlen, deterministic=not args.noise)
+        
+        if args.plot:
+            cassie_policyplot(env, policy, args.glen)
+
+    else:
+        policy, rms = torch.load(args.model_path)
+
+        env_fn = make_env_fn()
+        env = Normalize(Vectorize([env_fn]))
+
+        env.ob_rms, env.ret_rms = rms
+
+        env.ret = env.ret_rms is not None
+
+        if args.visualize:
+            visualize(env, policy, args.vlen, deterministic=not args.noise)
+        
+        if args.plot:
+            cassie_policyplot(env, policy, args.glen)
 
     exit()
 

@@ -51,6 +51,11 @@ args = parser.parse_args()
 # batch_size = 128, hardcoded to 128
 # lr = 1e-3, but gets set to 1e-4 in the code
 # num_epoch = 32, hardcoded to 64
+
+# his "epochs" are actually minibatch optimization steps...
+# which look to be done with replacement
+# equivalent epochs is 64*128/3000 ~= 3
+
 # num_steps = 2048, but gets multipled by 10,000?
 # ^ but samples are hardcoded to 300 in the code...
 # ^ but memory that optimization gets drawn from is set to 
@@ -61,14 +66,21 @@ args = parser.parse_args()
 
 # differences between Xie et al RL and my RL:
 # Xie et al: no GAE, different normalization scheme, seperate optimization for actor and critic, learning rate scheduling
+# Xie et al does not center advantages or rewards
 # optimizer reset every run
 # learning rate scheduling not used
 
+# policy size: (256, 256)
+
+# true hyperparams: 
 args.batch_size = 128
 args.lr = 1e-4
-args.epochs = 64
+args.epochs = 3
+args.num_steps = 3000
 
-args.name = "Xiehyperparams"
+args.use_gae = False
+
+args.name = "Xie"
 
 if __name__ == "__main__":
     #env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
@@ -85,6 +97,8 @@ if __name__ == "__main__":
     #policy = BetaMLP(obs_dim, action_dim)
 
     algo = PPO(args=args)
+
+    # TODO: add normalization options (frontloaded vs online)
 
     # TODO: make log, monitor and render command line arguments
     # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)

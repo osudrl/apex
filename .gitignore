@@ -3,6 +3,7 @@ MUJOCO_LOG.TXT
 cassie/cassiemujoco/mjkey.txt
 cassie/cassiemujoco/mjpro150/
 cassie/pickled
+sim-to-real/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

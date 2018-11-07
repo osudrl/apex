@@ -6,14 +6,12 @@ import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.autograd import Variable
 
-#from .base import PolicyGradientAlgorithm
-
 from rl.envs import Vectorize, Normalize
 
 import numpy as np
 import os
 
-
+# TODO: Rollout should be called Episode
 class Rollout():
     def __init__(self, num_steps, obs_dim, action_dim, first_state):
         self.states = torch.zeros(num_steps + 1, obs_dim)
@@ -34,13 +32,24 @@ class Rollout():
         self.rewards[step] = reward
         self.masks[step] = mask
     
-    def calculate_returns(self, next_value, gamma=0.99, tau=0.95):
-        self.values[-1] = next_value
-        gae = 0
-        for step in reversed(range(self.rewards.size(0))):
-            delta = self.rewards[step] + gamma * self.values[step + 1] * self.masks[step] - self.values[step]
-            gae = delta + gamma * tau * self.masks[step] * gae
-            self.returns[step] = gae + self.values[step]
+    def calculate_returns(self, next_value, gamma=0.99, tau=0.95, use_gae=True):
+        # "masks" just resets the calculation for each trajectory, based on "done"
+        # TODO: make this more easily read
+        
+        if use_gae:
+            self.values[-1] = next_value
+
+            gae = 0
+            for step in reversed(range(self.rewards.size(0))):
+                delta = self.rewards[step] + gamma * self.values[step + 1] * self.masks[step] - self.values[step]
+                gae = delta + gamma * tau * self.masks[step] * gae
+                self.returns[step] = gae + self.values[step]
+            
+        else:
+            self.returns[-1] = next_value
+
+            for step in reversed(range(self.rewards.size(0))):
+                self.returns[step] = self.returns[step + 1] * gamma * self.masks[step + 1] + self.rewards[step]
 
 
 class PPO:
@@ -69,11 +78,12 @@ class PPO:
         self.num_steps     = num_steps     or args.num_steps
 
         self.name = args.name
+        self.use_gae = args.use_gae
 
     @staticmethod
     def add_arguments(parser):
         parser.add_argument("--n_itr", type=int, default=1000,
-                            help="number of iterations of the learning algorithm")
+                            help="Number of iterations of the learning algorithm")
         
         parser.add_argument("--lr", type=float, default=3e-4,
                             help="Adam learning rate")
@@ -101,6 +111,9 @@ class PPO:
 
         parser.add_argument("--num_steps", type=int, default=5096,
                             help="Number of sampled timesteps per gradient estimate")
+
+        parser.add_argument("--use_gae", type=bool, default=True,
+                            help="Whether or not to calculate returns using Generalized Advantage Estimation")
         
 
     def sample_steps(self, env, policy, num_steps):
@@ -139,7 +152,7 @@ class PPO:
 
         next_value, _ = policy(state)
 
-        rollout.calculate_returns(next_value.data, self.gamma, self.tau)
+        rollout.calculate_returns(next_value.data, self.gamma, self.tau, self.use_gae)
 
         self.last_state = rollout.states[-1]
         
@@ -172,7 +185,9 @@ class PPO:
             observations, actions, returns, values, epr = self.sample_steps(env, policy, self.num_steps)
             
             advantages = returns - values
-            advantages = (advantages - advantages.mean()) / (advantages.std() + self.eps)
+
+            # TODO: make advantage centering an option
+            #advantages = (advantages - advantages.mean()) / (advantages.std() + self.eps)
 
             batch_size = self.batch_size or advantages.numel()
 
@@ -215,6 +230,8 @@ class PPO:
 
                     entropy_penalty = self.entropy_coeff * pdf.entropy().mean()
 
+                    # TODO: add ability to optimize critic and actor seperately, with different learning rates
+
                     optimizer.zero_grad()
                     (actor_loss + critic_loss + entropy_penalty).backward()
                     optimizer.step()
@@ -226,12 +243,16 @@ class PPO:
 
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
+            # TODO: add filtering options for reward graph (e.g., none)
+            # add explained variance, high and low rewards, std dev of rewards
+            # add options for reward graphs: e.g. explore/no explore
 
             if logger is not None:
                 logger.record("Reward: " + self.name, epr)
                 logger.dump()
 
             if itr % 10 == 0:
+                # TODO: add option for how often to save model
                 save_path = os.path.join("./trained_models", "ppo")
                 try:
                     os.makedirs(save_path)

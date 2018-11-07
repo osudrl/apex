@@ -17,8 +17,8 @@ class GaussianMLP(FFPolicy):
     def __init__(self, num_inputs, action_dim, init_std=1, learn_std=True, nonlinearity="tanh", normc_init=False):
         super(GaussianMLP, self).__init__()
 
-        actor_dims = (64, 64)
-        critic_dims = (64, 64)
+        actor_dims = (256, 256)
+        critic_dims = (256, 256)
 
         # create actor network
         self.actor_layers = nn.ModuleList()
@@ -50,10 +50,10 @@ class GaussianMLP(FFPolicy):
         # weight initialization scheme used in PPO paper experiments
         self.normc_init = normc_init
 
+        self.init_parameters()
         self.train()
-        self.reset_parameters()
 
-    def reset_parameters(self):
+    def init_parameters(self):
         if normc_init:
             self.apply(normc_init)
 

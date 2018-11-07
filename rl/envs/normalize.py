@@ -12,7 +12,7 @@ class Normalize:
                  venv,
                  ob_rms=None, 
                  ob=True, 
-                 ret=True, 
+                 ret=False, 
                  clipob=10., 
                  cliprew=10., 
                  gamma=1.0, 
@@ -40,6 +40,7 @@ class Normalize:
         self.ret = self.ret * self.gamma + rews
         obs = self._obfilt(obs)
 
+        # NOTE: shifting mean of reward seems bad; qualitatively changes MDP
         if self.ret_rms: 
             self.ret_rms.update(self.ret)
             rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)

@@ -50,10 +50,10 @@ class BetaMLP(FFPolicy):
         # weight initialization scheme used in PPO paper experiments
         self.normc_init = normc_init
 
+        self.init_parameters()
         self.train()
-        self.reset_parameters()
 
-    def reset_parameters(self):
+    def init_parameters(self):
         if self.normc_init:
             self.apply(normc_init)
 
