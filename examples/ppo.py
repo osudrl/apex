@@ -51,11 +51,14 @@ args = parser.parse_args()
 # batch_size = 128, hardcoded to 128
 # lr = 1e-3, but gets set to 1e-4 in the code
 # num_epoch = 32, hardcoded to 64
+<<<<<<< HEAD
 
 # his "epochs" are actually minibatch optimization steps...
 # which look to be done with replacement
 # equivalent epochs is 64*128/3000 ~= 3
 
+=======
+>>>>>>> bb5e429e85abe688fc117f3212ad343bffe4a1cc
 # num_steps = 2048, but gets multipled by 10,000?
 # ^ but samples are hardcoded to 300 in the code...
 # ^ but memory that optimization gets drawn from is set to 
