@@ -13,6 +13,12 @@ def normc_init(m):
         if m.bias is not None:
             m.bias.data.fill_(0)
 
+# TODO: add a variance-mean parameterization of the Beta,
+# to allow for training with a fixed variance
+# e.g.: 
+# alpha = ((1 - mu) / (sigma^2) - 1 / mu) * mu^2
+# beta = alpha * (1 / mu - 1)
+# with mu in (0, 1) and sigma^2 in (0, 0,5^2)
 class BetaMLP(FFPolicy):
     def __init__(self, num_inputs, action_dim, nonlinearity="tanh", normc_init=False):
         super(BetaMLP, self).__init__()

@@ -20,7 +20,7 @@ matplotlib.rcParams.update({'font.size': 8})
 #from scipy.signal import medfilt
 
 class Logger():
-    def __init__(self, args, viz=True):
+    def __init__(self, args, viz=True, viz_list=[]):
         self.ansi = dict(
             gray=30,
             red=31,
@@ -32,6 +32,10 @@ class Logger():
             white=37,
             crimson=38
         )
+
+        self.name = args.name
+
+        self.viz_list = ["Reward mean", "Reward test"]
 
         self.args = args
 
@@ -168,35 +172,37 @@ class Logger():
 
         for i in range(len(header)):
             y = data[:, i]
-            # do some kind of window based smoothing
-            y = running_mean(y, 30) 
 
-            xscale = 1 if self.viz_config["xlabel"] == "Iterations" \
-                       else (self.args.num_steps / 1e6)
+            if header[i] in self.viz_list:
+                # do some kind of window based smoothing
+                #y = running_mean(y, 30) 
 
-            x = np.arange(y.size) * xscale
+                xscale = 1 if self.viz_config["xlabel"] == "Iterations" \
+                        else (self.args.num_steps / 1e6)
 
-            fig = plt.figure(figsize=(5,4))
+                x = np.arange(y.size) * xscale
 
-            plt.plot(x, y, "C%i" % i)
+                fig = plt.figure(figsize=(5,4))
 
-            if self.viz_config["xlim"] == "Fixed":
-                plt.xlim(0, self.args.n_itr * xscale)
+                plt.plot(x, y, "C%i" % i)
 
-            plt.ylabel(header[i])
-            plt.xlabel(self.viz_config["xlabel"])
-            plt.title(header[i])
+                if self.viz_config["xlim"] == "Fixed":
+                    plt.xlim(0, self.args.n_itr * xscale)
 
-            plt.show()
-            plt.draw()
+                plt.ylabel(header[i])
+                plt.xlabel(self.viz_config["xlabel"])
+                plt.title("{0}: {1}".format(header[i], self.name))
 
-            image = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-            image = image.reshape(fig.canvas.get_width_height()[::-1] + (3, ))
-            image = np.transpose(image, (2, 0, 1))
+                plt.show()
+                plt.draw()
 
-            plt.close(fig)
+                image = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+                image = image.reshape(fig.canvas.get_width_height()[::-1] + (3, ))
+                image = np.transpose(image, (2, 0, 1))
 
-            self.wins[i] = self.viz.image(image, win=self.wins[i])
+                plt.close(fig)
+
+                self.wins[i] = self.viz.image(image, win=self.wins[i])
 
     def _load_data(self):
         log_file = open(self.output_dir, 'r')

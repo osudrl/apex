@@ -5,6 +5,10 @@ import torch.nn.functional as F
 from rl.distributions import DiagonalGaussian
 from .base import FFPolicy
 
+import time
+
+# NOTE: the fact that this has the same name as a parameter caused a NASTY bug
+# apparently "if <function_name>" evaluates to True in python...
 def normc_init(m):
     classname = m.__class__.__name__
     if classname.find('Linear') != -1:
@@ -44,8 +48,10 @@ class GaussianMLP(FFPolicy):
 
         if nonlinearity == "relu":
             self.nonlinearity = F.relu
-        else:
+        elif nonlinearity == "tanh":
             self.nonlinearity = torch.tanh
+        else:
+            raise NotImplementedError
         
         # weight initialization scheme used in PPO paper experiments
         self.normc_init = normc_init
@@ -54,7 +60,8 @@ class GaussianMLP(FFPolicy):
         self.train()
 
     def init_parameters(self):
-        if normc_init:
+        if self.normc_init:
+            print("Doing norm column initialization.")
             self.apply(normc_init)
 
             if self.dist.__class__.__name__ == "DiagGaussian":
@@ -71,6 +78,6 @@ class GaussianMLP(FFPolicy):
             x = self.nonlinearity(l(x))
         x = self.mean(x)
 
-        x = torch.tanh(x) # NOTE: not sure what this is for, but Xie et al does it?
+        mean = torch.tanh(x) # NOTE: not sure what this is for, but Xie et al does it?
 
-        return value, x
+        return value, mean

@@ -8,6 +8,8 @@ from torch.autograd import Variable
 
 from rl.envs import Vectorize, Normalize
 
+import time
+
 import numpy as np
 import os
 
@@ -51,6 +53,23 @@ class Rollout():
             for step in reversed(range(self.rewards.size(0))):
                 self.returns[step] = self.returns[step + 1] * gamma * self.masks[step + 1] + self.rewards[step]
 
+class Statistic:
+    def __init__(self):
+        self.items = []
+
+    def add(self, item):
+        self.items += [item]
+    
+    def get(self):
+        stats = {
+            "mean": np.mean(self.items),
+            "std": np.std(self.items),
+            "max": np.max(self.items),
+            "min": np.min(self.items),
+            "n": len(self.items)
+        }
+
+        return stats
 
 class PPO:
     def __init__(self, 
@@ -115,32 +134,35 @@ class PPO:
         parser.add_argument("--use_gae", type=bool, default=True,
                             help="Whether or not to calculate returns using Generalized Advantage Estimation")
         
-
-    def sample_steps(self, env, policy, num_steps):
-        """Collect a set number of frames, as in the original paper."""
-        rewards = []
-        episode_reward = 0
-
-        obs_dim = env.observation_space.shape[0]
-        action_dim = env.action_space.shape[0]
-
+    def sample_steps(self, env, policy, num_steps, deterministic=False):
+        """Collect a set number of frames, as in the original paper."""        
         if self.last_state is None:
             state = torch.Tensor(env.reset())
         else:
             # BUG: without unsqueeze this drops a dimension due to indexing
             state = self.last_state.unsqueeze(0)
-                    
+
+        obs_dim = env.observation_space.shape[0]
+        action_dim = env.action_space.shape[0]
+
         rollout = Rollout(num_steps, obs_dim, action_dim, state)
 
+        reward_stats = Statistic()
+
+        done = False
+        episode_reward = 0
         for step in range(num_steps):
-            value, action = policy.act(state)
+            with torch.no_grad():
+                value, action = policy.act(state, deterministic)
 
             state, reward, done, _ = env.step(action.data.numpy())
 
             episode_reward += reward
+
             if done:
                 state = env.reset()
-                rewards.append(episode_reward)
+    
+                reward_stats.add(episode_reward)
                 episode_reward = 0
 
             reward = torch.Tensor([reward])
@@ -149,6 +171,9 @@ class PPO:
 
             state = torch.Tensor(state)
             rollout.insert(step, state, action.data, value.data, reward, mask)
+
+        if not done:
+            reward_stats.add(episode_reward)
 
         next_value, _ = policy(state)
 
@@ -160,7 +185,7 @@ class PPO:
                rollout.actions, 
                rollout.returns[:-1], 
                rollout.values[:-1],
-               sum(rewards)/(len(rewards)+1)) 
+               reward_stats.get())
                # TODO: remove that +1^. Divide by 0 only happens when last trajectory gets discarded
                # because it never flags done
 
@@ -168,13 +193,30 @@ class PPO:
               env_fn,
               policy, 
               n_itr,
-              normalize=True,
+              normalize="pre",
               logger=None):
 
         env = Vectorize([env_fn]) # this will be useful for parallelism later
 
-        if normalize:
+        # TODO: move this out of PPO; this isn't relevant to the algorithm,
+        # and should be treated as preprocessing
+        # TODO: format this
+        if normalize == "online":
             env = Normalize(env, ret=False)
+
+        # TODO: make this more general to any environment/policy
+        # aka make these into hyperparams
+        elif normalize == "pre":
+            start = time.time()
+            print("Getting observation normalization parameters")
+            env = Normalize(env, ret=False, online=True)
+
+            #policy.noise = 0
+            self.sample_steps(env, policy, 10000)
+            #policy.noise = -2
+
+            env.online = False
+            print("Done getting parameters, {}s".format(time.time() - start))
 
         old_policy = deepcopy(policy)
 
@@ -182,7 +224,7 @@ class PPO:
 
         for itr in range(n_itr):
             print("********** Iteration %i ************" % itr)
-            observations, actions, returns, values, epr = self.sample_steps(env, policy, self.num_steps)
+            observations, actions, returns, values, train_stats = self.sample_steps(env, policy, self.num_steps)
             
             advantages = returns - values
 
@@ -191,7 +233,7 @@ class PPO:
 
             batch_size = self.batch_size or advantages.numel()
 
-            print("timesteps in batch: %i" % advantages.size()[0])
+            print("timesteps in batch: %i" % advantages.size(0))
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
 
@@ -206,6 +248,9 @@ class PPO:
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
 
+                    # TEST: sample WITH replacement
+                    # indices = torch.randperm(observations.size(0))[:self.batch_size]
+
                     obs_batch = observations[indices]
                     action_batch = actions[indices]
 
@@ -216,7 +261,7 @@ class PPO:
 
                     with torch.no_grad():
                         _, old_pdf = old_policy.evaluate(obs_batch)
-                        old_log_probs = old_pdf.log_prob(action_batch)
+                        old_log_probs = old_pdf.log_prob(action_batch) # BUG: log prob should be summed along action axis, aka joint log probs 
                     
                     log_probs = pdf.log_prob(action_batch)
                     
@@ -226,14 +271,15 @@ class PPO:
                     clip_loss = ratio.clamp(1.0 - self.clip, 1.0 + self.clip) * advantage_batch
                     actor_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-                    critic_loss = (return_batch - values).pow(2).mean()
+                    critic_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                     entropy_penalty = self.entropy_coeff * pdf.entropy().mean()
 
+                    # https://www.princeton.edu/~yc5/ele538_optimization/
                     # TODO: add ability to optimize critic and actor seperately, with different learning rates
 
                     optimizer.zero_grad()
-                    (actor_loss + critic_loss + entropy_penalty).backward()
+                    (actor_loss + critic_loss + entropy_penalty).backward(retain_graph=True)
                     optimizer.step()
 
                     losses.append([actor_loss.data.clone().numpy(),
@@ -247,8 +293,26 @@ class PPO:
             # add explained variance, high and low rewards, std dev of rewards
             # add options for reward graphs: e.g. explore/no explore
 
+            # total things that should be graphed/logged:
+            # number of trajectories
+            # average trajectory length (and min/max/std?)
+            # reward (return, reward, average,std,max,min, explore/exploit, filtered?)
+            # entropy (policy)
+            # perplexity
+            # explained variance
+            # policy average std
+            # mean and max KL
+            # Loss
+            # add "suppress name" option
+
+            # look into making logging a decorator or wrapper?
+            _, _, _, _, test_stats = self.sample_steps(env, policy, 800, deterministic=True)
             if logger is not None:
-                logger.record("Reward: " + self.name, epr)
+                logger.record("Reward test", test_stats["mean"])
+                logger.record("Reward mean", train_stats["mean"])
+                logger.record("Reward std", train_stats["std"])
+                logger.record("Reward max", train_stats["max"])
+                logger.record("Reward min", train_stats["min"])
                 logger.dump()
 
             if itr % 10 == 0:
@@ -261,7 +325,7 @@ class PPO:
 
                 filetype = ".pt" # pytorch model
 
-                if normalize:
+                if normalize != "none":
                     # ret_rms is not necessary to run policy, but is necessary to interpret rewards
                     save_model = [policy, (env.ob_rms, env.ret_rms)]
                     

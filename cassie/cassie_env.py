@@ -153,7 +153,7 @@ class CassieEnv:
             orientation_error += (target - actual) ** 2
 
         # left and right shin springs
-        for i in [15, 29]:
+        for i in [15, 28]:
             target = ref_pos[i]
             actual = qpos[i]
 
@@ -221,7 +221,50 @@ class CassieEnv:
         # irrelevant to phase-based control. Z is inherently invariant to
         # trajectory despite being global coord. Y is only invariant to straight
         # line trajectories.
+
+        # [ 0] Pelvis y
+        # [ 1] Pelvis z
+        # [ 2] Pelvis orientation qw
+        # [ 3] Pelvis orientation qx
+        # [ 4] Pelvis orientation qy
+        # [ 5] Pelvis orientation qz
+        # [ 6] Left hip roll         (Motor [0])
+        # [ 7] Left hip yaw          (Motor [1])
+        # [ 8] Left hip pitch        (Motor [2])
+        # [ 9] Left knee             (Motor [3])
+        # [10] Left shin                        (Joint [0])
+        # [11] Left tarsus                      (Joint [1])
+        # [12] Left foot             (Motor [4], Joint [2])
+        # [13] Right hip roll        (Motor [5])
+        # [14] Right hip yaw         (Motor [6])
+        # [15] Right hip pitch       (Motor [7])
+        # [16] Right knee            (Motor [8])
+        # [17] Right shin                       (Joint [3])
+        # [18] Right tarsus                     (Joint [4])
+        # [19] Right foot            (Motor [9], Joint [5])
+
         pos_index = np.array([1,2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
+
+        # [ 0] Pelvis x
+        # [ 1] Pelvis y
+        # [ 2] Pelvis z
+        # [ 3] Pelvis orientation wx
+        # [ 4] Pelvis orientation wy
+        # [ 5] Pelvis orientation wz
+        # [ 6] Left hip roll         (Motor [0])
+        # [ 7] Left hip yaw          (Motor [1])
+        # [ 8] Left hip pitch        (Motor [2])
+        # [ 9] Left knee             (Motor [3])
+        # [10] Left shin                        (Joint [0])
+        # [11] Left tarsus                      (Joint [1])
+        # [12] Left foot             (Motor [4], Joint [2])
+        # [13] Right hip roll        (Motor [5])
+        # [14] Right hip yaw         (Motor [6])
+        # [15] Right hip pitch       (Motor [7])
+        # [16] Right knee            (Motor [8])
+        # [17] Right shin                       (Joint [3])
+        # [18] Right tarsus                     (Joint [4])
+        # [19] Right foot            (Motor [9], Joint [5])
         vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
         ext_state = np.concatenate([ref_pos[pos_index], ref_vel[vel_index]])

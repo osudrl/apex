@@ -1,4 +1,4 @@
-import math
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -10,9 +10,11 @@ class DiagonalGaussian(nn.Module):
         super(DiagonalGaussian, self).__init__()
 
         self.logstd = nn.Parameter(
-            torch.ones(1, num_outputs) * math.log(init_std),
+            torch.ones(1, num_outputs) * np.log(init_std),
             requires_grad=learn_std
         )
+
+        self.learn_std = learn_std
 
     def forward(self, x):
         mean = x

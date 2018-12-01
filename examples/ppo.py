@@ -14,6 +14,7 @@ from cassie import CassieEnv
 
 #import gym
 import torch
+
 import numpy as np
 import os
 
@@ -51,14 +52,11 @@ args = parser.parse_args()
 # batch_size = 128, hardcoded to 128
 # lr = 1e-3, but gets set to 1e-4 in the code
 # num_epoch = 32, hardcoded to 64
-<<<<<<< HEAD
 
 # his "epochs" are actually minibatch optimization steps...
 # which look to be done with replacement
 # equivalent epochs is 64*128/3000 ~= 3
 
-=======
->>>>>>> bb5e429e85abe688fc117f3212ad343bffe4a1cc
 # num_steps = 2048, but gets multipled by 10,000?
 # ^ but samples are hardcoded to 300 in the code...
 # ^ but memory that optimization gets drawn from is set to 
@@ -83,9 +81,12 @@ args.num_steps = 3000
 
 args.use_gae = False
 
-args.name = "Xie"
+args.name = "Xie3"
 
 if __name__ == "__main__":
+    torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
+
+
     #env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
 
     env_fn = make_cassie_env("cassie/trajectory/stepdata.bin")

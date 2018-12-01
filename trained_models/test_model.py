@@ -2,6 +2,7 @@
 import argparse
 import pickle
 import torch
+
 import time
 
 from cassie import CassieEnv
@@ -14,6 +15,8 @@ plt.style.use('ggplot')
 
 import numpy as np
 np.set_printoptions(precision=2, suppress=True)
+
+from cassie.cassiemujoco import pd_in_t
 
 
 # TODO: add .dt to all environments. OpenAI should do the same...
@@ -48,6 +51,7 @@ def visualize(env, policy, trj_len, deterministic=True, dt=0.033, speedup=1):
             R += [r_ep]
 
         print("avg reward:", sum(R)/len(R))
+        print("avg timesteps:", trj_len / len(R))
 
             
 
@@ -126,7 +130,7 @@ def policyplot(env, policy, trj_len):
     state = torch.Tensor(env.reset())
     for t in range(trj_len):
 
-        _, action = policy(state, True)
+        _, action = policy.act(state, True)
 
         X[t, :] = state.data.numpy()
         y[t, :] = action.data.numpy()
@@ -140,6 +144,208 @@ def policyplot(env, policy, trj_len):
         axes[a].plot(np.arange(trj_len), y[:, a])
 
     plt.show()
+
+# TODO: add no_grad to all of these
+
+def get_rewards(env, policy, num_trj, deterministic=False):
+    r_ep = 0
+    R = []
+    done = False
+
+    state = torch.Tensor(env.reset())
+    while len(R) < num_trj:
+        _, action = policy.act(state, deterministic)
+        state, reward, done, _ = env.step(action.data.numpy())
+
+        r_ep += reward
+
+        if done:
+            state = env.reset()
+            R += [r_ep[0]]
+            r_ep = 0
+
+
+        state = torch.Tensor(state)
+
+    if not done:
+        R += [r_ep[0]]
+    
+    return R
+
+# TODO: add n_trials arg, pass in policy function instead
+
+def plot_reward_dist(env, policy, num_trj, deterministic=False):
+    r_ep = 0
+    R = []
+    done = False
+
+    state = torch.Tensor(env.reset())
+    while len(R) < num_trj:
+        _, action = policy.act(state, deterministic)
+        state, reward, done, _ = env.step(action.data.numpy())
+
+        r_ep += reward
+
+        if done:
+            state = env.reset()
+            R += [r_ep[0]]
+            r_ep = 0
+
+        state = torch.Tensor(state)
+
+    if not done:
+        R += [r_ep[0]]
+
+    plt.xlabel("Return")
+    plt.ylabel("Frequency")
+    plt.hist(R, edgecolor='black', label=policy.__class__.__name__) # TODO: make labels less hacky
+
+def plot_action_dist(env, policy, num_trj, deterministic=False):
+    n = 0
+    A = []
+    done = False
+
+    state = torch.Tensor(env.reset())
+    while n < num_trj:
+        _, action = policy.act(state, deterministic)
+        state, reward, done, _ = env.step(action.data.numpy())
+
+        A += [action.mean().data.numpy()]
+
+        if done:
+            state = env.reset()
+            n += 1
+
+
+        state = torch.Tensor(state)
+
+    print(np.std(A))
+
+    plt.xlabel("Mean Action")
+    plt.ylabel("Frequency")
+    plt.hist(A, edgecolor='black', label=policy.__class__.__name__) # TODO: make labels less hacky
+
+def print_semantic_state(s):
+    # only works for full state for now
+    assert s.numel() == 80
+
+    x = [None] * 20
+
+    # TODO: add mask variable to env to specifiy which states are used
+
+    x [ 0] = "Pelvis y"
+    x [ 1] = "Pelvis z"
+    x [ 2] = "Pelvis qw"
+    x [ 3] = "Pelvis qx"
+    x [ 4] = "Pelvis qy"
+    x [ 5] = "Pelvis qz"
+    x [ 6] = "Left hip roll"         #(Motor [0])
+    x [ 7] = "Left hip yaw"          #(Motor [1])
+    x [ 8] = "Left hip pitch"        #(Motor [2])
+    x [ 9] = "Left knee"             #(Motor [3])
+    x [10] = "Left shin"                        #(Joint [0])
+    x [11] = "Left tarsus"                      #(Joint [1])
+    x [12] = "Left foot"             #(Motor [4], Joint [2])
+    x [13] = "Right hip roll"        #(Motor [5])
+    x [14] = "Right hip yaw"         #(Motor [6])
+    x [15] = "Right hip pitch"       #(Motor [7])
+    x [16] = "Right knee"            #(Motor [8])
+    x [17] = "Right shin"                       #(Joint [3])
+    x [18] = "Right tarsus"                     #(Joint [4])
+    x [19] = "Right foot"            #(Motor [9], Joint [5])
+
+    x_dot = [None] * 20
+
+    x_dot[ 0] = "Pelvis x"
+    x_dot[ 1] = "Pelvis y"
+    x_dot[ 2] = "Pelvis z"
+    x_dot[ 3] = "Pelvis wx"
+    x_dot[ 4] = "Pelvis wy"
+    x_dot[ 5] = "Pelvis wz"
+    x_dot[ 6] = "Left hip roll"         #(Motor [0])
+    x_dot[ 7] = "Left hip yaw"          #(Motor [1])
+    x_dot[ 8] = "Left hip pitch"        #(Motor [2])
+    x_dot[ 9] = "Left knee"             #(Motor [3])
+    x_dot[10] = "Left shin"                        #(Joint [0])
+    x_dot[11] = "Left tarsus"                      #(Joint [1])
+    x_dot[12] = "Left foot"             #(Motor [4], Joint [2])
+    x_dot[13] = "Right hip roll"        #(Motor [5])
+    x_dot[14] = "Right hip yaw"         #(Motor [6])
+    x_dot[15] = "Right hip pitch"       #(Motor [7])
+    x_dot[16] = "Right knee"            #(Motor [8])
+    x_dot[17] = "Right shin"                       #(Joint [3])
+    x_dot[18] = "Right tarsus"                     #(Joint [4])
+    x_dot[19] = "Right foot"            #(Motor [9], Joint [5])
+
+    s_obs = s[:, :40]
+    s_ref = s[:, 40:]
+
+    print("\nObserved position")
+    for i in range(20):
+        if s_obs[:, i].item() > 1:
+            print("{0}: \r\t\t\t{1:.2f}".format(x[i], s_obs[:, i].item()))
+    
+    print("\nObserved velocity")
+    for i in range(20):
+        if s_obs[:, 20 + i].item() > 1:
+            print("{0}: \r\t\t\t{1:.2f}".format(x_dot[i], s_obs[:, 20 + i].item()))
+
+    print("\nReference position")
+    for i in range(20):
+        if s_ref[:, i].item() > 1:
+            print("{0}: \r\t\t\t{1:.2f}".format(x[i], s_ref[:, i].item()))
+
+    print("\nReference velocity")
+    for i in range(20):
+        if s_ref[:, 20 + i].item() > 1:
+            print("{0}: \r\t\t\t{1:.2f}".format(x_dot[i], s_ref[:, 20 + i].item()))
+
+# my idea for extending perturbation saliency to dynamical systems
+def saliency(policy, state, naive=False):
+    scores = torch.zeros_like(state)
+    for i in range(state.size(1)):
+        score = 0
+
+        s_prime = state.clone()
+        # sample values from (e - 0.25, e + 0.25)
+        max_r = 0.25
+
+        # change in value/related to number of samples
+        dr = 0.05
+
+        # current change
+        r = -max_r # start at min r
+        if not naive:
+            while r <= max_r:
+                s_prime[:, i] = state[:, i] + r
+
+                v, a = policy.act(state)
+                v_prime, a_prime = policy.act(s_prime)
+
+                score += 0.5 * torch.norm(v - v_prime, 2)
+
+                r += dr
+        else:
+            s_prime[:, i] = 0
+
+            v, a = policy.act(state)
+            v_prime, a_prime = policy.act(s_prime)
+
+            score += 0.5 * torch.norm(v - v_prime, 2)
+
+
+        score /= 2 * max_r
+        scores[:, i] = score
+    scores = scores / torch.max(scores) * 10
+    print_semantic_state(scores)
+
+    
+
+# more plots:
+# state visitation
+# value function
+# reward distribution
+
 
 def make_env_fn():
     def _thunk():
@@ -171,7 +377,139 @@ args = parser.parse_args()
 
 # TODO: add command line arguments for normalization on/off, and for ensemble policy?
 
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+import torch.multiprocessing as mp
+
+import time
+
+class XieNet(nn.Module):
+    def __init__(self, num_inputs, num_outputs, hidden_layer=[64, 64]):
+        super(XieNet, self).__init__()
+        self.num_outputs = num_outputs
+        self.hidden_layer = hidden_layer
+        self.p_fcs = nn.ModuleList()
+        self.v_fcs = nn.ModuleList()
+        p_fc = nn.Linear(num_inputs, self.hidden_layer[0])
+        v_fc = nn.Linear(num_inputs, self.hidden_layer[0])
+        self.p_fcs.append(p_fc)
+        self.v_fcs.append(v_fc)
+        for i in range(len(self.hidden_layer)-1):
+            p_fc = nn.Linear(self.hidden_layer[i], self.hidden_layer[i+1])
+            v_fc = nn.Linear(self.hidden_layer[i], self.hidden_layer[i+1])
+            self.p_fcs.append(p_fc)
+            self.v_fcs.append(v_fc)
+        self.mu = nn.Linear(self.hidden_layer[-1], num_outputs)
+        self.v = nn.Linear(self.hidden_layer[-1],1)
+        self.noise = -2
+
+    def forward(self, inputs):
+        # actor
+        x = F.relu(self.p_fcs[0](inputs))
+        for i in range(len(self.hidden_layer)-1):
+            x = F.relu(self.p_fcs[i+1](x))
+        mu = F.tanh(self.mu(x))
+
+        log_std = Variable(self.noise*torch.ones(self.num_outputs)).unsqueeze(0).expand_as(mu)
+
+        # critic
+        x = F.relu(self.v_fcs[0](inputs))
+        for i in range(len(self.hidden_layer)-1):
+            x = F.relu(self.v_fcs[i+1](x))
+        v = self.v(x)
+
+
+        return mu, log_std, v
+
+    def act(self, inputs, det):
+        mu, log_std, v = self(inputs)
+ 
+        if det:
+            return v, mu
+        else:
+            return v, mu + log_std.exp() *  torch.randn(mu.size())
+
+
+class ActorCriticNet(nn.Module):
+    def __init__(self, num_inputs, num_outputs, hidden_layer=[64, 64]):
+        super(ActorCriticNet, self).__init__()
+        self.num_outputs = num_outputs
+        self.hidden_layer = hidden_layer
+
+        actor_dims = (256, 256)
+        critic_dims = (256, 256)
+
+        # create actor network
+        self.actor_layers = nn.ModuleList()
+        self.actor_layers += [nn.Linear(num_inputs, actor_dims[0])]
+        for l in range(len(actor_dims) - 1):
+            in_dim = actor_dims[l]
+            out_dim = actor_dims[l + 1]
+            self.actor_layers += [nn.Linear(in_dim, out_dim)]
+        
+        self.mean = nn.Linear(actor_dims[-1], num_inputs)
+
+        # create critic network
+        self.critic_layers = nn.ModuleList()
+        self.critic_layers += [nn.Linear(num_inputs, critic_dims[0])]
+        for l in range(len(critic_dims) - 1):
+            in_dim = critic_dims[l]
+            out_dim = critic_dims[l + 1]
+            self.critic_layers += [nn.Linear(in_dim, out_dim)]
+
+        self.vf = nn.Linear(critic_dims[-1], 1)
+
+        self.noise = -2
+
+        self.log_std = nn.Parameter(
+            torch.ones(1, num_outputs) * self.noise,
+            requires_grad=False
+        )
+
+        self.nonlinearity = F.relu
+
+        #self.train()
+
+    def forward(self, inputs):
+        x = inputs
+        for l in self.critic_layers:
+            x = self.nonlinearity(l(x))
+        value = self.vf(x)
+
+        x = inputs
+        for l in self.actor_layers:
+            x = self.nonlinearity(l(x))
+        x = self.mean(x)
+
+        x = torch.tanh(x)
+
+        return x, self.log_std, value
+    
+    def act(self, inputs, det):
+        mu, log_std, v = self(inputs)
+
+        std = log_std.exp()
+ 
+        if det:
+            return v, mu
+        else:
+            #dist = torch.distributions.Normal
+            action = mu + std *  torch.randn(mu.size())
+            #print("ACNET: ", action.data.mean(), mu.data.mean(), std.mean())
+            return v, action
+    
+    #def evaluate():
+    
+    def set_noise(self, noise):
+        self.noise = noise
+
+
 if __name__ == "__main__":
+    torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
+
     if args.new:
         env_fn = make_env_fn()
         env = Vectorize([env_fn])
@@ -180,6 +518,35 @@ if __name__ == "__main__":
         action_dim = env_fn().action_space.shape[0]
 
         policy = GaussianMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False)
+
+        # policy2 = ActorCriticNet(obs_dim, action_dim, [256, 256])
+
+        # #print(policy,  sum(p.numel() for p in policy.parameters()))
+        # #print(policy2,  sum(p.numel() for p in policy2.parameters()))
+
+        # plot_action_dist(env, policy, 100)
+        # plot_action_dist(env, policy2, 100)
+        # plt.legend()
+        # plt.show()
+
+        # R1 = []
+        # R2 = []
+        # R3 = []
+        # for _ in range(5):
+        #     R1 += get_rewards(env, GaussianMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False), 50)
+        #     R2 += get_rewards(env, ActorCriticNet(obs_dim, action_dim, [256, 256]), 50)
+        #     R3 += get_rewards(env, XieNet(obs_dim, action_dim, [256, 256]), 50)
+
+        
+        # plt.xlabel("Return")
+        # plt.ylabel("Frequency")
+        # plt.hist(R1, edgecolor='black', label="GaussianMLP")
+        # plt.hist(R2, edgecolor='black', label="ActorCriticNet")
+        # plt.hist(R3, edgecolor='black', label="XieNet")
+        # plt.legend()
+        # plt.show()
+
+        # plot_reward_dist(env, policy2, 500)
 
         if args.visualize:
             visualize(env, policy, args.vlen, deterministic=not args.noise)
@@ -196,6 +563,17 @@ if __name__ == "__main__":
         env.ob_rms, env.ret_rms = rms
 
         env.ret = env.ret_rms is not None
+
+        # while True:
+        #     state = torch.Tensor(env.reset())
+        #     print("phase: {0}".format(env.venv.envs[0].phase))
+
+        #     saliency(policy, state, naive=False)
+
+        #     env.venv.envs[0].sim.step_pd(pd_in_t())
+
+        #     env.render()
+        #     input()
 
         if args.visualize:
             visualize(env, policy, args.vlen, deterministic=not args.noise)
@@ -241,7 +619,7 @@ if __name__ == "__main__":
 
         print("visualizing policy {}".format(i))
         # if i == 15:
-        visualize(env, policy, 100)
+        visualize(env, policy, 1)
             #cassie_policyplot(env, policy, 100, "policy {}".format(i))
 
     mmean /= 10

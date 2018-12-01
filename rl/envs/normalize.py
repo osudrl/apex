@@ -15,6 +15,7 @@ class Normalize:
                  ret=False, 
                  clipob=10., 
                  cliprew=10., 
+                 online=True,
                  gamma=1.0, 
                  epsilon=1e-8):
 
@@ -34,6 +35,8 @@ class Normalize:
         self.gamma = gamma
         self.epsilon = epsilon
 
+        self.online = online
+
     def step(self, vac):
         obs, rews, news, infos = self.venv.step(vac)
 
@@ -42,14 +45,18 @@ class Normalize:
 
         # NOTE: shifting mean of reward seems bad; qualitatively changes MDP
         if self.ret_rms: 
-            self.ret_rms.update(self.ret)
+            if self.online:
+                self.ret_rms.update(self.ret)
+            
             rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)
 
         return obs, rews, news, infos
 
     def _obfilt(self, obs):
         if self.ob_rms: 
-            self.ob_rms.update(obs)
+            if self.online:
+                self.ob_rms.update(obs)
+            
             obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
             return obs
         else:
