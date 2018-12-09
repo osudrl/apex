@@ -134,6 +134,7 @@ class PPO:
         parser.add_argument("--use_gae", type=bool, default=True,
                             help="Whether or not to calculate returns using Generalized Advantage Estimation")
         
+    @torch.no_grad()
     def sample_steps(self, env, policy, num_steps, deterministic=False):
         """Collect a set number of frames, as in the original paper."""        
         if self.last_state is None:
@@ -152,8 +153,7 @@ class PPO:
         done = False
         episode_reward = 0
         for step in range(num_steps):
-            with torch.no_grad():
-                value, action = policy.act(state, deterministic)
+            value, action = policy.act(state, deterministic)
 
             state, reward, done, _ = env.step(action.data.numpy())
 

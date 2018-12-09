@@ -30,9 +30,14 @@ def visualize(env, policy, trj_len, deterministic=True, dt=0.033, speedup=1):
 
         
         for t in range(trj_len):
-            _, action = policy.act(state, deterministic)
 
+            #start = time.time()
+            _, action = policy.act(state, deterministic)
+            #print("policy time: ", time.time() - start)
+
+            #start = time.time()
             state, reward, done, _ = env.step(action.data.numpy())
+            #print("env time: ", time.time() - start)
 
             r_ep += reward
 
@@ -317,6 +322,10 @@ def saliency(policy, state, naive=False):
         r = -max_r # start at min r
         if not naive:
             while r <= max_r:
+                # TODO: visualize s_prime
+                # would require setting qpos and visualizing
+                # setting qpos would require knowing the mapping of indices
+                # from s to qpos
                 s_prime[:, i] = state[:, i] + r
 
                 v, a = policy.act(state)
