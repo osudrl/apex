@@ -7,7 +7,7 @@ from rl.utils import run_experiment
 from rl.policies import GaussianMLP, BetaMLP
 from rl.algos import PPO
 
-#from cassieXie.simple_env import cassieRLEnv
+from rl.envs.normalize import PreNormalizer
 
 # NOTE: importing cassie for some reason breaks openai gym, BUG ?
 from cassie import CassieEnv
@@ -52,7 +52,6 @@ args = parser.parse_args()
 # batch_size = 128, hardcoded to 128
 # lr = 1e-3, but gets set to 1e-4 in the code
 # num_epoch = 32, hardcoded to 64
-
 # his "epochs" are actually minibatch optimization steps...
 # which look to be done with replacement
 # equivalent epochs is 64*128/3000 ~= 3
@@ -86,10 +85,9 @@ args.name = "Xie3"
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
-
     #env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
 
-    env_fn = make_cassie_env("cassie/trajectory/stepdata.bin")
+    env_fn = make_cassie_env("walking")
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
@@ -100,9 +98,9 @@ if __name__ == "__main__":
     policy = GaussianMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False)
     #policy = BetaMLP(obs_dim, action_dim)
 
-    algo = PPO(args=args)
+    normalizer = PreNormalizer(iter=10000, noise_std=1, policy=policy, online=False)
 
-    # TODO: add normalization options (frontloaded vs online)
+    algo = PPO(args=args)
 
     # TODO: make log, monitor and render command line arguments
     # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)
@@ -110,6 +108,7 @@ if __name__ == "__main__":
         algo=algo,
         policy=policy,
         env_fn=env_fn,
+        normalizer=normalizer,
         args=args,
         log=True,
         monitor=True,

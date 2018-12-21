@@ -18,6 +18,8 @@ np.set_printoptions(precision=2, suppress=True)
 
 from cassie.cassiemujoco import pd_in_t
 
+#TODO: convert all of this into ipynb
+
 
 # TODO: add .dt to all environments. OpenAI should do the same...
 def visualize(env, policy, trj_len, deterministic=True, dt=0.033, speedup=1):

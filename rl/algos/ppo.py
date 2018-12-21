@@ -53,6 +53,81 @@ class Rollout():
             for step in reversed(range(self.rewards.size(0))):
                 self.returns[step] = self.returns[step + 1] * gamma * self.masks[step + 1] + self.rewards[step]
 
+
+# class PPOBuffer:
+#     """
+#     A buffer for storing trajectories experienced by a PPO agent interacting
+#     with the environment, and using Generalized Advantage Estimation (GAE-Lambda)
+#     for calculating the advantages of state-action pairs.
+#     """
+
+#     def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
+#         self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
+#         self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
+#         self.adv_buf = np.zeros(size, dtype=np.float32)
+#         self.rew_buf = np.zeros(size, dtype=np.float32)
+#         self.ret_buf = np.zeros(size, dtype=np.float32)
+#         self.val_buf = np.zeros(size, dtype=np.float32)
+#         self.logp_buf = np.zeros(size, dtype=np.float32)
+#         self.gamma, self.lam = gamma, lam
+#         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
+
+#     def store(self, obs, act, rew, val, logp):
+#         """
+#         Append one timestep of agent-environment interaction to the buffer.
+#         """
+#         assert self.ptr < self.max_size     # buffer has to have room so you can store
+#         self.obs_buf[self.ptr] = obs
+#         self.act_buf[self.ptr] = act
+#         self.rew_buf[self.ptr] = rew
+#         self.val_buf[self.ptr] = val
+#         self.logp_buf[self.ptr] = logp
+#         self.ptr += 1
+
+#     def finish_path(self, last_val=0):
+#         """
+#         Call this at the end of a trajectory, or when one gets cut off
+#         by an epoch ending. This looks back in the buffer to where the
+#         trajectory started, and uses rewards and value estimates from
+#         the whole trajectory to compute advantage estimates with GAE-Lambda,
+#         as well as compute the rewards-to-go for each state, to use as
+#         the targets for the value function.
+#         The "last_val" argument should be 0 if the trajectory ended
+#         because the agent reached a terminal state (died), and otherwise
+#         should be V(s_T), the value function estimated for the last state.
+#         This allows us to bootstrap the reward-to-go calculation to account
+#         for timesteps beyond the arbitrary episode horizon (or epoch cutoff).
+#         """
+
+#         path_slice = slice(self.path_start_idx, self.ptr)
+#         rews = np.append(self.rew_buf[path_slice], last_val)
+#         vals = np.append(self.val_buf[path_slice], last_val)
+        
+#         # the next two lines implement GAE-Lambda advantage calculation
+#         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
+#         self.adv_buf[path_slice] = core.discount_cumsum(deltas, self.gamma * self.lam)
+        
+#         # the next line computes rewards-to-go, to be targets for the value function
+#         self.ret_buf[path_slice] = core.discount_cumsum(rews, self.gamma)[:-1]
+        
+#         self.path_start_idx = self.ptr
+
+#     def get(self):
+#         """
+#         Call this at the end of an epoch to get all of the data from
+#         the buffer, with advantages appropriately normalized (shifted to have
+#         mean zero and std one). Also, resets some pointers in the buffer.
+#         """
+#         assert self.ptr == self.max_size    # buffer has to be full before you can get
+#         self.ptr, self.path_start_idx = 0, 0
+#         # the next two lines implement the advantage normalization trick
+#         adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
+#         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
+#         return [self.obs_buf, self.act_buf, self.adv_buf, 
+#                 self.ret_buf, self.logp_buf]
+
+
+
 class Statistic:
     def __init__(self):
         self.items = []
@@ -137,11 +212,11 @@ class PPO:
     @torch.no_grad()
     def sample_steps(self, env, policy, num_steps, deterministic=False):
         """Collect a set number of frames, as in the original paper."""        
-        if self.last_state is None:
-            state = torch.Tensor(env.reset())
-        else:
-            # BUG: without unsqueeze this drops a dimension due to indexing
-            state = self.last_state.unsqueeze(0)
+        #if self.last_state is None:
+        state = torch.Tensor(env.reset())
+        #else:
+        #    # BUG: without unsqueeze this drops a dimension due to indexing
+        #    state = self.last_state.unsqueeze(0)
 
         obs_dim = env.observation_space.shape[0]
         action_dim = env.action_space.shape[0]
@@ -179,7 +254,7 @@ class PPO:
 
         rollout.calculate_returns(next_value.data, self.gamma, self.tau, self.use_gae)
 
-        self.last_state = rollout.states[-1]
+        #self.last_state = rollout.states[-1]
         
         return (rollout.states[:-1], 
                rollout.actions, 
@@ -193,30 +268,13 @@ class PPO:
               env_fn,
               policy, 
               n_itr,
-              normalize="pre",
+              normalized=None,
               logger=None):
 
         env = Vectorize([env_fn]) # this will be useful for parallelism later
-
-        # TODO: move this out of PPO; this isn't relevant to the algorithm,
-        # and should be treated as preprocessing
-        # TODO: format this
-        if normalize == "online":
-            env = Normalize(env, ret=False)
-
-        # TODO: make this more general to any environment/policy
-        # aka make these into hyperparams
-        elif normalize == "pre":
-            start = time.time()
-            print("Getting observation normalization parameters")
-            env = Normalize(env, ret=False, online=True)
-
-            #policy.noise = 0
-            self.sample_steps(env, policy, 10000)
-            #policy.noise = -2
-
-            env.online = False
-            print("Done getting parameters, {}s".format(time.time() - start))
+        
+        if normalized is not None:
+            env = normalized(env)
 
         old_policy = deepcopy(policy)
 
@@ -286,7 +344,7 @@ class PPO:
                                    pdf.entropy().mean().data.numpy(),
                                    critic_loss.data.numpy(),
                                    ratio.data.mean()])
-
+                # TODO: add verbosity arguments to suppress this
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
             # TODO: add filtering options for reward graph (e.g., none)
@@ -325,7 +383,7 @@ class PPO:
 
                 filetype = ".pt" # pytorch model
 
-                if normalize != "none":
+                if normalized is not None:
                     # ret_rms is not necessary to run policy, but is necessary to interpret rewards
                     save_model = [policy, (env.ob_rms, env.ret_rms)]
                     

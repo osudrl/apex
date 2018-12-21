@@ -1,8 +1,6 @@
-
-from setuptools import setup
+from setuptools import setup, find_packages
 
 #REQUIRED_PACKAGES = ["torch==0.4", "gym", "numpy", "visdom"]
-
 
 setup(name='deeprl',
       version='0.1',
@@ -10,6 +8,6 @@ setup(name='deeprl',
       author='Pedro Morais',
       author_email='autranemorais@gmail.com',
       license='MIT',
-      packages=['rl'],
+      packages=find_packages(exclude=("cassie",)),
       #install_requires=REQUIRED_PACKAGES
 )

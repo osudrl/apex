@@ -2,6 +2,52 @@
 # Thanks to the authors + OpenAI for the code
 
 import numpy as np
+import functools
+import torch
+
+# returns a function that creates a normalized environment, then pre-normalizes it 
+# using states sampled from a deterministic policy with some added noise
+def PreNormalizer(iter, noise_std, policy, *args, **kwargs):
+
+    # noise is gaussian noise
+    @torch.no_grad()
+    def pre_normalize(env, policy, num_iter, noise_std):
+        # save whether or not the environment is configured to do online normalization
+        online_val = env.online
+        env.online = True
+
+        state = env.reset()
+
+        for t in range(num_iter):
+            state = torch.Tensor(state)
+
+            _, action = policy.act(state, deterministic=True)
+
+            # add gaussian noise to deterministic action
+            action = action + torch.randn(action.size()) * noise_std
+
+            state, reward, done, _ = env.step(action.data.numpy())
+
+            if done:
+                state = env.reset()
+    
+    def _Normalizer(venv):
+        venv = Normalize(venv, *args, **kwargs)
+
+        print("Gathering input normalization data using {0} steps, noise = {1}...".format(iter, noise_std))
+        pre_normalize(venv, policy, iter, noise_std)
+        print("Done gathering input normalization data.")
+
+        return venv
+
+    return _Normalizer
+
+# returns a function that creates a normalized environment
+def Normalizer(*args, **kwargs):
+    def _Normalizer(venv):
+        return Normalize(venv, *args, **kwargs)
+
+    return _Normalizer
 
 
 class Normalize:
@@ -40,7 +86,7 @@ class Normalize:
     def step(self, vac):
         obs, rews, news, infos = self.venv.step(vac)
 
-        self.ret = self.ret * self.gamma + rews
+        #self.ret = self.ret * self.gamma + rews
         obs = self._obfilt(obs)
 
         # NOTE: shifting mean of reward seems bad; qualitatively changes MDP
