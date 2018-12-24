@@ -66,21 +66,21 @@ class PPOBuffer:
     # source of implementation bugs, so keep it readable
     # Verbose variable names are always better
     def __init__(self, gamma=0.99, lam=0.95, use_gae=False):
-        self.observations = []
-        self.actions      = []
-        self.rewards      = []
-        self.values       = []
-        self.returns      = []
+        self.states  = []
+        self.actions = []
+        self.rewards = []
+        self.values  = []
+        self.returns = []
 
         self.gamma, self.lam = gamma, lam
 
         self.ptr, self.path_idx = 0, 0
     
-    def store(self, observation, action, reward, value):
-        self.observations += [observation.squeeze(0)]
-        self.actions      += [action.squeeze(0)]
-        self.rewards      += [reward]
-        self.values       += [value.squeeze(0)]
+    def store(self, state, action, reward, value):
+        self.state   += [state.squeeze(0)]
+        self.actions += [action.squeeze(0)]
+        self.rewards += [reward.squeeze(0)]
+        self.values  += [value.squeeze(0)]
 
         self.ptr += 1
     
@@ -97,7 +97,7 @@ class PPOBuffer:
             R = self.gamma * R + reward
             returns.insert(0, R) # TODO: self.returns.insert(self.path_idx, R) ? 
                                  # also technically O(n^2), may be worth just reversing list
-                                 # BUG? This is adding copies of R by reference
+                                 # BUG? This is adding copies of R by reference (?)
 
         self.returns += returns
 
@@ -105,7 +105,7 @@ class PPOBuffer:
     
     def get(self):
         return(
-            self.observations,
+            self.states,
             self.actions,
             self.returns,
             self.values
@@ -217,24 +217,21 @@ class PPO:
             while traj_len < max_traj_len:
                 value, action = policy.act(state, deterministic=False) # TODO: add determinism?
 
-                state, reward, done, _ = env.step(action.data.numpy())
+                next_state, reward, done, _ = env.step(action.data.numpy())
 
-                memory.store(state, action.data.numpy(), reward, value.data.numpy())
+                memory.store(state.numpy(), action.numpy(), reward, value.numpy())
 
                 traj_len += 1
                 num_steps += 1
 
-                state = torch.Tensor(state)
-
-                # Need next_state to account for states being offset by one
-                # More elegant way to do this?
+                state = torch.Tensor(next_state)
 
                 if done:
                     break
 
             memory.finish_path(last_val=(not done) * value.data.numpy())
         
-        return memory
+        return memory, None
 
         
     @torch.no_grad()
@@ -264,30 +261,22 @@ class PPO:
 
             episode_reward += reward
 
-            reward = torch.Tensor([reward])
-
-            mask = torch.Tensor([0.0 if done else 1.0])
-
-            state = torch.Tensor(state)
-
-            rollout.insert(step, state, action.data, value.data, reward, mask)
-
             if done:
                 state = torch.Tensor(env.reset())
     
                 reward_stats.add(episode_reward)
                 episode_reward = 0
 
-                #memory.finish_path()
+                memory.finish_path()
             
-            #memory.store(state, action.data.numpy(), reward, value.data.numpy())
+            memory.store(state, action.numpy(), reward, value.numpy())
 
-            # reward = torch.Tensor([reward])
+            reward = torch.Tensor([reward])
 
-            # mask = torch.Tensor([0.0 if done else 1.0])
+            mask = torch.Tensor([0.0 if done else 1.0])
 
-            # state = torch.Tensor(state)
-            #rollout.insert(step, state, action.data, value.data, reward, mask)
+            state = torch.Tensor(state)
+            rollout.insert(step, state, action.data, value.data, reward, mask)
 
         next_value, _ = policy(state)
 
@@ -316,20 +305,20 @@ class PPO:
         #     import pdb
         #     pdb.set_trace()
 
-        return rollout, reward_stats.get()
+        return memory, reward_stats.get()
 
 
     def train(self,
               env_fn,
               policy, 
               n_itr,
-              normalized=None,
+              normalize=None,
               logger=None):
 
         env = Vectorize([env_fn]) # this will be useful for parallelism later
         
-        if normalized is not None:
-            env = normalized(env)
+        if normalize is not None:
+            env = normalize(env)
 
         old_policy = deepcopy(policy)
 
@@ -342,13 +331,15 @@ class PPO:
 
             #observations, actions, returns, values, train_stats = self.sample_steps(env, policy, self.num_steps)
 
-            rollout, _ = self.sample_steps(env, policy, self.num_steps)
+            #rollout, _ = self.sample_steps(env, policy, self.num_steps)
 
-            observations, actions, returns, values = map(torch.Tensor, rollout.get())
+            #observations, actions, returns, values = map(torch.Tensor, rollout.get())
 
-            # batch = self.sample(env, policy, self.num_steps, 400) #TODO: fix this
+            batch, _ = self.sample(env, policy, self.num_steps, 400) #TODO: fix this
 
-            # observations2, actions2, returns2, values2 = map(torch.Tensor, batch.get())
+            observations, actions, returns, values = map(torch.Tensor, batch.get())
+
+            #observations2, actions2, returns2, values2 = map(torch.Tensor, batch.get())
 
             # if itr % thresh == 0:
             #     import pdb
@@ -470,7 +461,7 @@ class PPO:
 
                 filetype = ".pt" # pytorch model
 
-                if normalized is not None:
+                if normalize is not None:
                     # ret_rms is not necessary to run policy, but is necessary to interpret rewards
                     save_model = [policy, (env.ob_rms, env.ret_rms)]
                     

@@ -75,20 +75,18 @@ class SampleTesterEnv:
 
     def test(self, states, actions, rewards, returns):
         # TODO: add off-by-one checks to diagnose common errors?
+        results = []
 
         num_steps = states.shape[0]
 
         expected_states = np.array([(np.ones(shape=(self.obs_dim,)) * (s % self.done)) for s in range(num_steps)])
-
-        assert np.allclose(states, expected_states)
+        results += [np.allclose(states, expected_states)]
 
         expected_rewards = np.array([(np.ones(shape=(1)) * (s % self.done)) for s in range(num_steps)])
-
-        assert np.allclose(rewards, expected_rewards)
+        results += [np.allclose(rewards, expected_rewards)]
 
         expected_actions = np.array(self.actions)
-
-        assert np.allclose(actions, expected_actions)
+        results += [np.allclose(actions, expected_actions)]
 
         expected_returns, R = [], 0
         for r in reversed(expected_rewards):
@@ -100,26 +98,27 @@ class SampleTesterEnv:
                 R = 0
 
         expected_returns = np.array(expected_returns)
+        results += [np.allclose(returns, expected_returns)]
 
         # compare to rllab magic reward-to-go equation
         # import scipy.signal
         # assert np.allclose(expected_returns, scipy.signal.lfilter([1], [1, float(-self.gamma)], expected_rewards[::-1], axis=0)[::-1])
 
-        assert np.allclose(returns, expected_returns)
+        assert np.all(results)
 
 
-@pytest.mark.parametrize("num_steps", [
-    10,
-    30,
-    35
+@pytest.mark.parametrize("num_steps, obs_dim, action_dim", [
+    (5, 1, 1),
+    (10, 1, 1),
+    (25, 1, 1),
+    (10, 80, 10),
+    (30, 80, 10),
+    (35, 80, 10)
 ])
-def test_ppo_sample(num_steps):
+def test_ppo_sample(num_steps, obs_dim, action_dim):
     # useful for debugging
     np.set_printoptions(threshold=10000)
     torch.set_printoptions(threshold=10000)
-
-    obs_dim = 80
-    action_dim = 10
 
     gamma = 0.99
 
@@ -131,7 +130,48 @@ def test_ppo_sample(num_steps):
 
     algo = PPO(args)
 
-    memory, _ = algo.sample_steps(env, policy, num_steps)
+    #memory, _ = algo.sample_steps(env, policy, num_steps)
+
+    memory, _ = algo.sample(env, policy, num_steps, 100)
 
     # TODO: move this out of env?
-    env.test(memory.states[:-1], memory.actions, memory.rewards, memory.returns[:-1])
+    #env.test(memory.states[:-1], memory.actions, memory.rewards, memory.returns[:-1])
+
+    #states, actions, rewards, returns = memory.states[:-1], memory.actions, memory.rewards, memory.returns[:-1]
+    states, actions, rewards, returns = map(torch.Tensor,(memory.observations, memory.actions, memory.rewards, memory.returns))
+
+    num_steps = states.shape[0] # kind of circular? TODO: fix this
+
+    assert states.shape == (num_steps, obs_dim)
+    assert actions.shape == (num_steps, action_dim)
+    assert rewards.shape == (num_steps, 1)
+    assert rewards.shape == (num_steps, 1)
+
+    results = [] # TODO: store error messages here
+
+    expected_states = np.array([(np.ones(shape=(obs_dim,)) * (s % env.done)) for s in range(num_steps)])
+    results += [np.allclose(states, expected_states)]
+
+    expected_rewards = np.array([(np.ones(shape=(1)) * (s % env.done)) for s in range(num_steps)])
+    results += [np.allclose(rewards, expected_rewards)]
+
+    expected_actions = np.array(env.actions)
+    results += [np.allclose(actions, expected_actions)]
+
+    expected_returns, R = [], 0
+    for r in reversed(expected_rewards):
+        R = R * gamma + r
+
+        expected_returns.insert(0, R.copy())
+
+        if r == 0: # this is an initial state, so reset the return
+            R = 0
+
+    expected_returns = np.array(expected_returns)
+    results += [np.allclose(returns, expected_returns)]
+
+    # compare to rllab magic reward-to-go equation
+    # import scipy.signal
+    # assert np.allclose(expected_returns, scipy.signal.lfilter([1], [1, float(-self.gamma)], expected_rewards[::-1], axis=0)[::-1])
+
+    assert np.all(results)
