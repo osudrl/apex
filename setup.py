@@ -8,6 +8,6 @@ setup(name='deeprl',
       author='Pedro Morais',
       author_email='autranemorais@gmail.com',
       license='MIT',
-      packages=find_packages(exclude=("cassie",)),
+      packages=find_packages(exclude=("cassie", "tests")),
       #install_requires=REQUIRED_PACKAGES
 )

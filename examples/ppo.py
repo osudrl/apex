@@ -98,9 +98,9 @@ if __name__ == "__main__":
     policy = GaussianMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False)
     #policy = BetaMLP(obs_dim, action_dim)
 
-    normalizer = PreNormalizer(iter=10000, noise_std=1, policy=policy, online=False)
+    normalizer = None #PreNormalizer(iter=10000, noise_std=1, policy=policy, online=False)
 
-    algo = PPO(args=args)
+    algo = PPO(args=vars(args))
 
     # TODO: make log, monitor and render command line arguments
     # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)

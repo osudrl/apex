@@ -34,7 +34,7 @@ class Rollout():
         self.rewards[step] = reward
         self.masks[step] = mask
     
-    def calculate_returns(self, next_value, gamma=0.99, tau=0.95, use_gae=True):
+    def calculate_returns(self, next_value, gamma=0.99, lam=0.95, use_gae=True):
         # "masks" just resets the calculation for each trajectory, based on "done"
         # TODO: make this more easily read
         
@@ -44,7 +44,7 @@ class Rollout():
             gae = 0
             for step in reversed(range(self.rewards.size(0))):
                 delta = self.rewards[step] + gamma * self.values[step + 1] * self.masks[step] - self.values[step]
-                gae = delta + gamma * tau * self.masks[step] * gae
+                gae = delta + gamma * lam * self.masks[step] * gae
                 self.returns[step] = gae + self.values[step]
             
         else:
@@ -53,79 +53,63 @@ class Rollout():
             for step in reversed(range(self.rewards.size(0))):
                 self.returns[step] = self.returns[step + 1] * gamma * self.masks[step + 1] + self.rewards[step]
 
+    def get(self):
+        return (self.states[:-1], 
+               self.actions, 
+               self.returns[:-1], 
+               self.values[:-1])
 
-# class PPOBuffer:
-#     """
-#     A buffer for storing trajectories experienced by a PPO agent interacting
-#     with the environment, and using Generalized Advantage Estimation (GAE-Lambda)
-#     for calculating the advantages of state-action pairs.
-#     """
 
-#     def __init__(self, obs_dim, act_dim, size, gamma=0.99, lam=0.95):
-#         self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-#         self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
-#         self.adv_buf = np.zeros(size, dtype=np.float32)
-#         self.rew_buf = np.zeros(size, dtype=np.float32)
-#         self.ret_buf = np.zeros(size, dtype=np.float32)
-#         self.val_buf = np.zeros(size, dtype=np.float32)
-#         self.logp_buf = np.zeros(size, dtype=np.float32)
-#         self.gamma, self.lam = gamma, lam
-#         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
+class PPOBuffer:
+    # Buffer philosophy: the buffer is almost never a bottleneck, so don't
+    # worry about preallocating memory or doing cool tricks, but it's a strong
+    # source of implementation bugs, so keep it readable
+    # Verbose variable names are always better
+    def __init__(self, gamma=0.99, lam=0.95, use_gae=False):
+        self.observations = []
+        self.actions      = []
+        self.rewards      = []
+        self.values       = []
+        self.returns      = []
 
-#     def store(self, obs, act, rew, val, logp):
-#         """
-#         Append one timestep of agent-environment interaction to the buffer.
-#         """
-#         assert self.ptr < self.max_size     # buffer has to have room so you can store
-#         self.obs_buf[self.ptr] = obs
-#         self.act_buf[self.ptr] = act
-#         self.rew_buf[self.ptr] = rew
-#         self.val_buf[self.ptr] = val
-#         self.logp_buf[self.ptr] = logp
-#         self.ptr += 1
+        self.gamma, self.lam = gamma, lam
 
-#     def finish_path(self, last_val=0):
-#         """
-#         Call this at the end of a trajectory, or when one gets cut off
-#         by an epoch ending. This looks back in the buffer to where the
-#         trajectory started, and uses rewards and value estimates from
-#         the whole trajectory to compute advantage estimates with GAE-Lambda,
-#         as well as compute the rewards-to-go for each state, to use as
-#         the targets for the value function.
-#         The "last_val" argument should be 0 if the trajectory ended
-#         because the agent reached a terminal state (died), and otherwise
-#         should be V(s_T), the value function estimated for the last state.
-#         This allows us to bootstrap the reward-to-go calculation to account
-#         for timesteps beyond the arbitrary episode horizon (or epoch cutoff).
-#         """
+        self.ptr, self.path_idx = 0, 0
+    
+    def store(self, observation, action, reward, value):
+        self.observations += [observation.squeeze(0)]
+        self.actions      += [action.squeeze(0)]
+        self.rewards      += [reward]
+        self.values       += [value.squeeze(0)]
 
-#         path_slice = slice(self.path_start_idx, self.ptr)
-#         rews = np.append(self.rew_buf[path_slice], last_val)
-#         vals = np.append(self.val_buf[path_slice], last_val)
-        
-#         # the next two lines implement GAE-Lambda advantage calculation
-#         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
-#         self.adv_buf[path_slice] = core.discount_cumsum(deltas, self.gamma * self.lam)
-        
-#         # the next line computes rewards-to-go, to be targets for the value function
-#         self.ret_buf[path_slice] = core.discount_cumsum(rews, self.gamma)[:-1]
-        
-#         self.path_start_idx = self.ptr
+        self.ptr += 1
+    
+    def finish_path(self, last_val=None):
+        if last_val is None:
+            last_val = np.zeros(shape=(1,))
 
-#     def get(self):
-#         """
-#         Call this at the end of an epoch to get all of the data from
-#         the buffer, with advantages appropriately normalized (shifted to have
-#         mean zero and std one). Also, resets some pointers in the buffer.
-#         """
-#         assert self.ptr == self.max_size    # buffer has to be full before you can get
-#         self.ptr, self.path_start_idx = 0, 0
-#         # the next two lines implement the advantage normalization trick
-#         adv_mean, adv_std = mpi_statistics_scalar(self.adv_buf)
-#         self.adv_buf = (self.adv_buf - adv_mean) / adv_std
-#         return [self.obs_buf, self.act_buf, self.adv_buf, 
-#                 self.ret_buf, self.logp_buf]
+        path = slice(self.path_idx, self.ptr)
+        rewards = self.rewards[path]
+        returns = []
 
+        R = last_val.squeeze(0)
+        for reward in reversed(rewards):
+            R = self.gamma * R + reward
+            returns.insert(0, R) # TODO: self.returns.insert(self.path_idx, R) ? 
+                                 # also technically O(n^2), may be worth just reversing list
+                                 # BUG? This is adding copies of R by reference
+
+        self.returns += returns
+
+        self.path_idx = self.ptr
+    
+    def get(self):
+        return(
+            self.observations,
+            self.actions,
+            self.returns,
+            self.values
+        )
 
 
 class Statistic:
@@ -150,7 +134,7 @@ class PPO:
     def __init__(self, 
                  args=None,
                  gamma=None, 
-                 tau=None, 
+                 lam=None, 
                  lr=None, 
                  eps=None,
                  entropy_coeff=None,
@@ -159,24 +143,23 @@ class PPO:
                  batch_size=None,
                  num_steps=None):
 
-        self.last_state = None
- 
-        self.gamma         = gamma         or args.gamma
-        self.tau           = tau           or args.tau
-        self.lr            = lr            or args.lr
-        self.eps           = eps           or args.eps
-        self.entropy_coeff = entropy_coeff or args.entropy_coeff
-        self.clip          = clip          or args.clip
-        self.batch_size    = batch_size    or args.batch_size
-        self.epochs        = epochs        or args.epochs
-        self.num_steps     = num_steps     or args.num_steps
+        self.gamma         = args['gamma']
+        self.lam           = args['lam']
+        self.lr            = args['lr']
+        self.eps           = args['eps']
+        self.entropy_coeff = args['entropy_coeff']
+        self.clip          = args['clip']
+        self.batch_size    = args['batch_size']
+        self.epochs        = args['epochs']
+        self.num_steps     = args['num_steps']
 
-        self.name = args.name
-        self.use_gae = args.use_gae
+        self.name = args['name']
+        self.use_gae = args['use_gae']
+
 
     @staticmethod
     def add_arguments(parser):
-        parser.add_argument("--n_itr", type=int, default=1000,
+        parser.add_argument("--n_itr", type=int, default=10000,
                             help="Number of iterations of the learning algorithm")
         
         parser.add_argument("--lr", type=float, default=3e-4,
@@ -185,7 +168,7 @@ class PPO:
         parser.add_argument("--eps", type=float, default=1e-5,
                             help="Adam epsilon (for numerical stability)")
         
-        parser.add_argument("--tau", type=float, default=0.95,
+        parser.add_argument("--lam", type=float, default=0.95,
                             help="Generalized advantage estimate discount")
 
         parser.add_argument("--gamma", type=float, default=0.99,
@@ -208,6 +191,51 @@ class PPO:
 
         parser.add_argument("--use_gae", type=bool, default=True,
                             help="Whether or not to calculate returns using Generalized Advantage Estimation")
+
+    #TODO: make this better
+    @torch.no_grad()
+    def sample(self, env, policy, min_steps, max_traj_len):
+        # SAMPLING PHILOSOPHY:
+        # Never truncate trajectories other than because max_traj_len is exceeded
+        # I.e. it's better to have a number of steps that's not divisible by the batch size,
+        # than to have an arbitrarily small trajectory screwing state-return estimates
+        # ALWAYS bootstrap the return estimate of a truncated trajectory using the critic value estimate
+        # Fure possibilities: sample independent trajectories NOT steps, as that's what really reduces gradient variance
+        # The above may lead to pessimistic performance and slowdowns, so maybe annealing the trajectory sample size
+        # is the solution?
+
+        memory = PPOBuffer(self.gamma, self.lam)
+
+        num_steps = 0
+        while num_steps < min_steps:
+            state = torch.Tensor(env.reset())
+
+            done = False
+            value = 0
+            traj_len = 0
+
+            while traj_len < max_traj_len:
+                value, action = policy.act(state, deterministic=False) # TODO: add determinism?
+
+                state, reward, done, _ = env.step(action.data.numpy())
+
+                memory.store(state, action.data.numpy(), reward, value.data.numpy())
+
+                traj_len += 1
+                num_steps += 1
+
+                state = torch.Tensor(state)
+
+                # Need next_state to account for states being offset by one
+                # More elegant way to do this?
+
+                if done:
+                    break
+
+            memory.finish_path(last_val=(not done) * value.data.numpy())
+        
+        return memory
+
         
     @torch.no_grad()
     def sample_steps(self, env, policy, num_steps, deterministic=False):
@@ -223,6 +251,8 @@ class PPO:
 
         rollout = Rollout(num_steps, obs_dim, action_dim, state)
 
+        memory = PPOBuffer(self.gamma)
+
         reward_stats = Statistic()
 
         done = False
@@ -234,35 +264,60 @@ class PPO:
 
             episode_reward += reward
 
-            if done:
-                state = env.reset()
-    
-                reward_stats.add(episode_reward)
-                episode_reward = 0
-
             reward = torch.Tensor([reward])
 
             mask = torch.Tensor([0.0 if done else 1.0])
 
             state = torch.Tensor(state)
+
             rollout.insert(step, state, action.data, value.data, reward, mask)
 
-        if not done:
-            reward_stats.add(episode_reward)
+            if done:
+                state = torch.Tensor(env.reset())
+    
+                reward_stats.add(episode_reward)
+                episode_reward = 0
+
+                #memory.finish_path()
+            
+            #memory.store(state, action.data.numpy(), reward, value.data.numpy())
+
+            # reward = torch.Tensor([reward])
+
+            # mask = torch.Tensor([0.0 if done else 1.0])
+
+            # state = torch.Tensor(state)
+            #rollout.insert(step, state, action.data, value.data, reward, mask)
 
         next_value, _ = policy(state)
 
-        rollout.calculate_returns(next_value.data, self.gamma, self.tau, self.use_gae)
+        if not done:
+            print("truncated traj")
+            reward_stats.add(episode_reward)
+            memory.finish_path(next_value.data.numpy())
+
+        rollout.calculate_returns(next_value.data, self.gamma, self.lam, self.use_gae)
 
         #self.last_state = rollout.states[-1]
-        
-        return (rollout.states[:-1], 
-               rollout.actions, 
-               rollout.returns[:-1], 
-               rollout.values[:-1],
-               reward_stats.get())
-               # TODO: remove that +1^. Divide by 0 only happens when last trajectory gets discarded
-               # because it never flags done
+
+        # try:
+        #     assert np.allclose(rollout.returns[:-1].data.numpy(), memory.returns)
+        #     assert np.allclose(rollout.values[:-1].data.numpy(), memory.values)
+        #     assert np.allclose(rollout.actions.data.numpy(), memory.actions)
+        #     assert np.allclose(rollout.rewards.data.numpy(), memory.rewards)
+        #     #assert np.allclose(rollout.states[:-1].data.numpy(), memory.observations)
+
+        # except (ValueError, AssertionError) as e:
+        #     print("Error:", e)
+        #     print(len(memory.rewards))
+        #     print(len(memory.returns))
+        #     print(len(memory.values))
+        #     np.set_printoptions(threshold=10000)
+        #     import pdb
+        #     pdb.set_trace()
+
+        return rollout, reward_stats.get()
+
 
     def train(self,
               env_fn,
@@ -278,36 +333,63 @@ class PPO:
 
         old_policy = deepcopy(policy)
 
-        optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
+        thresh = 10 #################
 
         for itr in range(n_itr):
             print("********** Iteration %i ************" % itr)
-            observations, actions, returns, values, train_stats = self.sample_steps(env, policy, self.num_steps)
-            
+
+            optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
+
+            #observations, actions, returns, values, train_stats = self.sample_steps(env, policy, self.num_steps)
+
+            rollout, _ = self.sample_steps(env, policy, self.num_steps)
+
+            observations, actions, returns, values = map(torch.Tensor, rollout.get())
+
+            # batch = self.sample(env, policy, self.num_steps, 400) #TODO: fix this
+
+            # observations2, actions2, returns2, values2 = map(torch.Tensor, batch.get())
+
+            # if itr % thresh == 0:
+            #     import pdb
+            #     pdb.set_trace()
+
+            #print(observations.size(), actions.size(), returns.size(), values.size())
+
+            torch.set_printoptions(threshold=50000)
+
+            #print(returns)
+            #exit()
+
+            #print(values)
+
             advantages = returns - values
+
+            # print(values)
+
+            # exit()
 
             # TODO: make advantage centering an option
             #advantages = (advantages - advantages.mean()) / (advantages.std() + self.eps)
 
+            # batch size should be minibatch
+
             batch_size = self.batch_size or advantages.numel()
 
-            print("timesteps in batch: %i" % advantages.size(0))
+            print("timesteps in batch: %i" % advantages.numel())
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
 
             for _ in range(self.epochs):
                 losses = []
                 sampler = BatchSampler(
-                    SubsetRandomSampler(range(self.num_steps)),
+                    SubsetRandomSampler(range(advantages.numel())),
                     batch_size,
-                    drop_last=False
+                    drop_last=True
                 )
 
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
-
-                    # TEST: sample WITH replacement
-                    # indices = torch.randperm(observations.size(0))[:self.batch_size]
 
                     obs_batch = observations[indices]
                     action_batch = actions[indices]
@@ -319,9 +401,9 @@ class PPO:
 
                     with torch.no_grad():
                         _, old_pdf = old_policy.evaluate(obs_batch)
-                        old_log_probs = old_pdf.log_prob(action_batch) # BUG: log prob should be summed along action axis, aka joint log probs 
+                        old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
                     
-                    log_probs = pdf.log_prob(action_batch)
+                    log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
                     
                     ratio = (log_probs - old_log_probs).exp()
 
@@ -337,13 +419,18 @@ class PPO:
                     # TODO: add ability to optimize critic and actor seperately, with different learning rates
 
                     optimizer.zero_grad()
-                    (actor_loss + critic_loss + entropy_penalty).backward(retain_graph=True)
+                    (actor_loss + critic_loss + entropy_penalty).backward()
                     optimizer.step()
 
-                    losses.append([actor_loss.data.clone().numpy(),
-                                   pdf.entropy().mean().data.numpy(),
-                                   critic_loss.data.numpy(),
-                                   ratio.data.mean()])
+                    if actor_loss.item() > thresh:
+                        import pdb
+                        pdb.set_trace()
+
+                    losses.append([actor_loss.item(),
+                                   pdf.entropy().mean().item(),
+                                   critic_loss.item(),
+                                   ratio.mean().item()])
+
                 # TODO: add verbosity arguments to suppress this
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
@@ -364,13 +451,13 @@ class PPO:
             # add "suppress name" option
 
             # look into making logging a decorator or wrapper?
-            _, _, _, _, test_stats = self.sample_steps(env, policy, 800, deterministic=True)
+            _, test_stats = self.sample_steps(env, policy, 800, deterministic=True)
             if logger is not None:
                 logger.record("Reward test", test_stats["mean"])
-                logger.record("Reward mean", train_stats["mean"])
-                logger.record("Reward std", train_stats["std"])
-                logger.record("Reward max", train_stats["max"])
-                logger.record("Reward min", train_stats["min"])
+                #logger.record("Reward mean", train_stats["mean"])
+                #logger.record("Reward std", train_stats["std"])
+                #logger.record("Reward max", train_stats["max"])
+                #logger.record("Reward min", train_stats["min"])
                 logger.dump()
 
             if itr % 10 == 0:

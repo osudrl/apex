@@ -49,7 +49,6 @@ def Normalizer(*args, **kwargs):
 
     return _Normalizer
 
-
 class Normalize:
     """
     Vectorized environment base class

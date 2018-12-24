@@ -360,7 +360,7 @@ def saliency(policy, state, naive=False):
 
 def make_env_fn():
     def _thunk():
-        return CassieEnv("cassie/trajectory/stepdata.bin")
+        return CassieEnv("walking")
     return _thunk
 
 
