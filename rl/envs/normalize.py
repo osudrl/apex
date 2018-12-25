@@ -26,10 +26,12 @@ def PreNormalizer(iter, noise_std, policy, *args, **kwargs):
             # add gaussian noise to deterministic action
             action = action + torch.randn(action.size()) * noise_std
 
-            state, reward, done, _ = env.step(action.data.numpy())
+            state, _, done, _ = env.step(action.data.numpy())
 
             if done:
                 state = env.reset()
+
+        env.online = online_val
     
     def _Normalizer(venv):
         venv = Normalize(venv, *args, **kwargs)

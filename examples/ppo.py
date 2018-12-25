@@ -19,17 +19,17 @@ import numpy as np
 import os
 
 #TODO: remove reliance on: Monitor, DummyVecEnv, VecNormalized
-def make_env(env_id, seed, rank, log_dir):
-    def _thunk(log=True):
-        env = gym.make(env_id)
-        env.seed(seed + rank)
-        filename = os.path.join(log_dir,os.path.join(log_dir,str(rank))) \
-                   if log else None
+# def make_env(env_id, seed, rank, log_dir):
+#     def _thunk(log=True):
+#         env = gym.make(env_id)
+#         env.seed(seed + rank)
+#         filename = os.path.join(log_dir,os.path.join(log_dir,str(rank))) \
+#                    if log else None
 
-        #env = bench.Monitor(env, filename, allow_early_resets=True)
-        return env
+#         #env = bench.Monitor(env, filename, allow_early_resets=True)
+#         return env
 
-    return _thunk
+#     return _thunk
 
 def make_cassie_env(traj_dir):
     def _thunk():
@@ -48,31 +48,6 @@ parser.add_argument("--name", type=str, default="model")
 
 args = parser.parse_args()
 
-# Xie et al params:
-# batch_size = 128, hardcoded to 128
-# lr = 1e-3, but gets set to 1e-4 in the code
-# num_epoch = 32, hardcoded to 64
-# his "epochs" are actually minibatch optimization steps...
-# which look to be done with replacement
-# equivalent epochs is 64*128/3000 ~= 3
-
-# num_steps = 2048, but gets multipled by 10,000?
-# ^ but samples are hardcoded to 300 in the code...
-# ^ but memory that optimization gets drawn from is set to 
-# ^ 3000...
-# max_episode_length = 2048 # not used
-# min_episode = 5           # not used
-# time_horizon = 200,000    # not used
-
-# differences between Xie et al RL and my RL:
-# Xie et al: no GAE, different normalization scheme, seperate optimization for actor and critic, learning rate scheduling
-# Xie et al does not center advantages or rewards
-# optimizer reset every run
-# learning rate scheduling not used
-
-# policy size: (256, 256)
-
-# true hyperparams: 
 args.batch_size = 128
 args.lr = 1e-4
 args.epochs = 3
@@ -80,7 +55,7 @@ args.num_steps = 3000
 
 args.use_gae = False
 
-args.name = "Xie3"
+args.name = "Xie"
 
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
@@ -98,7 +73,7 @@ if __name__ == "__main__":
     policy = GaussianMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False)
     #policy = BetaMLP(obs_dim, action_dim)
 
-    normalizer = None #PreNormalizer(iter=10000, noise_std=1, policy=policy, online=False)
+    normalizer = PreNormalizer(iter=10000, noise_std=1, policy=policy, online=False)
 
     algo = PPO(args=vars(args))
 
