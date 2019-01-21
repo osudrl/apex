@@ -35,7 +35,7 @@ class Logger():
 
         self.name = args.name
 
-        self.viz_list = ["Reward mean", "Reward test"]
+        self.viz_list = ["all"]
 
         self.args = args
 
@@ -173,7 +173,7 @@ class Logger():
         for i in range(len(header)):
             y = data[:, i]
 
-            if header[i] in self.viz_list:
+            if header[i] in self.viz_list or self.viz_list[0] == "all":
                 # do some kind of window based smoothing
                 #y = running_mean(y, 30) 
 

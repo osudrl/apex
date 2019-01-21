@@ -9,7 +9,7 @@ import time
 
 # NOTE: the fact that this has the same name as a parameter caused a NASTY bug
 # apparently "if <function_name>" evaluates to True in python...
-def normc_init(m):
+def normc_fn(m):
     classname = m.__class__.__name__
     if classname.find('Linear') != -1:
         m.weight.data.normal_(0, 1)
@@ -18,7 +18,15 @@ def normc_init(m):
             m.bias.data.fill_(0)
 
 class GaussianMLP(FFPolicy):
-    def __init__(self, num_inputs, action_dim, init_std=1, learn_std=True, nonlinearity="tanh", normc_init=False):
+    def __init__(self, 
+                 num_inputs, 
+                 action_dim, 
+                 init_std=1, 
+                 learn_std=True, 
+                 nonlinearity="tanh", 
+                 normc_init=False,
+                 obs_std=None,
+                 obs_mean=None):
         super(GaussianMLP, self).__init__()
 
         actor_dims = (256, 256)
@@ -52,6 +60,9 @@ class GaussianMLP(FFPolicy):
             self.nonlinearity = torch.tanh
         else:
             raise NotImplementedError
+
+        self.obs_std = obs_std
+        self.obs_mean = obs_mean
         
         # weight initialization scheme used in PPO paper experiments
         self.normc_init = normc_init
@@ -62,12 +73,15 @@ class GaussianMLP(FFPolicy):
     def init_parameters(self):
         if self.normc_init:
             print("Doing norm column initialization.")
-            self.apply(normc_init)
+            self.apply(normc_fn)
 
             if self.dist.__class__.__name__ == "DiagGaussian":
                 self.mean.weight.data.mul_(0.01)
 
     def forward(self, inputs):
+        if self.training == False:
+            inputs = (inputs - self.obs_mean) / (self.obs_std + 1e-8)
+
         x = inputs
         for l in self.critic_layers:
             x = self.nonlinearity(l(x))

@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-
+# TODO: look at change of variables function for enforcing
+# action bounds correctly
 class DiagonalGaussian(nn.Module):
     def __init__(self, num_outputs, init_std=1, learn_std=True):
         super(DiagonalGaussian, self).__init__()

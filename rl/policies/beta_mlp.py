@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 
-from rl.distributions import Beta
+from rl.distributions import Beta, Beta2
 from .base import FFPolicy
 
 def normc_init(m):
@@ -20,11 +20,24 @@ def normc_init(m):
 # beta = alpha * (1 / mu - 1)
 # with mu in (0, 1) and sigma^2 in (0, 0,5^2)
 class BetaMLP(FFPolicy):
-    def __init__(self, num_inputs, action_dim, nonlinearity="tanh", normc_init=False):
+    def __init__(self, 
+                 num_inputs, 
+                 action_dim, 
+                 nonlinearity="tanh", 
+                 normc_init=False,
+                 init_std=None,
+                 learn_std=False):
         super(BetaMLP, self).__init__()
 
         actor_dims = (64, 64)
         critic_dims = (64, 64)
+
+        if init_std is not None:
+            self.dist = Beta2(action_dim, init_std, learn_std)
+            num_outputs = action_dim
+        else:
+            self.dist = Beta(action_dim)
+            num_outputs = 2 * action_dim
 
         # create actor network
         self.actor_layers = nn.ModuleList()
@@ -34,7 +47,7 @@ class BetaMLP(FFPolicy):
             out_dim = actor_dims[l + 1]
             self.actor_layers += [nn.Linear(in_dim, out_dim)]
         
-        self.alpha_beta = nn.Linear(actor_dims[-1], 2 * action_dim)
+        self.params = nn.Linear(actor_dims[-1], num_outputs)
 
         # create critic network
         self.critic_layers = nn.ModuleList()
@@ -45,8 +58,6 @@ class BetaMLP(FFPolicy):
             self.critic_layers += [nn.Linear(in_dim, out_dim)]
 
         self.vf = nn.Linear(critic_dims[-1], 1)
-
-        self.dist = Beta(action_dim)
 
         if nonlinearity == "relu":
             self.nonlinearity = F.relu
@@ -75,6 +86,6 @@ class BetaMLP(FFPolicy):
         x = inputs
         for l in self.actor_layers:
             x = torch.tanh(l(x))
-        x = self.alpha_beta(x)
+        x = self.params(x)
 
         return value, x

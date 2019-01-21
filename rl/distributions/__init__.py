@@ -1,2 +1,2 @@
 from .gaussian import DiagonalGaussian
-from .beta import Beta
+from .beta import Beta, Beta2
