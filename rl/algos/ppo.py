@@ -158,10 +158,9 @@ class PPO:
 
         filetype = ".pt" # pytorch model
 
-        # TODO: save the normalization parameters as part of the policy instead
         if hasattr(env, 'ob_rms'):
             # ret_rms is not necessary to run policy, but is necessary to interpret rewards
-            mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var)
+            mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
             policy.obs_mean = torch.Tensor(mean)
             policy.obs_std = torch.Tensor(std)
 

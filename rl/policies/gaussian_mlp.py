@@ -80,7 +80,7 @@ class GaussianMLP(FFPolicy):
 
     def forward(self, inputs):
         if self.training == False:
-            inputs = (inputs - self.obs_mean) / (self.obs_std + 1e-8)
+            inputs = (inputs - self.obs_mean) / self.obs_std
 
         x = inputs
         for l in self.critic_layers:
