@@ -96,7 +96,7 @@ examples from root directory.
 * Some form of massively parallel Evolutionary Algorithm as a baseline
 * [A2C](https://arxiv.org/abs/1602.01783) 
 * Parallelism
-* [Beta distribution policy](http://proceedings.mlr.press/v70/chou17a/chou17a.pdf)
+* ~~[Beta distribution policy](http://proceedings.mlr.press/v70/chou17a/chou17a.pdf)~~
 * [Parameter noise exploration](https://arxiv.org/abs/1706.01905) (maybe)
 
 
