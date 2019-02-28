@@ -350,17 +350,14 @@ def saliency(policy, state, naive=False):
     scores = scores / torch.max(scores) * 10
     print_semantic_state(scores)
 
-    
-
 # more plots:
 # state visitation
 # value function
 # reward distribution
 
-
 def make_env_fn():
     def _thunk():
-        return CassieEnv("walking")
+        return CassieEnv("walking", clock_based=True)
     return _thunk
 
 
@@ -387,136 +384,6 @@ args = parser.parse_args()
 
 
 # TODO: add command line arguments for normalization on/off, and for ensemble policy?
-
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-import torch.multiprocessing as mp
-
-import time
-
-class XieNet(nn.Module):
-    def __init__(self, num_inputs, num_outputs, hidden_layer=[64, 64]):
-        super(XieNet, self).__init__()
-        self.num_outputs = num_outputs
-        self.hidden_layer = hidden_layer
-        self.p_fcs = nn.ModuleList()
-        self.v_fcs = nn.ModuleList()
-        p_fc = nn.Linear(num_inputs, self.hidden_layer[0])
-        v_fc = nn.Linear(num_inputs, self.hidden_layer[0])
-        self.p_fcs.append(p_fc)
-        self.v_fcs.append(v_fc)
-        for i in range(len(self.hidden_layer)-1):
-            p_fc = nn.Linear(self.hidden_layer[i], self.hidden_layer[i+1])
-            v_fc = nn.Linear(self.hidden_layer[i], self.hidden_layer[i+1])
-            self.p_fcs.append(p_fc)
-            self.v_fcs.append(v_fc)
-        self.mu = nn.Linear(self.hidden_layer[-1], num_outputs)
-        self.v = nn.Linear(self.hidden_layer[-1],1)
-        self.noise = -2
-
-    def forward(self, inputs):
-        # actor
-        x = F.relu(self.p_fcs[0](inputs))
-        for i in range(len(self.hidden_layer)-1):
-            x = F.relu(self.p_fcs[i+1](x))
-        mu = F.tanh(self.mu(x))
-
-        log_std = Variable(self.noise*torch.ones(self.num_outputs)).unsqueeze(0).expand_as(mu)
-
-        # critic
-        x = F.relu(self.v_fcs[0](inputs))
-        for i in range(len(self.hidden_layer)-1):
-            x = F.relu(self.v_fcs[i+1](x))
-        v = self.v(x)
-
-
-        return mu, log_std, v
-
-    def act(self, inputs, det):
-        mu, log_std, v = self(inputs)
- 
-        if det:
-            return v, mu
-        else:
-            return v, mu + log_std.exp() *  torch.randn(mu.size())
-
-
-class ActorCriticNet(nn.Module):
-    def __init__(self, num_inputs, num_outputs, hidden_layer=[64, 64]):
-        super(ActorCriticNet, self).__init__()
-        self.num_outputs = num_outputs
-        self.hidden_layer = hidden_layer
-
-        actor_dims = (256, 256)
-        critic_dims = (256, 256)
-
-        # create actor network
-        self.actor_layers = nn.ModuleList()
-        self.actor_layers += [nn.Linear(num_inputs, actor_dims[0])]
-        for l in range(len(actor_dims) - 1):
-            in_dim = actor_dims[l]
-            out_dim = actor_dims[l + 1]
-            self.actor_layers += [nn.Linear(in_dim, out_dim)]
-        
-        self.mean = nn.Linear(actor_dims[-1], num_inputs)
-
-        # create critic network
-        self.critic_layers = nn.ModuleList()
-        self.critic_layers += [nn.Linear(num_inputs, critic_dims[0])]
-        for l in range(len(critic_dims) - 1):
-            in_dim = critic_dims[l]
-            out_dim = critic_dims[l + 1]
-            self.critic_layers += [nn.Linear(in_dim, out_dim)]
-
-        self.vf = nn.Linear(critic_dims[-1], 1)
-
-        self.noise = -2
-
-        self.log_std = nn.Parameter(
-            torch.ones(1, num_outputs) * self.noise,
-            requires_grad=False
-        )
-
-        self.nonlinearity = F.relu
-
-        #self.train()
-
-    def forward(self, inputs):
-        x = inputs
-        for l in self.critic_layers:
-            x = self.nonlinearity(l(x))
-        value = self.vf(x)
-
-        x = inputs
-        for l in self.actor_layers:
-            x = self.nonlinearity(l(x))
-        x = self.mean(x)
-
-        x = torch.tanh(x)
-
-        return x, self.log_std, value
-    
-    def act(self, inputs, det):
-        mu, log_std, v = self(inputs)
-
-        std = log_std.exp()
- 
-        if det:
-            return v, mu
-        else:
-            #dist = torch.distributions.Normal
-            action = mu + std *  torch.randn(mu.size())
-            #print("ACNET: ", action.data.mean(), mu.data.mean(), std.mean())
-            return v, action
-    
-    #def evaluate():
-    
-    def set_noise(self, noise):
-        self.noise = noise
-
 
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
@@ -566,14 +433,12 @@ if __name__ == "__main__":
             cassie_policyplot(env, policy, args.glen)
 
     else:
-        policy, rms = torch.load(args.model_path)
+        policy = torch.load(args.model_path)
+        policy.train(0)
 
         env_fn = make_env_fn()
-        env = Normalize(Vectorize([env_fn]))
-
-        env.ob_rms, env.ret_rms = rms
-
-        env.ret = env.ret_rms is not None
+        
+        env = env_fn()
 
         # while True:
         #     state = torch.Tensor(env.reset())
@@ -616,7 +481,7 @@ if __name__ == "__main__":
     mmean = 0
     mvar = 0
     for i in range(1, 16):
-        policy, rms = torch.load("trained_models/modelv{}.pt".format(i))
+        policy = torch.load("trained_models/modelv{}.pt".format(i))
 
         #print(np.copy(rms.mean).mean())
         #print(np.copy(rms.var).mean())

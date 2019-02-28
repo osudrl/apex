@@ -10,7 +10,7 @@ from rl.algos import PPO
 from rl.envs.normalize import PreNormalizer
 
 # NOTE: importing cassie for some reason breaks openai gym, BUG ?
-from cassie import CassieEnv, CassieTSEnv
+from cassie import CassieEnv
 
 #import gym
 import torch
@@ -56,16 +56,21 @@ args.num_steps = 3000
 
 args.use_gae = False
 
-args.name = "XieTanh"
+args.name = "Normal"
+
+# TODO: add ability to select graphs by number
+# Interactive graphs/switch to tensorboard?
+# More detailed logging
+# Logging timestamps
 
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
     #env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
 
-    #env_fn = make_cassie_env("walking", clock_based=True)
+    env_fn = make_cassie_env("walking", clock_based=True)
 
-    env_fn = CassieTSEnv
+    #env_fn = CassieTSEnv
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
@@ -73,7 +78,7 @@ if __name__ == "__main__":
     obs_dim = env_fn().observation_space.shape[0] # TODO: could make obs and ac space static properties
     action_dim = env_fn().action_space.shape[0]
 
-    policy = GaussianMLP(obs_dim, action_dim, nonlinearity="tanh", init_std=np.exp(-1), learn_std=False)
+    policy = GaussianMLP(obs_dim, action_dim, nonlinearity="tanh", init_std=np.exp(-2), learn_std=False)
     
 
     #policy = BetaMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False)
