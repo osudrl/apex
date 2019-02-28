@@ -83,6 +83,7 @@ examples from root directory.
 
 #### To be implemented soon:
 
+* TD3
 * Some form of massively parallel Evolutionary Algorithm as a baseline
 * [A2C](https://arxiv.org/abs/1602.01783) 
 * Parallelism
