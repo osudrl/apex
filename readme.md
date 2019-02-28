@@ -57,22 +57,17 @@ This file structure makes it easy to compare models generated using the same hyp
 ### With Vizdom
 I've deprecated the bokeh monitor. Info on monitoring with vizdom coming soon. TODO: make a plotting config file format (e.g. use timesteps vs iterations on the x axis, use a fixed vs variable x axis, choose what kind of filtering to do).
 
-Run ```$ python -m visdom.server``` then navigate to ```http://localhost:8097/```` in your browser
+Run ```$ python -m visdom.server``` then navigate to ```http://localhost:8097/``` in your browser
 
 Requires matplotlib >= 2.0
 
 
 ### To Do
-- [ ] Save models
-- [ ] Package everything
 - [ ] Sphinx documentation and github wiki
 - [ ] Make logger as robust and pythonic as possible
 - [ ] Fix some hacks having to do with support for parallelism 
 (namely Vectorize, Normalize and Monitor)
 - [ ] ADD PARALLELISM/DISTRIBUTED IMPLEMENTATIONS
-- [ ] Add kl divergence, entropy, etc to logging
-- [ ] pure matlab logger
-- [ ] fix minor plotting bug from doing running average
 
 ### Notes
 
