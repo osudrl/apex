@@ -2,11 +2,6 @@
 
 This is a small, modular library that contains some implementations of continuous reinforcement learning algorithms. Fully compatible with OpenAI gym.
 
-## Acknowledgements
-
-Thanks to @ikostrikov's whose great implementations I used to debug my own, and inspired a lot of changes to my original code. Also thanks to @rll for rllab, which inspired a lot of the high level interface and logging for this library, and to @OpenAI for the original PPO tensorflow implementation.
-
-
 ## Running experiments
 
 ### Basics
@@ -62,22 +57,17 @@ This file structure makes it easy to compare models generated using the same hyp
 ### With Vizdom
 I've deprecated the bokeh monitor. Info on monitoring with vizdom coming soon. TODO: make a plotting config file format (e.g. use timesteps vs iterations on the x axis, use a fixed vs variable x axis, choose what kind of filtering to do).
 
-Run ```$ python -m visdom.server``` then navigate to ```http://localhost:8097/```` in your browser
+Run ```$ python -m visdom.server``` then navigate to ```http://localhost:8097/``` in your browser
 
 Requires matplotlib >= 2.0
 
 
 ### To Do
-- [ ] Save models
-- [ ] Package everything
 - [ ] Sphinx documentation and github wiki
 - [ ] Make logger as robust and pythonic as possible
 - [ ] Fix some hacks having to do with support for parallelism 
 (namely Vectorize, Normalize and Monitor)
 - [ ] ADD PARALLELISM/DISTRIBUTED IMPLEMENTATIONS
-- [ ] Add kl divergence, entropy, etc to logging
-- [ ] pure matlab logger
-- [ ] fix minor plotting bug from doing running average
 
 ### Notes
 
@@ -93,6 +83,7 @@ examples from root directory.
 
 #### To be implemented soon:
 
+* TD3
 * Some form of massively parallel Evolutionary Algorithm as a baseline
 * [A2C](https://arxiv.org/abs/1602.01783) 
 * Parallelism
@@ -119,3 +110,7 @@ examples from root directory.
 * [ACER](https://arxiv.org/abs/1611.01224) and other off-policy methods
 * Model-based methods
 
+
+## Acknowledgements
+
+Thanks to @ikostrikov's whose great implementations I used to debug my own, and inspired a lot of changes to my original code. Also thanks to @rll for rllab, which inspired a lot of the high level interface and logging for this library, and to @OpenAI for the original PPO tensorflow implementation.
