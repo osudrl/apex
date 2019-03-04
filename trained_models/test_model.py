@@ -483,15 +483,7 @@ if __name__ == "__main__":
     for i in range(1, 16):
         policy = torch.load("trained_models/modelv{}.pt".format(i))
 
-        #print(np.copy(rms.mean).mean())
-        #print(np.copy(rms.var).mean())
-
-        mmean += np.copy(rms.mean)
-        mvar += np.copy(rms.var)
-
         vpolicy += [policy]
-
-        env.ob_rms = rms
 
         print("visualizing policy {}".format(i))
         # if i == 15:

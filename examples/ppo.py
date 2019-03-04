@@ -30,6 +30,7 @@ import os
 #         return env
 
 #     return _thunk
+from functools import partial
 
 def make_cassie_env(*args, **kwargs):
     def _thunk():
@@ -48,15 +49,21 @@ parser.add_argument("--name", type=str, default="model")
 
 args = parser.parse_args()
 
-args.batch_size = 128
-args.lr = 1e-4
-#args.epochs = 3
-args.epochs = 5
-args.num_steps = 3000
+args.batch_size = 128 # Xie
+#args.batch_size = 256 # Peng
+args.lr = 1e-4 # Xie
+#args.lr = 5e-5 # Peng
+args.epochs = 3 # Xie
+#args.epochs = 5
+#args.num_steps = 3000
+
+args.num_procs = 5
+args.num_steps = 3000 #// args.num_procs
+#args.num_steps = 3000 # Peng
 
 args.use_gae = False
 
-args.name = "Normal"
+args.name = "NormalTanhParallelGradClipBigBatch"
 
 # TODO: add ability to select graphs by number
 # Interactive graphs/switch to tensorboard?
@@ -68,7 +75,9 @@ if __name__ == "__main__":
 
     #env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
 
-    env_fn = make_cassie_env("walking", clock_based=True)
+    #env_fn = make_cassie_env("walking", clock_based=True)
+
+    env_fn = partial(CassieEnv, "walking")
 
     #env_fn = CassieTSEnv
 
@@ -87,6 +96,7 @@ if __name__ == "__main__":
 
     algo = PPO(args=vars(args))
     #with torch.autograd.detect_anomaly():
+
     # TODO: make log, monitor and render command line arguments
     # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)
     run_experiment(

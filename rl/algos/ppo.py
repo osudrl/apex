@@ -65,7 +65,7 @@ class PPOBuffer:
 
         returns = []
 
-        R = last_val.squeeze(0)
+        R = last_val.squeeze(0).copy() # Avoid copy?
         for reward in reversed(rewards):
             R = self.gamma * R + reward
             returns.insert(0, R) # TODO: self.returns.insert(self.path_idx, R) ? 
@@ -97,7 +97,7 @@ class PPO:
                  entropy_coeff=None,
                  clip=None,
                  epochs=None,
-                 batch_size=None,
+                 minibatch_size=None,
                  num_steps=None):
 
         self.gamma         = args['gamma']
@@ -106,12 +106,15 @@ class PPO:
         self.eps           = args['eps']
         self.entropy_coeff = args['entropy_coeff']
         self.clip          = args['clip']
-        self.batch_size    = args['batch_size']
+        self.minibatch_size    = args['minibatch_size']
         self.epochs        = args['epochs']
         self.num_steps     = args['num_steps']
 
         self.name = args['name']
         self.use_gae = args['use_gae']
+        self.n_proc = args['num_procs']
+
+        self.grad_clip = args['max_grad_norm']
 
     @staticmethod
     def add_arguments(parser):
@@ -136,7 +139,7 @@ class PPO:
         parser.add_argument("--clip", type=float, default=0.2,
                             help="Clipping parameter for PPO surrogate loss")
 
-        parser.add_argument("--batch_size", type=int, default=64,
+        parser.add_argument("--minibatch_size", type=int, default=64,
                             help="Batch size for PPO updates")
 
         parser.add_argument("--epochs", type=int, default=10,
@@ -147,6 +150,12 @@ class PPO:
 
         parser.add_argument("--use_gae", type=bool, default=True,
                             help="Whether or not to calculate returns using Generalized Advantage Estimation")
+
+        parser.add_argument("--num_procs", type=int, default=1,
+                            help="Number of threads to train on")
+
+        parser.add_argument("--max_grad_norm", type=float, default=0.5,
+                            help="Value to clip gradients at.")
 
     def save(self, policy, env):
         save_path = os.path.join("./trained_models", "ppo")
@@ -171,6 +180,40 @@ class PPO:
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
         """
+        memory = PPOBuffer(self.gamma, self.lam)
+
+        num_steps = 0
+        while num_steps < min_steps:
+            state = torch.Tensor(env.reset())
+
+            done = False
+            value = 0
+            traj_len = 0
+
+            while not done and traj_len < max_traj_len:
+                value, action = policy.act(state, deterministic)
+
+                next_state, reward, done, _ = env.step(action.numpy())
+
+                memory.store(state.numpy(), action.numpy(), reward, value.numpy())
+
+                state = torch.Tensor(next_state)
+
+                traj_len += 1
+                num_steps += 1
+
+            value, _ = policy.act(state)
+            memory.finish_path(last_val=(not done) * value.numpy())
+        
+        return memory
+
+    @torch.no_grad()
+    def _sample(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
+        """
+        Sample at least min_steps number of total timesteps, truncating 
+        trajectories only if they exceed max_traj_len number of timesteps
+        """
+        env = Vectorize([env_fn])
 
         memory = PPOBuffer(self.gamma, self.lam)
 
@@ -199,6 +242,32 @@ class PPO:
         
         return memory
 
+    def sample_parallel(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
+        import torch.multiprocessing as mp
+        from functools import partial, reduce
+
+        worker = partial(self._sample, env_fn, policy, min_steps, max_traj_len, deterministic)
+
+        with mp.Pool(processes=self.n_proc) as pool:
+            # Call pool of workers, don't apply any arguments
+            # TODO: this is a weird use of starmap, maybe Process is more suited?
+            result = pool.starmap(worker, [() for _ in range(self.n_proc)])
+
+        def merge(buf1, buf2):
+            buf2.states  += buf1.states
+            buf2.actions += buf1.actions
+            buf2.rewards += buf1.rewards
+            buf2.values  += buf1.values
+            buf2.returns += buf1.returns
+
+            buf2.ep_returns += buf1.ep_returns
+            buf2.ep_lens    += buf1.ep_lens
+
+            return buf2
+
+        memory = reduce(merge, result)
+        return memory
+
     def train(self,
               env_fn,
               policy, 
@@ -213,25 +282,35 @@ class PPO:
         if normalize is not None:
             env = normalize(env)
 
+            mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
+            policy.obs_mean = torch.Tensor(mean)
+            policy.obs_std = torch.Tensor(std)
+            policy.train(0)
+
+        env = Vectorize([env_fn])
+
         old_policy = deepcopy(policy)
 
         optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
 
+        start_time = time.time()
+
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
 
-            batch = self.sample(env, policy, self.num_steps, 300) #TODO: fix this
+            if self.n_proc > 1:
+                batch = self.sample_parallel(env_fn, policy, self.num_steps, 300)
+            else:
+                batch = self._sample(env_fn, policy, self.num_steps, 300) #TODO: fix this
+
+            print("time elapsed: {:.2f} s".format(time.time() - start_time))
 
             observations, actions, returns, values = map(torch.Tensor, batch.get())
 
             advantages = returns - values
-
-            # TODO: make advantage centering an option
             advantages = (advantages - advantages.mean()) / (advantages.std() + self.eps)
 
-            # TODO: batch size should be minibatch_size
-
-            batch_size = self.batch_size or advantages.numel()
+            minibatch_size = self.minibatch_size or advantages.numel()
 
             print("timesteps in batch: %i" % advantages.numel())
 
@@ -241,7 +320,7 @@ class PPO:
                 losses = []
                 sampler = BatchSampler(
                     SubsetRandomSampler(range(advantages.numel())),
-                    batch_size,
+                    minibatch_size,
                     drop_last=True
                 )
 
@@ -271,12 +350,16 @@ class PPO:
 
                     critic_loss = 0.5 * (return_batch - values).pow(2).mean()
 
-                    entropy_penalty = self.entropy_coeff * pdf.entropy().mean()
+                    entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
 
                     # TODO: add ability to optimize critic and actor seperately, with different learning rates
 
                     optimizer.zero_grad()
                     (actor_loss + critic_loss + entropy_penalty).backward()
+
+                    # Clip the gradient norm to prevent "unlucky" minibatches from 
+                    # causing pathalogical updates
+                    torch.nn.utils.clip_grad_norm_(policy.parameters(), self.grad_clip)
                     optimizer.step()
 
                     losses.append([actor_loss.item(),
@@ -292,23 +375,6 @@ class PPO:
                     print("Max kl reached, stopping optimization early.")
                     break
 
-            # TODO: add filtering options for reward graph (e.g., none)
-            # add explained variance, high and low rewards, std dev of rewards
-            # add options for reward graphs: e.g. explore/no explore
-
-            # total things that should be graphed/logged:
-            # number of trajectories
-            # average trajectory length (and min/max/std?)
-            # reward (return, reward, average,std,max,min, explore/exploit, filtered?)
-            # perplexity
-            # explained variance
-            # policy average std
-            # max KL
-            # Loss
-            # time
-            # add "suppress name" option
-
-            # look into making logging a decorator or wrapper?
             if logger is not None:
                 test = self.sample(env, policy, 800, 400, deterministic=True)
                 _, pdf     = policy.evaluate(observations)
@@ -323,10 +389,6 @@ class PPO:
         
                 logger.record("Mean KL Div", kl)
                 logger.record("Mean Entropy", entropy)
-
-                #logger.record("Reward std", train_stats["std"])
-                #logger.record("Reward max", train_stats["max"])
-                #logger.record("Reward min", train_stats["min"])
                 logger.dump()
 
             # TODO: add option for how often to save model

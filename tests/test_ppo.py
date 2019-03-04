@@ -59,6 +59,8 @@ class SampleTesterEnv:
 
         done = (self.state % self.done) == 0
 
+        #print("real: ", done)
+
         # the first reward corresponds to the second state
         reward = np.ones(shape=(1, 1)) * (self.state - 1)
 
@@ -131,3 +133,55 @@ def test_ppo_sample(num_steps, obs_dim, action_dim):
 
     expected_returns = np.array(expected_returns)
     assert np.allclose(returns, expected_returns)
+
+
+@pytest.mark.parametrize("num_steps, obs_dim, action_dim", [
+    (5, 1, 1),
+    (10, 1, 1),
+    (25, 1, 1),
+    (10, 80, 10),
+    (30, 80, 10),
+    (35, 80, 10)
+])
+def test_ppo_sample_parallel(num_steps, obs_dim, action_dim):
+    # useful for debugging
+    np.set_printoptions(threshold=10000)
+    torch.set_printoptions(threshold=10000)
+
+    # TODO: test value est bootstrap for truncated trajectories
+
+    gamma = 0.99
+
+    from functools import partial
+
+    env = SampleTesterEnv(obs_dim=obs_dim, action_dim=action_dim, gamma=gamma)
+    env_fn = partial(
+        SampleTesterEnv, 
+        obs_dim=obs_dim, 
+        action_dim=action_dim, 
+        gamma=gamma
+    )
+
+    policy = GaussianMLP(obs_dim, action_dim)
+
+    # don't need to specify args that don't affect ppo.sample()
+    args = defaultdict(lambda: None, {'gamma': gamma, 'num_procs': 4})
+
+    algo = PPO(args)
+
+    memory = algo.sample_parallel(env_fn, policy, num_steps, 100)
+
+    expected_memory = algo.sample(env, policy, 40, 100)
+
+    #breakpoint()
+
+    assert np.allclose(memory.states, expected_memory.states)
+    #assert np.allclose(memory.actions, expected_memory.actions)
+    assert np.allclose(memory.rewards, expected_memory.rewards)
+    #assert np.allclose(memory.returns, expected_memory.returns)
+    assert np.allclose(memory.returns, expected_memory.returns)
+
+    assert np.allclose(memory.ep_returns, expected_memory.ep_returns)
+    assert np.allclose(memory.ep_lens, expected_memory.ep_lens)
+
+test_ppo_sample_parallel(5, 1, 1)
