@@ -59,6 +59,8 @@ Run ```$ python -m visdom.server``` then navigate to ```http://localhost:8097/``
 
 Requires matplotlib >= 2.0
 
+## Unit tests
+You can run the unit tests using pytest.
 
 ### To Do
 - [ ] Save models
