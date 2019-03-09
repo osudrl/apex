@@ -2,11 +2,6 @@
 
 This is a small, modular library that contains some implementations of continuous reinforcement learning algorithms. Fully compatible with OpenAI gym.
 
-## Acknowledgements
-
-Thanks to @ikostrikov's whose great implementations I used to debug my own, and inspired a lot of changes to my original code. Also thanks to @rll for rllab, which inspired a lot of the high level interface and logging for this library, and to @OpenAI for the original PPO tensorflow implementation.
-
-
 ## Running experiments
 
 ### Basics
@@ -18,13 +13,11 @@ env = gym.make("Hopper-v1")
 obs_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 
-policy = GaussianMLP(obs_dim, action_dim, (8,))
-baseline = FeatureEncodingBaseline(obs_dim)
+policy = GaussianMLP(obs_dim, action_dim)
 
-algo = VPG(
+algo = PPO(
     env=env,
     policy=policy,
-    baseline=baseline,
     lr=args.lr,
 )
 ```
@@ -119,3 +112,6 @@ examples from root directory.
 * [ACER](https://arxiv.org/abs/1611.01224) and other off-policy methods
 * Model-based methods
 
+## Acknowledgements
+
+Thanks to @ikostrikov's whose great implementations I used to debug my own, and inspired a lot of changes to my original code. Also thanks to @rll for rllab, which inspired a lot of the high level interface and logging for this library, and to @OpenAI for the original PPO tensorflow implementation.
