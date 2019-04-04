@@ -14,6 +14,8 @@ import time
 import numpy as np
 import os
 
+import ray
+
 class PPOBuffer:
     """
     A buffer for storing trajectory data and calculating returns for the policy
@@ -116,6 +118,8 @@ class PPO:
 
         self.grad_clip = args['max_grad_norm']
 
+        ray.init()
+
     @staticmethod
     def add_arguments(parser):
         parser.add_argument("--n_itr", type=int, default=10000,
@@ -207,6 +211,7 @@ class PPO:
         
         return memory
 
+    @ray.remote
     @torch.no_grad()
     def _sample(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
         """
@@ -243,29 +248,27 @@ class PPO:
         return memory
 
     def sample_parallel(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
-        import torch.multiprocessing as mp
-        from functools import partial, reduce
+        worker = self._sample
+        args = (self, env_fn, policy, min_steps, max_traj_len, deterministic)
 
-        worker = partial(self._sample, env_fn, policy, min_steps, max_traj_len, deterministic)
+        result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
 
-        with mp.Pool(processes=self.n_proc) as pool:
-            # Call pool of workers, don't apply any arguments
-            # TODO: this is a weird use of starmap, maybe Process is more suited?
-            result = pool.starmap(worker, [() for _ in range(self.n_proc)])
+        # O(n)
+        def merge(buffers):
+            merged = PPOBuffer(self.gamma, self.lam)
+            for buf in buffers:
+                merged.states  += buf.states
+                merged.actions += buf.actions
+                merged.rewards += buf.rewards
+                merged.values  += buf.values
+                merged.returns += buf.returns
 
-        def merge(buf1, buf2):
-            buf2.states  += buf1.states
-            buf2.actions += buf1.actions
-            buf2.rewards += buf1.rewards
-            buf2.values  += buf1.values
-            buf2.returns += buf1.returns
+                merged.ep_returns += buf.ep_returns
+                merged.ep_lens    += buf.ep_lens
 
-            buf2.ep_returns += buf1.ep_returns
-            buf2.ep_lens    += buf1.ep_lens
+            return merged
 
-            return buf2
-
-        memory = reduce(merge, result)
+        memory = merge(result)
         return memory
 
     def train(self,
@@ -298,12 +301,15 @@ class PPO:
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
 
+            sample_start = time.time()
+
             if self.n_proc > 1:
                 batch = self.sample_parallel(env_fn, policy, self.num_steps, 300)
             else:
                 batch = self._sample(env_fn, policy, self.num_steps, 300) #TODO: fix this
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
+            print("sample time elapsed: {:.2f} s".format(time.time() - sample_start))
 
             observations, actions, returns, values = map(torch.Tensor, batch.get())
 
@@ -316,6 +322,8 @@ class PPO:
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
 
+            optimizer_start = time.time()
+            
             for _ in range(self.epochs):
                 losses = []
                 sampler = BatchSampler(
@@ -375,8 +383,14 @@ class PPO:
                     print("Max kl reached, stopping optimization early.")
                     break
 
+            print("optimizer time elapsed: {:.2f} s".format(time.time() - optimizer_start))        
+
+
             if logger is not None:
-                test = self.sample(env, policy, 800, 400, deterministic=True)
+                evaluate_start = time.time()
+                test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, 400, deterministic=True)
+                print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
+
                 _, pdf     = policy.evaluate(observations)
                 _, old_pdf = old_policy.evaluate(observations)
 
@@ -394,7 +408,6 @@ class PPO:
             # TODO: add option for how often to save model
             if itr % 10 == 0:
                 self.save(policy, env)
-
 
 
             
