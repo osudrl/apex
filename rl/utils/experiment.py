@@ -8,17 +8,15 @@ from .logging import Logger
 from rl.envs import Normalize, Vectorize
 
 
-def run_experiment(algo, policy, env_fn, args, normalizer=None, log=True, monitor=False, render=False):
+def run_experiment(algo, policy, env_fn, args, log=True, monitor=False, render=False):
     logger = Logger(args, viz=monitor) if log else None
 
-
     # HOTFIX for Patrick's desktop: (MP is buggy on it for some reason)
-
     if render:
         policy.share_memory()
 
         train_p = mp.Process(target=algo.train,
-                         args=(env_fn, policy, args.n_itr, normalizer),
+                         args=(env_fn, policy, args.n_itr),
                          kwargs=dict(logger=logger))
         train_p.start()
 
@@ -34,4 +32,4 @@ def run_experiment(algo, policy, env_fn, args, normalizer=None, log=True, monito
         render_p.join()
     
     else:
-        algo.train(env_fn, policy, args.n_itr, normalizer, logger=logger)
+        algo.train(env_fn, policy, args.n_itr, logger=logger)

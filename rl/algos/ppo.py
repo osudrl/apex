@@ -4,10 +4,7 @@ from copy import deepcopy
 import torch
 import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-from torch.autograd import Variable
 from torch.distributions import kl_divergence
-
-from rl.envs import Vectorize, Normalize
 
 import time
 
@@ -15,6 +12,8 @@ import numpy as np
 import os
 
 import ray
+
+from rl.envs import WrapEnv
 
 class PPOBuffer:
     """
@@ -111,6 +110,7 @@ class PPO:
         self.minibatch_size    = args['minibatch_size']
         self.epochs        = args['epochs']
         self.num_steps     = args['num_steps']
+        self.max_traj_len  = args['max_traj_len']
 
         self.name = args['name']
         self.use_gae = args['use_gae']
@@ -161,7 +161,10 @@ class PPO:
         parser.add_argument("--max_grad_norm", type=float, default=0.5,
                             help="Value to clip gradients at.")
 
-    def save(self, policy, env):
+        parser.add_argument("--max_traj_len", type=int, default=1000,
+                            help="Max episode horizon")
+
+    def save(self, policy):
         save_path = os.path.join("./trained_models", "ppo")
 
         try:
@@ -170,55 +173,16 @@ class PPO:
             pass
 
         filetype = ".pt" # pytorch model
-
-        if hasattr(env, 'ob_rms'):
-            mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
-            policy.obs_mean = torch.Tensor(mean)
-            policy.obs_std = torch.Tensor(std)
-
         torch.save(policy, os.path.join("./trained_models", self.name + filetype))
-
-    @torch.no_grad()
-    def sample(self, env, policy, min_steps, max_traj_len, deterministic=False):
-        """
-        Sample at least min_steps number of total timesteps, truncating 
-        trajectories only if they exceed max_traj_len number of timesteps
-        """
-        memory = PPOBuffer(self.gamma, self.lam)
-
-        num_steps = 0
-        while num_steps < min_steps:
-            state = torch.Tensor(env.reset())
-
-            done = False
-            value = 0
-            traj_len = 0
-
-            while not done and traj_len < max_traj_len:
-                value, action = policy.act(state, deterministic)
-
-                next_state, reward, done, _ = env.step(action.numpy())
-
-                memory.store(state.numpy(), action.numpy(), reward, value.numpy())
-
-                state = torch.Tensor(next_state)
-
-                traj_len += 1
-                num_steps += 1
-
-            value, _ = policy.act(state)
-            memory.finish_path(last_val=(not done) * value.numpy())
-        
-        return memory
 
     @ray.remote
     @torch.no_grad()
-    def _sample(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
+    def sample(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
         """
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
         """
-        env = Vectorize([env_fn])
+        env = WrapEnv(env_fn)
 
         memory = PPOBuffer(self.gamma, self.lam)
 
@@ -248,10 +212,14 @@ class PPO:
         return memory
 
     def sample_parallel(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
-        worker = self._sample
+        worker = self.sample
         args = (self, env_fn, policy, min_steps, max_traj_len, deterministic)
 
-        result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
+        # Don't don't bother launching another process for single thread
+        if self.n_proc > 1:
+            result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
+        else:
+            result = [worker(*args)]
 
         # O(n)
         def merge(buffers):
@@ -268,29 +236,13 @@ class PPO:
 
             return merged
 
-        memory = merge(result)
-        return memory
+        return merge(result)
 
     def train(self,
               env_fn,
               policy, 
               n_itr,
-              normalize=None,
               logger=None):
-
-        policy.train()
-
-        env = Vectorize([env_fn]) # this will be useful for parallelism later
-        
-        if normalize is not None:
-            env = normalize(env)
-
-            mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
-            policy.obs_mean = torch.Tensor(mean)
-            policy.obs_std = torch.Tensor(std)
-            policy.train(0)
-
-        env = Vectorize([env_fn])
 
         old_policy = deepcopy(policy)
 
@@ -302,11 +254,7 @@ class PPO:
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
-
-            if self.n_proc > 1:
-                batch = self.sample_parallel(env_fn, policy, self.num_steps, 300)
-            else:
-                batch = self._sample(env_fn, policy, self.num_steps, 300) #TODO: fix this
+            batch = self.sample_parallel(env_fn, policy, self.num_steps, self.max_traj_len)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
             print("sample time elapsed: {:.2f} s".format(time.time() - sample_start))
@@ -388,7 +336,7 @@ class PPO:
 
             if logger is not None:
                 evaluate_start = time.time()
-                test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, 400, deterministic=True)
+                test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, self.max_traj_len, deterministic=True)
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
                 _, pdf     = policy.evaluate(observations)
@@ -407,7 +355,7 @@ class PPO:
 
             # TODO: add option for how often to save model
             if itr % 10 == 0:
-                self.save(policy, env)
+                self.save(policy)
 
 
             
