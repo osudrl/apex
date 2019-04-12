@@ -5,10 +5,11 @@ import numpy as np
 import functools
 import torch
 
+from .wrapper import WrapEnv
 def get_normalization_params(iter, policy, env_fn, noise_std):
     print("Gathering input normalization data using {0} steps, noise = {1}...".format(iter, noise_std))
 
-    env = env_fn()
+    env = WrapEnv(env_fn)
 
     states = np.zeros((iter, env.observation_space.shape[0]))
 
@@ -30,7 +31,7 @@ def get_normalization_params(iter, policy, env_fn, noise_std):
 
     print("Done gathering input normalization data.")
 
-    return np.mean(states, axis=0), np.std(states, axis=0)
+    return np.mean(states, axis=0), np.sqrt(np.var(states, axis=0) + 1e-8)
 
 
 # returns a function that creates a normalized environment, then pre-normalizes it 

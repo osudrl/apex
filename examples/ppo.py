@@ -1,41 +1,16 @@
 """Python file for automatically running experiments from command line."""
 import argparse
 
-#from baselines import bench
-
 from rl.utils import run_experiment
 from rl.policies import GaussianMLP, BetaMLP
 from rl.algos import PPO
 
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
-# NOTE: importing cassie for some reason breaks openai gym, BUG ?
-from cassie import CassieEnv
-
-#import gym
 import torch
 
 import numpy as np
 import os
-
-#TODO: remove reliance on: Monitor, DummyVecEnv, VecNormalized
-# def make_env(env_id, seed, rank, log_dir):
-#     def _thunk(log=True):
-#         env = gym.make(env_id)
-#         env.seed(seed + rank)
-#         filename = os.path.join(log_dir,os.path.join(log_dir,str(rank))) \
-#                    if log else None
-
-#         #env = bench.Monitor(env, filename, allow_early_resets=True)
-#         return env
-
-#     return _thunk
-from functools import partial
-
-def make_cassie_env(*args, **kwargs):
-    def _thunk():
-        return CassieEnv(*args, **kwargs)
-    return _thunk
 
 parser = argparse.ArgumentParser()
 
@@ -55,10 +30,11 @@ args.lr = 1e-4 # Xie
 #args.lr = 5e-5 # Peng
 args.epochs = 3 # Xie
 #args.epochs = 5
-#args.num_steps = 3000
 
 args.num_procs = 30
-args.num_steps = 500 #// args.num_procs
+args.num_steps = 3000 // args.num_procs
+
+#args.num_steps = 500 #// args.num_procs
 #args.num_steps = 3000 # Peng
 
 args.max_traj_len = 400
@@ -72,28 +48,56 @@ args.name = "Ray2"
 # More detailed logging
 # Logging timestamps
 
+import gym
+import gym_cassie
+
+def gym_factory(path, **kwargs):
+    from functools import partial
+
+    """
+    This is (mostly) equivalent to gym.make(), but it returns an *uninstantiated* 
+    environment constructor.
+
+    Since environments containing cpointers (e.g. Mujoco envs) can't be serialized, 
+    this allows us to pass their constructors to Ray remote functions instead 
+    (since the gym registry isn't shared across ray subprocesses we can't simply 
+    pass gym.make() either)
+
+    Note: env.unwrapped.spec is never set, if that matters for some reason.
+    """
+    spec = gym.envs.registry.spec(path)
+    _kwargs = spec._kwargs.copy()
+    _kwargs.update(kwargs)
+    
+    if callable(spec._entry_point):
+        cls = spec._entry_point(**_kwargs)
+    else:
+        cls = gym.envs.registration.load(spec._entry_point)
+
+    return partial(cls, **_kwargs)
+
+
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
-    #env_fn = make_env("Walker2d-v1", args.seed, 1337, "/tmp/gym/rl/")
-    #env_fn = make_cassie_env("walking", clock_based=True)
-    env_fn = partial(CassieEnv, "walking", clock_based=True)
-
-    #env_fn = CassieTSEnv
+    env_fn = gym_factory("Cassie-walking-v0")
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
-    obs_dim = env_fn().observation_space.shape[0] # TODO: could make obs and ac space static properties
+    obs_dim = env_fn().observation_space.shape[0] 
     action_dim = env_fn().action_space.shape[0]
 
-    policy = GaussianMLP(obs_dim, action_dim, nonlinearity="tanh", init_std=np.exp(-2), learn_std=False)
+    policy = GaussianMLP(
+        obs_dim, action_dim, 
+        nonlinearity="relu", 
+        bounded=True, 
+        init_std=np.exp(-2), 
+        learn_std=False
+    )
 
     policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=10000, noise_std=1, policy=policy, env_fn=env_fn))
     policy.train(0)
-
-    #policy = BetaMLP(obs_dim, action_dim, nonlinearity="relu", init_std=np.exp(-2), learn_std=False)
-    #normalizer = PreNormalizer(iter=10000, noise_std=1, policy=policy, online=False)
 
     algo = PPO(args=vars(args))
 
