@@ -13,13 +13,11 @@ env = gym.make("Hopper-v1")
 obs_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 
-policy = GaussianMLP(obs_dim, action_dim, (8,))
-baseline = FeatureEncodingBaseline(obs_dim)
+policy = GaussianMLP(obs_dim, action_dim)
 
-algo = VPG(
+algo = PPO(
     env=env,
     policy=policy,
-    baseline=baseline,
     lr=args.lr,
 )
 ```
@@ -61,6 +59,8 @@ Run ```$ python -m visdom.server``` then navigate to ```http://localhost:8097/``
 
 Requires matplotlib >= 2.0
 
+## Unit tests
+You can run the unit tests using pytest.
 
 ### To Do
 - [ ] Sphinx documentation and github wiki
@@ -109,7 +109,6 @@ examples from root directory.
 * [DXNN](https://arxiv.org/abs/1008.2412)
 * [ACER](https://arxiv.org/abs/1611.01224) and other off-policy methods
 * Model-based methods
-
 
 ## Acknowledgements
 

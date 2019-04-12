@@ -114,7 +114,7 @@ if __name__ == "__main__":
         env_fn=env_fn,
         args=args,
         log=True,
-        monitor=True,
+        monitor=False,
         render=False # NOTE: CassieVis() hangs when launched in seperate thread. BUG?
-                    # Also, waitpid() hangs on patrick's desktop in mp.Process. BUG?
+                    # Also, waitpid() hangs sometimes in mp.Process. BUG?
     )
