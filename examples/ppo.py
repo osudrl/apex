@@ -21,6 +21,7 @@ parser.add_argument("--seed", type=int, default=1,
 parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
                     help="Where to log diagnostics to")
 parser.add_argument("--name", type=str, default="model")
+parser.add_argument("--env", type=str, default="Cassie-walking-v0")
 
 args = parser.parse_args()
 
@@ -49,7 +50,11 @@ args.name = "Ray2"
 # Logging timestamps
 
 import gym
-import gym_cassie
+
+try:
+    import gym_cassie
+except ImportError:
+    pass
 
 def gym_factory(path, **kwargs):
     from functools import partial
@@ -80,7 +85,7 @@ def gym_factory(path, **kwargs):
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
-    env_fn = gym_factory("Cassie-walking-v0")
+    env_fn = gym_factory(args.env)
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
