@@ -84,9 +84,10 @@ examples from root directory.
 #### To be implemented soon:
 
 * TD3
-* Some form of massively parallel Evolutionary Algorithm as a baseline
+* Some form of massively parallel Evolutionary Algorithm as a baseline (CMAES, ARS)
+* [TRPO](https://arxiv.org/abs/1502.05477)
 * [A2C](https://arxiv.org/abs/1602.01783) 
-* Parallelism
+* ~~Parallelism~~
 * ~~[Beta distribution policy](http://proceedings.mlr.press/v70/chou17a/chou17a.pdf)~~
 * [Parameter noise exploration](https://arxiv.org/abs/1706.01905) (maybe)
 
@@ -105,7 +106,6 @@ examples from root directory.
 
 #### Maybe implemented in future:
 
-* [TRPO](https://arxiv.org/abs/1502.05477)
 * [DXNN](https://arxiv.org/abs/1008.2412)
 * [ACER](https://arxiv.org/abs/1611.01224) and other off-policy methods
 * Model-based methods
