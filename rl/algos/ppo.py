@@ -101,6 +101,8 @@ class PPO:
                  minibatch_size=None,
                  num_steps=None):
 
+        self.env_name = args['env']
+
         self.gamma         = args['gamma']
         self.lam           = args['lam']
         self.lr            = args['lr']
@@ -165,6 +167,8 @@ class PPO:
                             help="Max episode horizon")
 
     def save(self, policy):
+        policy.env_name = self.env_name
+
         save_path = os.path.join("./trained_models", "ppo")
 
         try:
@@ -182,7 +186,7 @@ class PPO:
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
         """
-        env = WrapEnv(env_fn)
+        env = WrapEnv(env_fn) # TODO
 
         memory = PPOBuffer(self.gamma, self.lam)
 

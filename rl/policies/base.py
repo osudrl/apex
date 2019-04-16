@@ -4,6 +4,7 @@ import torch.nn as nn
 class FFPolicy(nn.Module):
     def __init__(self):
         super(FFPolicy, self).__init__()
+        self.env = None # Gym environment name string
 
     def forward(self, x):
         raise NotImplementedError
