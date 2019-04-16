@@ -219,7 +219,7 @@ class PPO:
         if self.n_proc > 1:
             result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
         else:
-            result = [worker(*args)]
+            result = [worker._function(*args)]
 
         # O(n)
         def merge(buffers):
