@@ -21,7 +21,8 @@ parser.add_argument("--seed", type=int, default=1,
 parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
                     help="Where to log diagnostics to")
 parser.add_argument("--name", type=str, default="model")
-parser.add_argument("--env", type=str, default="Cassie-walking-v0")
+
+parser.add_argument("--env", type=str, default="Cassie-mimic-walking-v0")
 
 args = parser.parse_args()
 
@@ -42,7 +43,7 @@ args.max_traj_len = 400
 
 args.use_gae = False
 
-args.name = "Ray2"
+args.name = "demo2"
 
 # TODO: add ability to select graphs by number
 # Interactive graphs/switch to tensorboard?
@@ -50,11 +51,7 @@ args.name = "Ray2"
 # Logging timestamps
 
 import gym
-
-try:
-    import gym_cassie
-except ImportError:
-    pass
+import gym_cassie
 
 def gym_factory(path, **kwargs):
     from functools import partial
@@ -98,7 +95,8 @@ if __name__ == "__main__":
         nonlinearity="relu", 
         bounded=True, 
         init_std=np.exp(-2), 
-        learn_std=False
+        learn_std=False,
+        normc_init=False
     )
 
     policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=10000, noise_std=1, policy=policy, env_fn=env_fn))
@@ -114,7 +112,7 @@ if __name__ == "__main__":
         env_fn=env_fn,
         args=args,
         log=True,
-        monitor=False,
+        monitor=True,
         render=False # NOTE: CassieVis() hangs when launched in seperate thread. BUG?
                     # Also, waitpid() hangs sometimes in mp.Process. BUG?
     )

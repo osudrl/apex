@@ -25,7 +25,7 @@ class GaussianMLP(FFPolicy):
                  learn_std=True, 
                  nonlinearity="tanh", 
                  bounded=False,
-                 normc_init=False,
+                 normc_init=True,
                  obs_std=None,
                  obs_mean=None):
         super(GaussianMLP, self).__init__()
