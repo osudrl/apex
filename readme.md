@@ -84,6 +84,7 @@ examples from root directory.
 * [PPO](https://arxiv.org/abs/1707.06347), VPG with ratio objective and with log likelihood objective
 
 #### To be implemented soon:
+* Move to "gitflow" workflow
 
 * TD3
 * Some form of massively parallel Evolutionary Algorithm as a baseline (CMAES, ARS)
