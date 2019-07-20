@@ -2,7 +2,7 @@
 
 ----
 
-This is a small, modular library that contains some implementations of continuous reinforcement learning algorithms. Fully compatible with OpenAI gym.
+Apex is a small, modular library that contains some implementations of continuous reinforcement learning algorithms. Fully compatible with OpenAI gym.
 
 ## Running experiments
 
