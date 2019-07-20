@@ -1,4 +1,6 @@
-# Pytorch RL
+<img src="https://github.com/osudrl/apex/blob/master/apex-logo.png" alt="apex" width="200"/>
+
+----
 
 This is a small, modular library that contains some implementations of continuous reinforcement learning algorithms. Fully compatible with OpenAI gym.
 
