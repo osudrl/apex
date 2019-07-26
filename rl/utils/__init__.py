@@ -2,6 +2,8 @@ from .render import *
 from .experiment import *
 from .plotting import *
 from .logging import *
+from .simple_plotter import *
+from .param_noise import *
 import sys
 
 class ProgBar():
