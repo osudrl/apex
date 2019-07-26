@@ -1,7 +1,3 @@
-"""
-This is same as actor critic used in official implementation of DDPG and TD3, but with layernorm added (so adding parameter noise can be done)
-"""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

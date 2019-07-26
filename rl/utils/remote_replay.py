@@ -3,7 +3,7 @@ import numpy as np
 import ray
 
 # Plot results
-from rl.utils import VisdomLinePlotter
+from rl.utils import Logger
 
 # Code based on:
 # https://github.com/openai/baselines/blob/master/baselines/deepq/replay_buffer.py
@@ -12,7 +12,7 @@ from rl.utils import VisdomLinePlotter
 
 @ray.remote
 class ReplayBuffer_remote(object):
-    def __init__(self, size, experiment_name, viz_port):
+    def __init__(self, size, experiment_name, args):
         """Create Replay buffer.
         Parameters
         ----------
@@ -25,7 +25,7 @@ class ReplayBuffer_remote(object):
         self.ptr = 0
 
         self.plot_storage = []
-        self.plotter = VisdomLinePlotter(env_name=experiment_name, port=viz_port)
+        self.logger = Logger(args, env_name=experiment_name, viz=True)
 
         print("Created replay buffer with size {}".format(self.max_size))
     
@@ -68,7 +68,8 @@ class ReplayBuffer_remote(object):
         return np.array(x), np.array(u)
 
     def plot_actor_results(self, actor_id, actor_timesteps, episode_reward):
-        self.plotter.plot('return', 'Actor timesteps','actor {}'.format(actor_id), 'Actor Episode Return', actor_timesteps, episode_reward)
+        self.logger.plot('return', 'Actor timesteps','actor {}'.format(actor_id), 'Actor Episode Return', actor_timesteps, episode_reward)
 
     def plot_learner_results(self, step_count, avg_reward):
-        self.plotter.plot('Agent Return', 'Global Timesteps','eval', 'Agent Return', step_count, avg_reward)
+        self.logger.record('Agent Return', avg_reward, step_count, 'Agent Return', x_var_name='Global Timesteps', split_name='eval')
+        self.logger.dump()

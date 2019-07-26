@@ -24,6 +24,11 @@ parser.add_argument("--name", type=str, default="model")
 
 parser.add_argument("--env", type=str, default="Cassie-mimic-walking-v0")
 
+# visdom server port
+parser.add_argument("--viz_port", default=8097)                                 
+
+parser.add_argument("--input_norm_steps", type=int, default=10000)
+
 args = parser.parse_args()
 
 #args.batch_size = 128 # Xie
@@ -99,7 +104,7 @@ if __name__ == "__main__":
         normc_init=False
     )
 
-    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=10000, noise_std=1, policy=policy, env_fn=env_fn))
+    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
     policy.train(0)
 
     algo = PPO(args=vars(args))

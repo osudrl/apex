@@ -113,3 +113,9 @@ venv.bak/
 
 # ray tmp file
 /ray_tmp
+
+# trained models
+/trained_models/*.pt
+
+# logging directory
+/logs
