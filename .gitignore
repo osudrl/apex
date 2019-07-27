@@ -111,8 +111,9 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-# ray tmp file
+# ray files
 /ray_tmp
+ray_timeline.json
 
 # trained models
 /trained_models/*.pt
