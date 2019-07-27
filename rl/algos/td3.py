@@ -1,4 +1,4 @@
-from rl.utils import AdaptiveParamNoiseSpec, evaluator
+from rl.utils import AdaptiveParamNoiseSpec, evaluator, select_action
 from rl.policies.td3_actor_critic import LN_Actor as LN_Actor, LN_TD3Critic as Critic
 
 import time
@@ -13,6 +13,8 @@ import torch.nn.functional as F
 import gym
 
 import ray
+
+device = torch.device('cpu')
 
 @ray.remote
 class Actor(object):
@@ -195,7 +197,7 @@ class Learner(object):
         # self.plotter_id = plotter_id
 
         # evaluate untrained policy
-        print('Untrained Policy: {}'.format( self.evaluate(trials=self.num_of_evaluators, num_of_workers=self.num_of_evaluators) ))
+        # print('Untrained Policy: {}'.format( self.evaluate(trials=self.num_of_evaluators, num_of_workers=self.num_of_evaluators) ))
 
         # also dump ray timeline
         # ray.timeline(filename="./ray_timeline.json")
