@@ -1,4 +1,4 @@
-from rl.utils import AdaptiveParamNoiseSpec, evaluator, select_action
+from rl.utils import AdaptiveParamNoiseSpec, distance_metric, evaluator, perturb_actor_parameters
 from rl.policies.td3_actor_critic import LN_Actor as LN_Actor, LN_TD3Critic as Critic
 
 import time
@@ -16,6 +16,17 @@ import ray
 
 device = torch.device('cpu')
 
+
+def select_action(perturbed_policy, unperturbed_policy, state, device, param_noise=None):
+    state = torch.FloatTensor(state.reshape(1, -1)).to(device)
+
+    unperturbed_policy.eval()
+
+    if param_noise is not None:
+        return perturbed_policy(state).cpu().data.numpy().flatten()
+    else:
+        return unperturbed_policy(state).cpu().data.numpy().flatten()
+
 @ray.remote
 class Actor(object):
     def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id):
@@ -26,11 +37,15 @@ class Actor(object):
         self.max_action = float(self.env.action_space.high[0])
 
         #self.policy = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
+        self.policy_perturbed = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
         self.learner_id = learner_id
         self.memory_id = memory_id
         
+        # Action noise
         self.start_timesteps = start_timesteps
         self.act_noise = act_noise
+        
+        # Initialize param noise (or set to none)
         self.noise_scale = noise_scale
         self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
 
@@ -44,7 +59,7 @@ class Actor(object):
 
         self.id = id
 
-        self.policy, self.training_done = ray.get(self.learner_id.get_global_policy.remote())
+        self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(self.learner_id.get_global_policy.remote())
 
 
     def collect_experience(self):
@@ -59,14 +74,21 @@ class Actor(object):
                     # PUTTING WAIT ON THIS SHOULD MAKE THIS EXACT SAME AS NON-DISTRIBUTED, if using one actor
                     # Query learner for latest model and termination flag
 
-                    self.policy, self.training_done = ray.get(self.learner_id.get_global_policy.remote())
+                    self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(self.learner_id.get_global_policy.remote())
 
                     #global_policy_state_dict, training_done = ray.get(self.learner_id.get_global_policy.remote())
                     #self.policy.load_state_dict(global_policy_state_dict)
-                    print("loaded global model")
+                    
 
-                # self.policy, self.training_done = ray.get(self.learner_id.get_global_policy.remote())
-                # print("loaded global model")
+                    # If we have loaded a global model, we also need to update the param_noise based on the distance metric
+                    if self.param_noise is not None:
+                        states, perturbed_actions = ray.get(self.memory_id.get_transitions_from_range.remote(self.global_timestep_at_last_update))
+                        unperturbed_actions = np.array([select_action(self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
+                        dist = distance_metric(perturbed_actions, unperturbed_actions)
+                        self.param_noise.adapt(dist)
+                        print("loaded global model and adapted parameter noise")
+                    else:
+                        print("loaded global model")
 
                 if self.training_done:
                     break
@@ -81,6 +103,10 @@ class Actor(object):
 
                     #self.env.render()
 
+                    # Param Noise
+                    if self.param_noise:
+                        perturb_actor_parameters(self.policy, self.policy, self.param_noise, device)
+
                     # Select action randomly or according to policy
                     if self.actor_timesteps < self.start_timesteps:
                         #print("selecting action randomly {}".format(done_bool))
@@ -88,7 +114,7 @@ class Actor(object):
                         action = action.numpy()
                     else:
                         #print("selecting from policy")
-                        action = select_action(self.policy, np.array(obs), device)
+                        action = select_action(self.policy_perturbed, self.policy, np.array(obs), device, param_noise=self.param_noise)
                         if self.act_noise != 0:
                             action = (action + np.random.normal(0, self.act_noise,
                                                                 size=self.env.action_space.shape[0])).clip(self.env.action_space.low, self.env.action_space.high)
@@ -348,7 +374,7 @@ class Learner(object):
         return 0
 
     def get_global_policy(self):
-        return self.actor, self.is_training_finished()
+        return self.actor, self.is_training_finished(), self.step_count
 
     def get_global_timesteps(self):
         return self.step_count

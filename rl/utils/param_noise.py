@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 import gym
 
@@ -45,3 +46,13 @@ def distance_metric(actions1, actions2):
     mean_diff = np.mean(np.square(diff), axis=0)
     dist = np.sqrt(np.mean(mean_diff))
     return dist
+
+def perturb_actor_parameters(perturbed_policy, unperturbed_policy, param_noise, device):
+    """Apply parameter noise to actor model, for exploration"""
+    perturbed_policy.load_state_dict(unperturbed_policy.state_dict())
+    params = perturbed_policy.state_dict()
+    for name in params:
+        if 'ln' in name: 
+            pass 
+        param = params[name]
+        param += torch.randn(param.shape).to(device) * param_noise.current_stddev

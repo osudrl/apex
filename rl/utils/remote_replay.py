@@ -57,7 +57,8 @@ class ReplayBuffer_remote(object):
         #print("Sampled experience from replay buffer.")
         return np.array(x), np.array(y), np.array(u), np.array(r).reshape(-1, 1), np.array(d).reshape(-1, 1)
 
-    def get_transitions_from_range(self, start, end):
+    def get_transitions_from_range(self, start):
+        end = self.ptr
         ind = np.arange(int(start), int(end))
         x, u = [], []
         for i in ind:
