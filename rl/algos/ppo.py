@@ -349,12 +349,13 @@ class PPO:
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
-                logger.record("Return (test)", np.mean(test.ep_returns))
-                logger.record("Return (batch)", np.mean(batch.ep_returns))
-                logger.record("Mean Eplen",  np.mean(batch.ep_lens))
-        
-                logger.record("Mean KL Div", kl)
-                logger.record("Mean Entropy", entropy)
+                logger.record('Return (test)', np.mean(test.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='test')
+                logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
+                logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
+
+                logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
+                logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
+
                 logger.dump()
 
             # TODO: add option for how often to save model

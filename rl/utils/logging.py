@@ -15,12 +15,14 @@ import configparser
 from collections import OrderedDict
 import numpy as np
 
+import ray
+
 matplotlib.rcParams.update({'font.size': 8})
 
 #from scipy.signal import medfilt
 
 class Logger():
-    def __init__(self, args, viz=True, viz_list=[]):
+    def __init__(self, args, env_name, viz=True, viz_list=[]):
         self.ansi = dict(
             gray=30,
             red=31,
@@ -41,9 +43,9 @@ class Logger():
 
         if viz:
             from visdom import Visdom
-            self.viz = Visdom()
-            self.wins = []
-            self.viz_config = self.config_monitor()
+            self.viz = Visdom(port=args.viz_port)
+            self.env = env_name
+            self.plots = {}
         else:
             self.viz = None
 
@@ -95,7 +97,7 @@ class Logger():
 
         return active_path
 
-    def record(self, key, val):
+    def record(self, key, val, x_val, title_name, x_var_name="Timesteps", split_name="train"):
         """
         Log some diagnostic value in current iteration.
 
@@ -103,8 +105,8 @@ class Logger():
         """
         if self.init:
             self.header.append(key)
-            if self.viz is not None:
-                self.wins.append(None)
+            # if self.viz is not None:
+            #     self.wins.append(None)
         else:
             assert key in self.header, \
             "Key %s not in header. All keys must be set in first iteration" % key
@@ -113,6 +115,9 @@ class Logger():
         "You already set key %s this iteration. Did you forget to call dump()?" % key
 
         self.current_row[key] = val
+
+        if self.viz is not None:
+            self.plot(key, x_var_name, split_name, title_name, x_val, val)
 
     def dump(self):
         """Write all of the diagnostics from the current iteration"""
@@ -149,8 +154,8 @@ class Logger():
 
         self.init = False
 
-        if self.viz is not None:
-            self.plot()
+        # if self.viz is not None:
+        #     self.plot()
 
     def config_monitor(self, config_path=None):
         if config_path is None:
@@ -161,48 +166,16 @@ class Logger():
 
         return config["monitor"]
 
-    def plot(self):
-        def running_mean(x, N):
-            if len(x) < N:
-                return x
-            cumsum = np.cumsum(np.insert(x, 0, 0)) 
-            return (cumsum[N:] - cumsum[:-N]) / float(N)
-
-        data, header = self._load_data()
-
-        for i in range(len(header)):
-            y = data[:, i]
-
-            if header[i] in self.viz_list or self.viz_list[0] == "all":
-                # do some kind of window based smoothing
-                #y = running_mean(y, 30) 
-
-                xscale = 1 if self.viz_config["xlabel"] == "Iterations" \
-                        else (self.args.num_steps / 1e6)
-
-                x = np.arange(y.size) * xscale
-
-                fig = plt.figure(figsize=(5,4))
-
-                plt.plot(x, y, "C%i" % i)
-
-                if self.viz_config["xlim"] == "Fixed":
-                    plt.xlim(0, self.args.n_itr * xscale)
-
-                plt.ylabel(header[i])
-                plt.xlabel(self.viz_config["xlabel"])
-                plt.title("{0}: {1}".format(header[i], self.name))
-
-                plt.show()
-                plt.draw()
-
-                image = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-                image = image.reshape(fig.canvas.get_width_height()[::-1] + (3, ))
-                image = np.transpose(image, (2, 0, 1))
-
-                plt.close(fig)
-
-                self.wins[i] = self.viz.image(image, win=self.wins[i])
+    def plot(self, var_name, x_var_name, split_name, title_name, x, y):
+        if var_name not in self.plots:
+            self.plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
+                legend=[split_name],
+                title=title_name,
+                xlabel=x_var_name,
+                ylabel=var_name
+            ))
+        else:
+            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.plots[var_name], name=split_name, update = 'append')
 
     def _load_data(self):
         log_file = open(self.output_dir, 'r')
