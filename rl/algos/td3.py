@@ -27,6 +27,55 @@ def select_action(perturbed_policy, unperturbed_policy, state, device, param_noi
     else:
         return unperturbed_policy(state).cpu().data.numpy().flatten()
 
+class ActorBuffer(object):
+    def __init__(self, size):
+        """Create Replay buffer.
+        Parameters
+        ----------
+        size: int
+            Max number of transitions to store in the buffer. When the buffer
+            overflows the old memories are dropped.
+        """
+        self.storage = []
+        self.max_size = size
+        self.ptr = 0
+    
+    def __len__(self):
+        return len(self.storage)
+
+    def storage_size(self):
+        return len(self.storage)
+
+    def add(self, data):
+        if len(self.storage) < self.max_size:
+            self.storage.append(data)
+        self.storage[int(self.ptr)] = data
+        self.ptr = (self.ptr + 1) % self.max_size
+        #print("Added experience to replay buffer.")
+
+    def get_transitions(self):
+        ind = np.arange(0, len(self.storage))
+        x, y, u, r, d = [], [], [], [], []
+
+        for i in ind:
+            X, Y, U, R, D = self.storage[i]
+            x.append(np.array(X, copy=False))
+            y.append(np.array(Y, copy=False))
+            u.append(np.array(U, copy=False))
+            r.append(np.array(R, copy=False))
+            d.append(np.array(D, copy=False))
+
+        #print("Sampled experience from replay buffer.")
+
+        self.clear()
+
+        return np.array(x), np.array(u)
+
+    def clear(self):
+        self.storage = []
+        self.ptr = 0
+
+
 @ray.remote
 class Actor(object):
     def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id):
@@ -49,13 +98,18 @@ class Actor(object):
         self.noise_scale = noise_scale
         self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
 
+        # Termination condition: max episode length
         self.max_traj_len = 400
 
+        # Counters
         self.actor_timesteps = 0
         self.taper_timesteps = 0
         self.episode_num = 0
-        self.taper_load_freq = taper_load_freq
-        self.load_freq = load_freq             # initial load frequency... make this taper down to 1 over time 
+        self.taper_load_freq = taper_load_freq  # taper load freq or not?
+        self.load_freq = load_freq              # initial load frequency... make this taper down to 1 over time 
+
+        # Local replay buffer
+        self.local_buffer = ActorBuffer(self.max_traj_len * self.load_freq)
 
         self.id = id
 
@@ -82,7 +136,7 @@ class Actor(object):
 
                     # If we have loaded a global model, we also need to update the param_noise based on the distance metric
                     if self.param_noise is not None:
-                        states, perturbed_actions = ray.get(self.memory_id.get_transitions_from_range.remote(self.global_timestep_at_last_update))
+                        states, perturbed_actions = self.local_buffer.get_transitions()
                         unperturbed_actions = np.array([select_action(self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
                         dist = distance_metric(perturbed_actions, unperturbed_actions)
                         self.param_noise.adapt(dist)
@@ -105,7 +159,7 @@ class Actor(object):
 
                     # Param Noise
                     if self.param_noise:
-                        perturb_actor_parameters(self.policy, self.policy, self.param_noise, device)
+                        perturb_actor_parameters(self.policy_perturbed, self.policy, self.param_noise, device)
 
                     # Select action randomly or according to policy
                     if self.actor_timesteps < self.start_timesteps:
@@ -125,7 +179,9 @@ class Actor(object):
                     episode_reward += reward
 
                     # Store data in replay buffer
-                    self.memory_id.add.remote((obs, new_obs, action, reward, done_bool))
+                    transition = (obs, new_obs, action, reward, done_bool)
+                    self.local_buffer.add(transition)
+                    self.memory_id.add.remote(transition)
 
                     # call update from model server
                     self.learner_id.update_and_evaluate.remote()
