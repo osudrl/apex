@@ -4,13 +4,15 @@ import time
 from rl.algos.td3 import Actor, Learner
 from rl.utils import ReplayBuffer_remote
 
-import gym
+#import gym
+
+from cassie import CassieEnv
 
 import torch
 
-def make_cassie_env(*args, **kwargs):
+def make_env_fn():
     def _thunk():
-        return CassieEnv(*args, **kwargs)
+        return CassieEnv("walking", clock_based=True)
     return _thunk
 
 def gym_factory(path, **kwargs):
@@ -90,10 +92,12 @@ if __name__ == "__main__":
     # Environment
     if(args.env_name in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
         # set up cassie environment
-        import gym_cassie
-        env_fn = gym_factory(args.env_name)
+        # import gym_cassie
+        # env_fn = gym_factory(args.env_name)
+        env_fn = make_env_fn()
         max_episode_steps = 400
     else:
+        import gym
         env_fn = gym_factory(args.env_name)
         #max_episode_steps = env_fn()._max_episode_steps
         max_episode_steps = 1000
