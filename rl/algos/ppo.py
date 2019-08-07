@@ -120,6 +120,8 @@ class PPO:
 
         self.grad_clip = args['max_grad_norm']
 
+        self.max_return = 0
+
         ray.init()
 
     @staticmethod
