@@ -55,8 +55,9 @@ args.name = "demo2"
 # More detailed logging
 # Logging timestamps
 
-import gym
-import gym_cassie
+#import gym
+#import gym_cassie
+from cassie import CassieEnv
 
 def gym_factory(path, **kwargs):
     from functools import partial
@@ -83,11 +84,17 @@ def gym_factory(path, **kwargs):
 
     return partial(cls, **_kwargs)
 
+def make_env_fn():
+    def _thunk():
+        return CassieEnv("walking", clock_based=True)
+    return _thunk
+
 
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
-    env_fn = gym_factory(args.env)
+    #env_fn = gym_factory(args.env)  # for use with gym_cassie
+    env_fn = make_env_fn()
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
