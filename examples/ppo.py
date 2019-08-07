@@ -3,9 +3,10 @@ import argparse
 
 from rl.utils import run_experiment
 from rl.policies import GaussianMLP, BetaMLP
-from rl.algos import PPO
+from rl.algos import PPO, MirrorPPO
 
 from rl.envs.normalize import get_normalization_params, PreNormalizer
+from rl.envs.wrappers import SymmetricEnv
 
 import torch
 
@@ -50,11 +51,19 @@ args.name = "demo2"
 # More detailed logging
 # Logging timestamps
 
-import gym
-import gym_cassie
+# NOTE: importing cassie for some reason breaks openai gym, BUG ?
+from cassie import CassieEnv, CassieTSEnv
+from cassie.no_delta_env import CassieEnv_nodelta
+from cassie.speed_env import CassieEnv_speed
+from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+
+# import gym
+# import gym_cassie
+
+import functools
 
 def gym_factory(path, **kwargs):
-    from functools import partial
 
     """
     This is (mostly) equivalent to gym.make(), but it returns an *uninstantiated* 
@@ -76,19 +85,34 @@ def gym_factory(path, **kwargs):
     else:
         cls = gym.envs.registration.load(spec._entry_point)
 
-    return partial(cls, **_kwargs)
+    return functools.partial(cls, **_kwargs)
 
+def make_cassie_env(*args, **kwargs):
+    def _thunk():
+        return CassieEnv(*args, **kwargs)
+    return _thunk
 
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
-    env_fn = gym_factory(args.env)
+    #env_fn = gym_factory(args.env)
 
-    #env.seed(args.seed)
-    #torch.manual_seed(args.seed)
+    # env_fn = make_cassie_env("walking", clock_based=True)
+    # env_fn = functools.partial(CassieEnv_speed, "walking", clock_based=True, state_est=False)
+    # env_fn = functools.partial(CassieEnv_nodelta, "walking", clock_based=True, state_est=False)
+    env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est = False)
+    args.env = "speed_dfreq"
 
     obs_dim = env_fn().observation_space.shape[0] 
     action_dim = env_fn().action_space.shape[0]
+
+    env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+                                        18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+                                        -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+                                        mirrored_act = [0,1,2,3,4,5,6,7,8,9])
+
+    #env.seed(args.seed)
+    #torch.manual_seed(args.seed)
 
     policy = GaussianMLP(
         obs_dim, action_dim, 
@@ -98,11 +122,15 @@ if __name__ == "__main__":
         learn_std=False,
         normc_init=False
     )
-
     policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=10000, noise_std=1, policy=policy, env_fn=env_fn))
+
+    # or load previous policy
+    # policy = torch.load("./trained_models/dfreq_max_speed_orient_new.pt")
+    
     policy.train(0)
 
-    algo = PPO(args=vars(args))
+    # algo = PPO(args=vars(args))
+    algo = MirrorPPO(args=vars(args))
 
     # TODO: make log, monitor and render command line arguments
     # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)
