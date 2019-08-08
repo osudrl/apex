@@ -25,6 +25,8 @@ parser.add_argument("--name", type=str, default="model")
 
 parser.add_argument("--env", type=str, default="Cassie-mimic-walking-v0")
 
+parser.add_argument("--state_est", type=bool, default=True)
+
 # visdom server port
 parser.add_argument("--viz_port", default=8097)                                 
 
@@ -95,9 +97,9 @@ def gym_factory(path, **kwargs):
 
     return functools.partial(cls, **_kwargs)
 
-def make_env_fn():
+def make_env_fn(state_est=False):
     def _thunk():
-        return CassieEnv("walking", clock_based=True)
+        return CassieEnv("walking", clock_based=True, state_est=state_est)
     return _thunk
 
 
@@ -105,12 +107,12 @@ if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
     #env_fn = gym_factory(args.env)  # for use with gym_cassie
-    env_fn = make_env_fn()
+    env_fn = make_env_fn(state_est=args.state_est)
 
     # env_fn = make_cassie_env("walking", clock_based=True)
     # env_fn = functools.partial(CassieEnv_speed, "walking", clock_based=True, state_est=False)
     # env_fn = functools.partial(CassieEnv_nodelta, "walking", clock_based=True, state_est=False)
-    env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est = False)
+    env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
     args.env = "speed_dfreq"
 
     obs_dim = env_fn().observation_space.shape[0] 
