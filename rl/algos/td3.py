@@ -83,7 +83,8 @@ class Actor(object):
 
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.shape[0]
-        self.max_action = float(self.env.action_space.high[0])
+        #self.max_action = float(self.env.action_space.high[0])
+        self.max_action = 1
 
         #self.policy = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
         self.policy_perturbed = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
@@ -261,7 +262,8 @@ class Learner(object):
         # env attributes
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.shape[0]
-        self.max_action = float(self.env.action_space.high[0])
+        #self.max_action = float(self.env.action_space.high[0])
+        self.max_action = 1
         self.max_traj_len = 400
 
         # models and optimizers

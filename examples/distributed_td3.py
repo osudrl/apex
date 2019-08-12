@@ -4,13 +4,20 @@ import time
 from rl.algos.td3 import Actor, Learner
 from rl.utils import ReplayBuffer_remote
 
-import gym
+#import gym
+
+# NOTE: importing cassie for some reason breaks openai gym, BUG ?
+from cassie import CassieEnv, CassieTSEnv
+from cassie.no_delta_env import CassieEnv_nodelta
+from cassie.speed_env import CassieEnv_speed
+from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
 
 import torch
 
-def make_cassie_env(*args, **kwargs):
+def make_env_fn(state_est=False):
     def _thunk():
-        return CassieEnv(*args, **kwargs)
+        return CassieEnv("walking", clock_based=True, state_est=state_est)
     return _thunk
 
 def gym_factory(path, **kwargs):
@@ -43,6 +50,7 @@ parser = argparse.ArgumentParser()
 # args common for actors and learners
 parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
 parser.add_argument("--hidden_size", default=256)
+parser.add_argument("--state_est", type=bool, default=True)                     # use state estimator or not
 
 # learner specific args
 parser.add_argument("--replay_size", default=1e7, type=int)                     # replay buffer size    
@@ -90,10 +98,13 @@ if __name__ == "__main__":
     # Environment
     if(args.env_name in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
         # set up cassie environment
-        import gym_cassie
-        env_fn = gym_factory(args.env_name)
+        # import gym_cassie
+        # env_fn = gym_factory(args.env_name)
+        #env_fn = make_env_fn(state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
         max_episode_steps = 400
     else:
+        import gym
         env_fn = gym_factory(args.env_name)
         #max_episode_steps = env_fn()._max_episode_steps
         max_episode_steps = 1000
