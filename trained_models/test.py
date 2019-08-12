@@ -19,10 +19,12 @@ np.set_printoptions(precision=2, suppress=True)
 
 device = torch.device('cpu')
 
+
 def make_cassie_env(*args, **kwargs):
     def _thunk():
         return CassieEnv(*args, **kwargs)
     return _thunk
+
 
 def gym_factory(path, **kwargs):
     from functools import partial
@@ -41,7 +43,7 @@ def gym_factory(path, **kwargs):
     spec = gym.envs.registry.spec(path)
     _kwargs = spec._kwargs.copy()
     _kwargs.update(kwargs)
-    
+
     if callable(spec._entry_point):
         cls = spec._entry_point(**_kwargs)
     else:
@@ -50,6 +52,8 @@ def gym_factory(path, **kwargs):
     return partial(cls, **_kwargs)
 
 # TODO: add .dt to all environments. OpenAI should do the same...
+
+
 def visualize(env_fn, policy, vlen, dt=0.033, speedup=1):
 
     env = env_fn()
@@ -142,7 +146,7 @@ max_action = float(env_fn().action_space.high[0])
 
 
 # Load Policy
-actor = Actor(state_dim, action_dim, max_action, 400, 300).to(device)
+actor = Actor(state_dim, action_dim, max_action, 256, 256).to(device)
 actor_path = os.path.join(args.model_path, "global_policy.pt")
 print('Loading model from {}'.format(actor_path))
 if actor_path is not None:

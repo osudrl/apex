@@ -27,6 +27,7 @@ def select_action(perturbed_policy, unperturbed_policy, state, device, param_noi
     else:
         return unperturbed_policy(state).cpu().data.numpy().flatten()
 
+
 class ActorBuffer(object):
     def __init__(self, size):
         """Create Replay buffer.
@@ -39,7 +40,7 @@ class ActorBuffer(object):
         self.storage = []
         self.max_size = size
         self.ptr = 0
-    
+
     def __len__(self):
         return len(self.storage)
 
@@ -78,7 +79,7 @@ class ActorBuffer(object):
 
 @ray.remote
 class Actor(object):
-    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id):
+    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256):
         self.env = env_fn()
 
         self.state_dim = self.env.observation_space.shape[0]
@@ -87,17 +88,19 @@ class Actor(object):
         self.max_action = 1
 
         #self.policy = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
-        self.policy_perturbed = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
+        self.policy_perturbed = LN_Actor(
+            self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(device)
         self.learner_id = learner_id
         self.memory_id = memory_id
-        
+
         # Action noise
         self.start_timesteps = start_timesteps
         self.act_noise = act_noise
-        
+
         # Initialize param noise (or set to none)
         self.noise_scale = noise_scale
-        self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
+        self.param_noise = AdaptiveParamNoiseSpec(
+            initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
 
         # Termination condition: max episode length
         self.max_traj_len = 400
@@ -107,15 +110,16 @@ class Actor(object):
         self.taper_timesteps = 0
         self.episode_num = 0
         self.taper_load_freq = taper_load_freq  # taper load freq or not?
-        self.load_freq = load_freq              # initial load frequency... make this taper down to 1 over time 
+        # initial load frequency... make this taper down to 1 over time
+        self.load_freq = load_freq
 
         # Local replay buffer
         self.local_buffer = ActorBuffer(self.max_traj_len * self.load_freq)
 
         self.id = id
 
-        self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(self.learner_id.get_global_policy.remote())
-
+        self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(
+            self.learner_id.get_global_policy.remote())
 
     def collect_experience(self):
 
@@ -129,17 +133,19 @@ class Actor(object):
                     # PUTTING WAIT ON THIS SHOULD MAKE THIS EXACT SAME AS NON-DISTRIBUTED, if using one actor
                     # Query learner for latest model and termination flag
 
-                    self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(self.learner_id.get_global_policy.remote())
+                    self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(
+                        self.learner_id.get_global_policy.remote())
 
                     #global_policy_state_dict, training_done = ray.get(self.learner_id.get_global_policy.remote())
-                    #self.policy.load_state_dict(global_policy_state_dict)
-                    
+                    # self.policy.load_state_dict(global_policy_state_dict)
 
                     # If we have loaded a global model, we also need to update the param_noise based on the distance metric
                     if self.param_noise is not None:
                         states, perturbed_actions = self.local_buffer.get_transitions()
-                        unperturbed_actions = np.array([select_action(self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
-                        dist = distance_metric(perturbed_actions, unperturbed_actions)
+                        unperturbed_actions = np.array([select_action(
+                            self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
+                        dist = distance_metric(
+                            perturbed_actions, unperturbed_actions)
                         self.param_noise.adapt(dist)
                         print("loaded global model and adapted parameter noise")
                     else:
@@ -156,27 +162,31 @@ class Actor(object):
                 # nested collection loop - COLLECTS TIMESTEPS OF EXPERIENCE UNTIL episode is over
                 while episode_timesteps < self.max_traj_len and not done:
 
-                    #self.env.render()
+                    # self.env.render()
 
                     # Param Noise
                     if self.param_noise:
-                        perturb_actor_parameters(self.policy_perturbed, self.policy, self.param_noise, device)
+                        perturb_actor_parameters(
+                            self.policy_perturbed, self.policy, self.param_noise, device)
 
                     # Select action randomly or according to policy
                     if self.actor_timesteps < self.start_timesteps:
                         #print("selecting action randomly {}".format(done_bool))
-                        action = torch.randn(self.env.action_space.shape[0]) if cassieEnv is True else self.env.action_space.sample()
+                        action = torch.randn(
+                            self.env.action_space.shape[0]) if cassieEnv is True else self.env.action_space.sample()
                         action = action.numpy()
                     else:
                         #print("selecting from policy")
-                        action = select_action(self.policy_perturbed, self.policy, np.array(obs), device, param_noise=self.param_noise)
+                        action = select_action(self.policy_perturbed, self.policy, np.array(
+                            obs), device, param_noise=self.param_noise)
                         if self.act_noise != 0:
                             action = (action + np.random.normal(0, self.act_noise,
                                                                 size=self.env.action_space.shape[0])).clip(self.env.action_space.low, self.env.action_space.high)
 
                     # Perform action
                     new_obs, reward, done, _ = self.env.step(action)
-                    done_bool = 1.0 if episode_timesteps + 1 == self.max_traj_len else float(done)
+                    done_bool = 1.0 if episode_timesteps + \
+                        1 == self.max_traj_len else float(done)
                     episode_reward += reward
 
                     # Store data in replay buffer
@@ -199,21 +209,24 @@ class Actor(object):
 
                 # episode is over, increment episode count and plot episode info
                 self.episode_num += 1
-                
-                # pass episode details to visdom logger on memory server
-                self.memory_id.plot_actor_results.remote(self.id, self.actor_timesteps, episode_reward)
 
-                ray.wait([self.learner_id.increment_episode_count.remote()], num_returns=1)
+                # pass episode details to visdom logger on memory server
+                self.memory_id.plot_actor_results.remote(
+                    self.id, self.actor_timesteps, episode_reward)
+
+                ray.wait(
+                    [self.learner_id.increment_episode_count.remote()], num_returns=1)
 
                 if self.taper_load_freq and self.taper_timesteps >= 2000:
                     self.load_freq = self.load_freq // 2
                     print("Increased load frequency")
 
+
 @ray.remote(num_gpus=0)
 class Learner(object):
     def __init__(self, env_fn, memory_server, learning_episodes, state_space, action_space,
                  batch_size=500, discount=0.99, tau=0.005, eval_update_freq=10,
-                 target_update_freq=2000, evaluate_freq=50, num_of_evaluators=30):
+                 target_update_freq=2000, evaluate_freq=50, num_of_evaluators=30, hidden_size=256):
 
         # THIS WORKS, but rest doesn't when trying to use GPU for learner
         print("This function is allowed to use GPUs {}.".format(ray.get_gpu_ids()))
@@ -227,8 +240,8 @@ class Learner(object):
         self.learning_episodes = learning_episodes
         #self.max_timesteps = max_timesteps
 
-        #self.start_memory_size=1000
-        self.batch_size=batch_size
+        # self.start_memory_size=1000
+        self.batch_size = batch_size
 
         self.eval_update_freq = eval_update_freq
         self.target_update_freq = target_update_freq
@@ -249,7 +262,7 @@ class Learner(object):
         # hyperparams
         self.discount = discount
         self.tau = tau
-        
+
         # results list
         self.results = []
 
@@ -267,13 +280,17 @@ class Learner(object):
         self.max_traj_len = 400
 
         # models and optimizers
-        self.actor = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(self.device)
-        self.actor_target = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(self.device)
+        self.actor = LN_Actor(self.state_dim, self.action_dim,
+                              self.max_action, hidden_size, hidden_size).to(self.device)
+        self.actor_target = LN_Actor(
+            self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters())
 
-        self.critic = Critic(self.state_dim, self.action_dim, 400, 300).to(self.device)
-        self.critic_target = Critic(self.state_dim, self.action_dim, 400, 300).to(self.device)
+        self.critic = Critic(self.state_dim, self.action_dim,
+                             hidden_size, hidden_size).to(self.device)
+        self.critic_target = Critic(
+            self.state_dim, self.action_dim, hidden_size, hidden_size).to(self.device)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters())
 
@@ -292,7 +309,8 @@ class Learner(object):
         self.step_count += 1        # global step count
 
         # increment models' step counts
-        self.eval_step_count += 1     # step count between calls of updating policy and targets (TD3)
+        # step count between calls of updating policy and targets (TD3)
+        self.eval_step_count += 1
         self.target_step_count += 1   # time between each eval
 
     def update_and_evaluate(self):
@@ -308,15 +326,17 @@ class Learner(object):
     def increment_episode_count(self):
         self.episode_count += 1
         self.eval_episode_count += 1
-        #print(self.episode_count)
+        # print(self.episode_count)
 
         if self.eval_episode_count >= self.evaluate_freq:
 
             self.eval_episode_count = 0
 
             # evaluate learned policy
-            self.results.append(self.evaluate(trials=self.num_of_evaluators, num_of_workers=self.num_of_evaluators))
-            print('Episode {}: {}'.format(self.episode_count, self.results[-1]))
+            self.results.append(self.evaluate(
+                trials=self.num_of_evaluators, num_of_workers=self.num_of_evaluators))
+            print('Episode {}: {}'.format(
+                self.episode_count, self.results[-1]))
 
             # save policy with highest return so far
             if self.highest_return < self.results[-1]:
@@ -378,7 +398,8 @@ class Learner(object):
             # Delayed policy updates
             if self.update_counter % policy_freq == 0:
 
-                print("optimizing at timestep {} | time = {} | replay size = {} | episode count = {} | update count = {} ".format(self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.episode_count, self.update_counter))
+                print("optimizing at timestep {} | time = {} | replay size = {} | episode count = {} | update count = {} ".format(
+                    self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.episode_count, self.update_counter))
 
                 # Compute actor loss
                 actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
@@ -418,7 +439,8 @@ class Learner(object):
             evaluators.remove(ready_ids[0])
 
             # start a new worker
-            evaluators.append(evaluator.remote(self.env_fn, self.actor, self.max_traj_len))
+            evaluators.append(evaluator.remote(
+                self.env_fn, self.actor, self.max_traj_len))
 
         # return average reward
         avg_reward = total_rewards / trials
