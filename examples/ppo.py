@@ -106,8 +106,8 @@ def make_env_fn(state_est=False):
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
-    #env_fn = gym_factory(args.env)  # for use with gym_cassie
-    env_fn = make_env_fn(state_est=args.state_est)
+    # env_fn = gym_factory(args.env)  # for use with gym_cassie
+    # env_fn = make_env_fn(state_est=args.state_est)
 
     # env_fn = make_cassie_env("walking", clock_based=True)
     # env_fn = functools.partial(CassieEnv_speed, "walking", clock_based=True, state_est=False)
@@ -118,10 +118,18 @@ if __name__ == "__main__":
     obs_dim = env_fn().observation_space.shape[0] 
     action_dim = env_fn().action_space.shape[0]
 
-    env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+    if args.state_est:
+        # with state estimator
+        env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
+    else:
+        # without state estimator
+        env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
                                         18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
                                         -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
                                         mirrored_act = [0,1,2,3,4,5,6,7,8,9])
+
+    obs_dim = env_fn().observation_space.shape[0] 
+    action_dim = env_fn().action_space.shape[0]
 
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
@@ -137,6 +145,8 @@ if __name__ == "__main__":
 
     policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
     policy.train(0)
+
+    print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
 
     # algo = PPO(args=vars(args))
     algo = MirrorPPO(args=vars(args))
