@@ -15,7 +15,7 @@ def select_action(Policy, state, device):
     return Policy(state).cpu().data.numpy().flatten()
 
 @ray.remote
-def evaluator(env, policy, max_traj_len):
+def evaluator(env, policy, max_traj_len, render_policy=False):
 
     env = env()
 
@@ -26,6 +26,9 @@ def evaluator(env, policy, max_traj_len):
 
     # evaluate performance of the passed model for one episode
     while steps < max_traj_len and not done:
+        if render_policy:
+            env.render()
+
         # use model's greedy policy to predict action
         action = select_action(policy, np.array(state), device)
 

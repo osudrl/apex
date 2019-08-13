@@ -5,7 +5,13 @@ import torch
 
 import time
 
-from cassie import CassieEnv
+# NOTE: importing cassie for some reason breaks openai gym, BUG ?
+from cassie import CassieEnv, CassieTSEnv
+from cassie.no_delta_env import CassieEnv_nodelta
+from cassie.speed_env import CassieEnv_speed
+from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+
 from rl.envs import Normalize, Vectorize
 from rl.policies import GaussianMLP, EnsemblePolicy
 
@@ -355,9 +361,9 @@ def saliency(policy, state, naive=False):
 # value function
 # reward distribution
 
-def make_env_fn():
+def make_env_fn(state_est=False):
     def _thunk():
-        return CassieEnv("walking", clock_based=True)
+        return CassieEnv("walking", clock_based=True, state_est=state_est)
     return _thunk
 
 
@@ -389,7 +395,13 @@ if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
     if args.new:
-        env_fn = make_env_fn()
+        env_fn = make_env_fn(state_est=args.state_est)
+
+        # env_fn = make_cassie_env("walking", clock_based=True)
+        # env_fn = functools.partial(CassieEnv_speed, "walking", clock_based=True, state_est=False)
+        # env_fn = functools.partial(CassieEnv_nodelta, "walking", clock_based=True, state_est=False)
+        # env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+
         env = Vectorize([env_fn])
 
         obs_dim = env_fn().observation_space.shape[0] 
