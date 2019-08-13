@@ -60,7 +60,7 @@ def get_trajectory(peak, stride, phase, stance=0.15):
 
 class CassieTSEnv:
     def __init__(self, simrate=60):
-        self.sim = CassieSim()
+        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
 
         self.qpos0 = np.copy(self.sim.qpos())
@@ -274,6 +274,6 @@ class CassieTSEnv:
 
     def render(self):
         if self.vis is None:
-            self.vis = CassieVis()
+            self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/cassie.xml")
 
-        self.vis.draw(self.sim)
+        return self.vis.draw(self.sim)
