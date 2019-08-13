@@ -83,7 +83,8 @@ class Actor(object):
 
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.shape[0]
-        self.max_action = float(self.env.action_space.high[0])
+        #self.max_action = float(self.env.action_space.high[0])
+        self.max_action = 1
 
         #self.policy = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
         self.policy_perturbed = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
@@ -212,7 +213,7 @@ class Actor(object):
 class Learner(object):
     def __init__(self, env_fn, memory_server, learning_episodes, state_space, action_space,
                  batch_size=500, discount=0.99, tau=0.005, eval_update_freq=10,
-                 target_update_freq=2000, evaluate_freq=50, num_of_evaluators=30):
+                 target_update_freq=2000, evaluate_freq=50, num_of_evaluators=30, render_policy=False):
 
         # THIS WORKS, but rest doesn't when trying to use GPU for learner
         print("This function is allowed to use GPUs {}.".format(ray.get_gpu_ids()))
@@ -261,7 +262,8 @@ class Learner(object):
         # env attributes
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.shape[0]
-        self.max_action = float(self.env.action_space.high[0])
+        #self.max_action = float(self.env.action_space.high[0])
+        self.max_action = 1
         self.max_traj_len = 400
 
         # models and optimizers
@@ -283,6 +285,9 @@ class Learner(object):
 
         # also dump ray timeline
         # ray.timeline(filename="./ray_timeline.json")
+
+        # render policy?
+        self.render_policy = render_policy
 
         self.update_and_evaluate()
 
@@ -395,7 +400,7 @@ class Learner(object):
                     target_param.data.copy_(
                         self.tau * param.data + (1 - self.tau) * target_param.data)
 
-    def evaluate(self, trials=30, num_of_workers=30):
+    def evaluate(self, trials=30, num_of_workers=30, render_policy=False):
 
         start_time = time.time()
 
@@ -416,7 +421,7 @@ class Learner(object):
             evaluators.remove(ready_ids[0])
 
             # start a new worker
-            evaluators.append(evaluator.remote(self.env_fn, self.actor, self.max_traj_len))
+            evaluators.append(evaluator.remote(self.env_fn, self.actor, self.max_traj_len, render_policy=self.render_policy))
 
         # return average reward
         avg_reward = total_rewards / trials

@@ -3,14 +3,24 @@ import time
 
 from rl.algos.td3 import Actor, Learner
 from rl.utils import ReplayBuffer_remote
+from rl.envs.wrappers import SymmetricEnv
 
-import gym
+import functools
+
+#import gym
+
+# NOTE: importing cassie for some reason breaks openai gym, BUG ?
+from cassie import CassieEnv, CassieTSEnv
+from cassie.no_delta_env import CassieEnv_nodelta
+from cassie.speed_env import CassieEnv_speed
+from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
 
 import torch
 
-def make_cassie_env(*args, **kwargs):
+def make_env_fn(state_est=False):
     def _thunk():
-        return CassieEnv(*args, **kwargs)
+        return CassieEnv("walking", clock_based=True, state_est=state_est)
     return _thunk
 
 def gym_factory(path, **kwargs):
@@ -43,6 +53,7 @@ parser = argparse.ArgumentParser()
 # args common for actors and learners
 parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
 parser.add_argument("--hidden_size", default=256)
+parser.add_argument("--state_est", type=bool, default=True)                     # use state estimator or not
 
 # learner specific args
 parser.add_argument("--replay_size", default=1e7, type=int)                     # replay buffer size    
@@ -66,9 +77,10 @@ parser.add_argument("--taper_load_freq", type=bool, default=True)               
 parser.add_argument("--viz_actors", type=bool, default=True)                    # Visualize actors in visdom or not
 
 # evaluator args
-parser.add_argument("--num_trials", default=10, type=int)                       # Number of evaluators
+parser.add_argument("--num_trials", default=1, type=int)                       # Number of evaluators
 parser.add_argument("--num_evaluators", default=1, type=int)                   # Number of evaluators
-parser.add_argument("--viz_port", default=8097)                                 # visdom server port
+parser.add_argument("--viz_port", default=8097)                                # visdom server port
+parser.add_argument("--render_policy", type=bool, default=False)               # render during eval
 
 # misc args
 parser.add_argument("--name", type=str, default="model")
@@ -90,24 +102,38 @@ if __name__ == "__main__":
     # Environment
     if(args.env_name in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
         # set up cassie environment
-        import gym_cassie
-        env_fn = gym_factory(args.env_name)
+        # import gym_cassie
+        # env_fn = gym_factory(args.env_name)
+        #env_fn = make_env_fn(state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+        obs_dim = env_fn().observation_space.shape[0]
+        action_dim = env_fn().action_space.shape[0]
+        if args.state_est:
+            # with state estimator
+            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
+        else:
+            # without state estimator
+            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+                                            18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+                                            -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+                                            mirrored_act = [0,1,2,3,4,5,6,7,8,9])
         max_episode_steps = 400
     else:
+        import gym
         env_fn = gym_factory(args.env_name)
         #max_episode_steps = env_fn()._max_episode_steps
+        obs_dim = env_fn().observation_space.shape[0]
+        action_dim = env_fn().action_space.shape[0]
         max_episode_steps = 1000
 
     # Visdom Monitoring
-    obs_dim = env_fn().observation_space.shape[0]
-    action_dim = env_fn().action_space.shape[0]
 
     # create remote visdom logger
     # plotter_id = VisdomLinePlotter.remote(env_name=experiment_name, port=args.viz_port)
 
     # Create remote learner (learner will create the evaluators) and replay buffer
     memory_id = ReplayBuffer_remote.remote(args.replay_size, experiment_name, args)
-    learner_id = Learner.remote(env_fn, memory_id, args.training_episodes, obs_dim, action_dim, batch_size=args.batch_size, discount=args.discount, eval_update_freq=args.eval_update_freq, evaluate_freq=args.evaluate_freq, num_of_evaluators=args.num_evaluators)
+    learner_id = Learner.remote(env_fn, memory_id, args.training_episodes, obs_dim, action_dim, batch_size=args.batch_size, discount=args.discount, eval_update_freq=args.eval_update_freq, evaluate_freq=args.evaluate_freq, num_of_evaluators=args.num_evaluators, render_policy=args.render_policy)
 
     # Create remote actors
     actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_actors, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i) for i in range(args.num_actors)]
@@ -126,4 +152,4 @@ if __name__ == "__main__":
     end = time.time()
 
     # also dump ray timeline
-    ray.global_state.chrome_tracing_dump(filename="./ray_timeline.json")
+    #ray.global_state.chrome_tracing_dump(filename="./ray_timeline.json")
