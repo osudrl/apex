@@ -60,7 +60,7 @@ def get_trajectory(peak, stride, phase, stance=0.15):
 
 class CassieTSEnv:
     def __init__(self, simrate=60):
-        self.sim = CassieSim()
+        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
 
         self.qpos0 = np.copy(self.sim.qpos())
@@ -181,7 +181,7 @@ class CassieTSEnv:
         # quaternion distance
         orientation_error = np.arccos(2 * np.inner(qpos[3:7], self.qpos0[3:7]) ** 2 - 1)
 
-        print(".", 0.4 * np.exp(-foot_error), 0.3 * np.exp(-com_error), 0.3 * np.exp(-orientation_error))
+        # print(".", 0.4 * np.exp(-foot_error), 0.3 * np.exp(-com_error), 0.3 * np.exp(-orientation_error))
 
         reward = 0.4 * np.exp(-foot_error) + \
                  0.3 * np.exp(-com_error)  + \
@@ -274,6 +274,6 @@ class CassieTSEnv:
 
     def render(self):
         if self.vis is None:
-            self.vis = CassieVis()
+            self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/cassie.xml")
 
-        self.vis.draw(self.sim)
+        return self.vis.draw(self.sim)
