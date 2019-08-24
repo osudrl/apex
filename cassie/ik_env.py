@@ -17,13 +17,12 @@ class CassieIKTrajectory:
 
         self.qpos = np.copy(trajectory["qpos"])
         self.qvel = np.copy(trajectory["qvel"])
-        #print("qpos shape: {}   |   qvel shape: {}".format(qpos.shape, qvel.shape))
     
     def __len__(self):
         return len(self.qpos)
 
 class CassieIKEnv:
-    def __init__(self, traj="stepping2", simrate=60, clock_based=True):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, filename="spline_stepping_traj.pkl"):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -36,17 +35,8 @@ class CassieIKEnv:
             self.observation_space = np.zeros(86)
             self.action_space      = np.zeros(10)
 
-        # 1767 - 2767
-
         dirname = os.path.dirname(__file__)
-        if traj == "stepping":
-            traj_path = os.path.join(dirname, "trajectory", "stepping_traj.pkl")
-
-        elif traj == "stepping2":
-            traj_path = os.path.join(dirname, "trajectory", "spline_stepping_traj.pkl")
-
-        elif traj == "stand-in-place":
-            raise NotImplementedError
+        traj_path = os.path.join(dirname, "trajectory", filename)
 
         self.trajectory = CassieIKTrajectory(traj_path)
 
@@ -67,7 +57,7 @@ class CassieIKEnv:
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(len(self.trajectory) / self.simrate) #-1
+        self.phaselen = floor(len(self.trajectory) / self.simrate) - 1
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
@@ -141,51 +131,6 @@ class CassieIKEnv:
         self.sim.set_qvel(qvel)
 
         return self.get_full_state()
-
-    # used for plotting against the reference trajectory
-    def reset_for_test(self):
-        self.phase = 0
-        self.time = 0
-        self.counter = 0
-
-        qpos, qvel = self.get_ref_state(self.phase)
-
-        self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel)
-
-        return self.get_full_state()
-    
-    def set_joint_pos(self, jpos, fbpos=None, iters=5000):
-        """
-        Kind of hackish. 
-        This takes a floating base position and some joint positions
-        and abuses the MuJoCo solver to get the constrained forward
-        kinematics. 
-
-        There might be a better way to do this, e.g. using mj_kinematics
-        """
-
-        # actuated joint indices
-        joint_idx = [7, 8, 9, 14, 20,
-                     21, 22, 23, 28, 34]
-
-        # floating base indices
-        fb_idx = [0, 1, 2, 3, 4, 5, 6]
-
-        for _ in range(iters):
-            qpos = np.copy(self.sim.qpos())
-            qvel = np.copy(self.sim.qvel())
-
-            qpos[joint_idx] = jpos
-
-            if fbpos is not None:
-                qpos[fb_idx] = fbpos
-
-            self.sim.set_qpos(qpos)
-            self.sim.set_qvel(0 * qvel)
-
-            self.sim.step_pd(pd_in_t())
-
 
     # NOTE: this reward is slightly different from the one in Xie et al
     # see notes for details
@@ -270,6 +215,7 @@ class CassieIKEnv:
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
+        #pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
         pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
         
         # ^ should only matter for COM error calculation,

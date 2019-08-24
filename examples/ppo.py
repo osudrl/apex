@@ -62,11 +62,11 @@ args.name = "demo2"
 #import gym_cassie
 
 # NOTE: importing cassie for some reason breaks openai gym, BUG ?
-from cassie import CassieEnv, CassieTSEnv
-from cassie.no_delta_env import CassieEnv_nodelta
-from cassie.speed_env import CassieEnv_speed
-from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
-from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
+# from cassie.no_delta_env import CassieEnv_nodelta
+# from cassie.speed_env import CassieEnv_speed
+# from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+# from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
 
 # import gym
 # import gym_cassie
@@ -112,7 +112,8 @@ if __name__ == "__main__":
     # env_fn = make_cassie_env("walking", clock_based=True)
     # env_fn = functools.partial(CassieEnv_speed, "walking", clock_based=True, state_est=False)
     # env_fn = functools.partial(CassieEnv_nodelta, "walking", clock_based=True, state_est=False)
-    env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+    #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+    env_fn = functools.partial(CassieIKEnv)
     args.env = "speed_dfreq"
 
     obs_dim = env_fn().observation_space.shape[0] 

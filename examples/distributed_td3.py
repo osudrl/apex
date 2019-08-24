@@ -120,7 +120,7 @@ if __name__ == "__main__":
     # Environment
     if(args.env_name in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
         # NOTE: importing cassie for some reason breaks openai gym, BUG ?
-        from cassie import CassieEnv, CassieTSEnv
+        from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
         from cassie.no_delta_env import CassieEnv_nodelta
         from cassie.speed_env import CassieEnv_speed
         from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         # env_fn = gym_factory(args.env_name)
         #env_fn = make_env_fn(state_est=args.state_est)
         #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieTSEnv)
+        env_fn = functools.partial(CassieIKEnv)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
         if args.state_est:
