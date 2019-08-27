@@ -83,14 +83,13 @@ parser.add_argument("--start_timesteps", default=1e4, type=int)
 parser.add_argument("--initial_load_freq", default=10, type=int)
 # Std of Gaussian exploration noise (used to be 0.1)
 parser.add_argument("--act_noise", default=0.1, type=float)
-parser.add_argument('--param_noise', type=bool,
-                    default=True)                   # param noise
+parser.add_argument('--param_noise', type=bool, default=True)                   # param noise
 # noise scale for param noise
 parser.add_argument('--noise_scale', type=float, default=0.3)
 # initial amount of time between loading global model
 parser.add_argument("--taper_load_freq", type=bool, default=True)
 # Visualize actors in visdom or not
-parser.add_argument("--viz_actors", type=bool, default=True)
+parser.add_argument("--viz_actors", type=bool, default=False)
 
 # evaluator args
 parser.add_argument("--num_trials", default=1, type=int)                       # Number of evaluators
