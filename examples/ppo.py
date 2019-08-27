@@ -27,6 +27,9 @@ parser.add_argument("--env", type=str, default="Cassie-mimic-walking-v0")
 
 parser.add_argument("--state_est", type=bool, default=True)
 
+# mirror actions or not
+parser.add_argument("--mirror", type=bool, default=False)
+
 # visdom server port
 parser.add_argument("--viz_port", default=8097)                                 
 
@@ -119,15 +122,16 @@ if __name__ == "__main__":
     obs_dim = env_fn().observation_space.shape[0] 
     action_dim = env_fn().action_space.shape[0]
 
-    if args.state_est:
-        # with state estimator
-        env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
-    else:
-        # without state estimator
-        env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-                                        18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-                                        -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-                                        mirrored_act = [0,1,2,3,4,5,6,7,8,9])
+    if args.mirror:
+        if args.state_est:
+            # with state estimator
+            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
+        else:
+            # without state estimator
+            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+                                            18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+                                            -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+                                            mirrored_act = [0,1,2,3,4,5,6,7,8,9])
 
     obs_dim = env_fn().observation_space.shape[0] 
     action_dim = env_fn().action_space.shape[0]
@@ -149,9 +153,11 @@ if __name__ == "__main__":
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
 
-    # algo = PPO(args=vars(args))
-    algo = MirrorPPO(args=vars(args))
-
+    if args.mirror:
+        algo = MirrorPPO(args=vars(args))
+    else:
+        algo = PPO(args=vars(args))
+        
     # TODO: make log, monitor and render command line arguments
     # TODO: make algos take in a dictionary or list of quantities to log (e.g. reward, entropy, kl div etc)
     run_experiment(
