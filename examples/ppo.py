@@ -19,7 +19,7 @@ PPO.add_arguments(parser)
 
 parser.add_argument("--seed", type=int, default=1,
                     help="RNG seed")
-parser.add_argument("--logdir", type=str, default="/tmp/rl/experiments/",
+parser.add_argument("--logdir", type=str, default="./logs/apex/experiments/",
                     help="Where to log diagnostics to")
 parser.add_argument("--name", type=str, default="model")
 

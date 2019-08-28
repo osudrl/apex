@@ -58,10 +58,10 @@ parser.add_argument("--mirror", type=bool, default=False)
 
 # learner specific args
 # replay buffer size
-parser.add_argument("--replay_size", default=1e7, type=int)
+parser.add_argument("--replay_size", default=1e8, type=int)
 # Max time steps to run environment for
-parser.add_argument("--max_timesteps", default=1e7, type=float)
-parser.add_argument("--training_episodes", default=100000,
+parser.add_argument("--max_timesteps", default=1e8, type=float)
+parser.add_argument("--training_episodes", default=10000000,
                     type=float)           # Max episodes to learn from
 # Batch size for both actor and critic
 parser.add_argument("--batch_size", default=500, type=int)
@@ -94,8 +94,8 @@ parser.add_argument("--taper_load_freq", type=bool, default=True)
 parser.add_argument("--viz_actors", type=bool, default=False)
 
 # evaluator args
-parser.add_argument("--num_trials", default=1, type=int)                       # Number of evaluators
-parser.add_argument("--num_evaluators", default=1, type=int)                   # Number of evaluators
+parser.add_argument("--num_trials", default=10, type=int)                       # Number of evaluators
+parser.add_argument("--num_evaluators", default=10, type=int)                   # Number of evaluators
 parser.add_argument("--viz_port", default=8097)                                # visdom server port
 parser.add_argument("--render_policy", type=bool, default=False)               # render during eval
 
