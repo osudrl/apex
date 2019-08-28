@@ -180,8 +180,10 @@ class Actor(object):
                         action = select_action(self.policy_perturbed, self.policy, np.array(
                             obs), device, param_noise=self.param_noise)
                         if self.act_noise != 0:
+                            # action = (action + np.random.normal(0, self.act_noise,
+                            #                                     size=self.env.action_space.shape[0])).clip(self.env.action_space.low, self.env.action_space.high)
                             action = (action + np.random.normal(0, self.act_noise,
-                                                                size=self.env.action_space.shape[0])).clip(self.env.action_space.low, self.env.action_space.high)
+                                                                  size=self.env.action_space.shape[0])).clip(-1, 1)
 
                     # Perform action
                     new_obs, reward, done, _ = self.env.step(action)
