@@ -22,7 +22,7 @@ class CassieIKTrajectory:
         return len(self.qpos)
 
 class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, filename="spline_stepping_traj.pkl"):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, filename="traj_from_ref_foot_data.pkl"):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
