@@ -3,17 +3,16 @@ import argparse
 import pickle
 import torch
 
+import time
+
+import functools
+
 # NOTE: importing cassie for some reason breaks openai gym, BUG ?
 from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
 from cassie.no_delta_env import CassieEnv_nodelta
 from cassie.speed_env import CassieEnv_speed
 from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
 from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
-
-
-import time
-
-import functools
 
 from rl.envs import Normalize, Vectorize
 from rl.policies import GaussianMLP, EnsemblePolicy
@@ -398,6 +397,8 @@ args = parser.parse_args()
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757 
 
+    input()
+
     if args.new:
         env_fn = make_env_fn(state_est=args.state_est)
 
@@ -449,11 +450,11 @@ if __name__ == "__main__":
             cassie_policyplot(env, policy, args.glen)
 
     else:
-        env_fn = functools.partial(CassieIKEnv)
-
         policy = torch.load(args.model_path)
         policy.train(0)
 
+        env_fn = make_env_fn()
+        
         env = env_fn()
 
         # while True:

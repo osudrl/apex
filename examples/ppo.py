@@ -54,8 +54,6 @@ args.max_traj_len = 400
 
 args.use_gae = False
 
-args.name = "demo2"
-
 # TODO: add ability to select graphs by number
 # Interactive graphs/switch to tensorboard?
 # More detailed logging
@@ -116,7 +114,7 @@ if __name__ == "__main__":
     # env_fn = functools.partial(CassieEnv_speed, "walking", clock_based=True, state_est=False)
     # env_fn = functools.partial(CassieEnv_nodelta, "walking", clock_based=True, state_est=False)
     #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-    env_fn = functools.partial(CassieIKEnv)
+    env_fn = functools.partial(CassieIKEnv, clock_based=True)
     args.env = "speed_dfreq"
 
     obs_dim = env_fn().observation_space.shape[0] 

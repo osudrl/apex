@@ -78,7 +78,7 @@ class ActorBuffer(object):
 
 
 @ray.remote
-class Actor(object):
+class Actor():
     def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256):
         self.env = env_fn()
 
@@ -133,8 +133,13 @@ class Actor(object):
                     # PUTTING WAIT ON THIS SHOULD MAKE THIS EXACT SAME AS NON-DISTRIBUTED, if using one actor
                     # Query learner for latest model and termination flag
 
+                    # time this for debugging (need to implement sharded parameter server or not)
+                    # start = time.time()
+
                     self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(
                         self.learner_id.get_global_policy.remote())
+
+                    # duration = time.time() - start
 
                     #global_policy_state_dict, training_done = ray.get(self.learner_id.get_global_policy.remote())
                     # self.policy.load_state_dict(global_policy_state_dict)
@@ -147,9 +152,12 @@ class Actor(object):
                         dist = distance_metric(
                             perturbed_actions, unperturbed_actions)
                         self.param_noise.adapt(dist)
-                        print("loaded global model and adapted parameter noise")
+                        # print("loaded global model and adapted parameter noise. Load duration = {}".format(duration))
+                        # print("loaded global model and adapted parameter noise")
                     else:
-                        print("loaded global model")
+                        # print("loaded global model.  Load duration = {}".format(duration))
+                        # print("loaded global model.")
+                        pass
 
                 if self.training_done:
                     break
@@ -225,10 +233,10 @@ class Actor(object):
 
 
 @ray.remote(num_gpus=0)
-class Learner(object):
-    def __init__(self, env_fn, memory_server, learning_episodes, state_space, action_space,
+class Learner():
+    def __init__(self, env_fn, memory_server, learning_episodes, state_space, action_space, evaluator_id,
                  batch_size=500, discount=0.99, tau=0.005, eval_update_freq=10,
-                 target_update_freq=2000, evaluate_freq=50, num_of_evaluators=30, render_policy=False, hidden_size=256):
+                 target_update_freq=2000, evaluate_freq=50, render_policy=False, hidden_size=256):
 
         # THIS WORKS, but rest doesn't when trying to use GPU for learner
         print("This function is allowed to use GPUs {}.".format(ray.get_gpu_ids()))
@@ -237,6 +245,9 @@ class Learner(object):
 
         # keep uninstantiated constructor for evaluator
         self.env_fn = env_fn
+
+        # evaluator ids
+        self.evaluator_id = evaluator_id
 
         self.env = env_fn()
         self.learning_episodes = learning_episodes
@@ -248,8 +259,6 @@ class Learner(object):
         self.eval_update_freq = eval_update_freq
         self.target_update_freq = target_update_freq
         self.evaluate_freq = evaluate_freq     # how many steps before each eval
-
-        self.num_of_evaluators = num_of_evaluators
 
         # counters
         self.step_count = 0
@@ -299,8 +308,8 @@ class Learner(object):
         # visdom plotter
         # self.plotter_id = plotter_id
 
-        # evaluate untrained policy
-        # print('Untrained Policy: {}'.format( self.evaluate(trials=self.num_of_evaluators, num_of_workers=self.num_of_evaluators) ))
+        # evaluate learned policy
+        self.evaluate()
 
         # also dump ray timeline
         # ray.timeline(filename="./ray_timeline.json")
@@ -338,16 +347,11 @@ class Learner(object):
             self.eval_episode_count = 0
 
             # evaluate learned policy
-            self.results.append(self.evaluate(
-                trials=self.num_of_evaluators, num_of_workers=self.num_of_evaluators))
-            print('Episode {}: {}'.format(
-                self.episode_count, self.results[-1]))
+            self.evaluate()            
 
-            # save policy with highest return so far
-            if self.highest_return < self.results[-1]:
-                self.highest_return = self.results[-1]
-
-                # also save
+            # save policy if it has highest return so far
+            if self.highest_return < self.results[-1][0]:
+                self.highest_return = self.results[-1][0]
                 self.save()
 
             # also dump ray timelines
@@ -363,11 +367,12 @@ class Learner(object):
             start_time = time.time()
 
             if ray.get(self.memory.storage_size.remote()) < self.batch_size:
-                print("not enough experience yet")
+                #print("not enough experience yet")
                 return
 
             # randomly sample a mini-batch transition from memory_server
             x, y, u, r, d = ray.get(self.memory.sample.remote(self.batch_size))
+            #print("sampled from replay buffer. Duration = {}".format(time.time() - start_time))
             state = torch.FloatTensor(x).to(self.device)
             action = torch.FloatTensor(u).to(self.device)
             next_state = torch.FloatTensor(y).to(self.device)
@@ -398,13 +403,15 @@ class Learner(object):
             critic_loss.backward()
             self.critic_optimizer.step()
 
-            self.update_counter += 1
+            self.memory.plot_critic_loss.remote(self.update_counter, critic_loss)
+
+            self.update_counter += 1            
 
             # Delayed policy updates
             if self.update_counter % policy_freq == 0:
 
-                print("optimizing at timestep {} | time = {} | replay size = {} | episode count = {} | update count = {} ".format(
-                    self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.episode_count, self.update_counter))
+                # print("optimizing at timestep {} | time = {} | replay size = {} | episode count = {} | update count = {} ".format(
+                #     self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.episode_count, self.update_counter))
 
                 # Compute actor loss
                 actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
@@ -423,34 +430,20 @@ class Learner(object):
                     target_param.data.copy_(
                         self.tau * param.data + (1 - self.tau) * target_param.data)
 
-    def evaluate(self, trials=30, num_of_workers=30, render_policy=False):
+                self.memory.plot_actor_loss.remote(self.update_counter, actor_loss)
+
+            self.memory.plot_learner_progress.remote(self.update_counter, self.step_count)
+
+    def evaluate(self, trials=30, render_policy=False):
 
         start_time = time.time()
 
-        # initialize evaluators
-        evaluators = [evaluator.remote(self.env_fn, self.actor, max_traj_len=400)
-                      for _ in range(num_of_workers)]
+        # call evaluators and get results
+        self.results.append(ray.get(self.evaluator_id.evaluate_policy.remote(self.actor, 1)))
+        avg_reward, avg_eplen = self.results[-1]
+        self.memory.plot_eval_results.remote(self.step_count, avg_reward, avg_eplen)
 
-        total_rewards = 0
-
-        for t in range(trials):
-            # get result from a worker
-            ready_ids, _ = ray.wait(evaluators, num_returns=1)
-
-            # update total rewards
-            total_rewards += ray.get(ready_ids[0])
-
-            # remove ready_ids from the evaluators
-            evaluators.remove(ready_ids[0])
-
-            # start a new worker
-            evaluators.append(evaluator.remote(self.env_fn, self.actor, self.max_traj_len, render_policy=self.render_policy))
-
-        # return average reward
-        avg_reward = total_rewards / trials
-        self.memory.plot_learner_results.remote(self.step_count, avg_reward)
-
-        print("eval time: {}".format(time.time()-start_time))
+        print('Timestep {} | eval time: {}'.format(self.step_count, time.time()-start_time))
 
         return avg_reward
 

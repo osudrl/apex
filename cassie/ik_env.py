@@ -22,18 +22,22 @@ class CassieIKTrajectory:
         return len(self.qpos)
 
 class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, filename="traj_from_ref_foot_data.pkl"):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, filename="traj_from_ref_foot_data.pkl"):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
         self.clock_based = clock_based
+        self.state_est = state_est
 
         if clock_based:
-            self.observation_space = np.zeros(48)
-            self.action_space      = np.zeros(10)
+            self.observation_space = np.zeros(42)
+            if self.state_est:
+                self.observation_space = np.zeros(48)       # Size for use with state est
         else:
-            self.observation_space = np.zeros(86)
-            self.action_space      = np.zeros(10)
+            self.observation_space = np.zeros(80)
+            if self.state_est:
+                self.observation_space = np.zeros(86)       # Size for use with state est
+        self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
         traj_path = os.path.join(dirname, "trajectory", filename)
@@ -62,11 +66,15 @@ class CassieIKEnv:
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
-    
+
+        # maybe make ref traj only send relevant idxs?
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.prev_action = ref_pos[self.pos_idx]
+        self.phase_add = 1
+
         # Output of Cassie's state estimation code
         self.cassie_state = state_out_t()
 
-        #self.name = 
 
     def step_simulation(self, action):
 
@@ -74,6 +82,22 @@ class CassieIKEnv:
         ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
 
         target = action + ref_pos[self.pos_idx]
+
+        h = 0.0005
+        Tf = 1.0 / 300.0
+        alpha = h / (Tf + h)
+        real_action = (1-alpha)*self.prev_action + alpha*target
+
+        # diff = real_action - self.prev_action
+        # max_diff = np.ones(10)*0.1
+        # for i in range(10):
+        #     if diff[i] < -max_diff[i]:
+        #         target[i] = self.prev_action[i] - max_diff[i]
+        #     elif diff[i] > max_diff[i]:
+        #         target[i] = self.prev_action[i] + max_diff[i]
+
+        self.prev_action = real_action
+        # real_action = target
 
         self.u = pd_in_t()
         for i in range(5):
@@ -126,9 +150,37 @@ class CassieIKEnv:
         self.counter = 0
 
         qpos, qvel = self.get_ref_state(self.phase)
+        # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
+
+        # Need to reset u? Or better way to reset cassie_state than taking step
+        self.cassie_state = self.sim.step_pd(self.u)
+
+        # maybe make ref traj only send relevant idxs?
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.prev_action = ref_pos[self.pos_idx]
+
+        return self.get_full_state()
+
+    # used for plotting against the reference trajectory
+    def reset_for_test(self):
+        self.phase = 0
+        self.time = 0
+        self.counter = 0
+
+        qpos, qvel = self.get_ref_state(self.phase)
+
+        self.sim.set_qpos(qpos)
+        self.sim.set_qvel(qvel)
+
+        # maybe make ref traj only send relevant idxs?
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.prev_action = ref_pos[self.pos_idx]
+
+        # Need to reset u? Or better way to reset cassie_state than taking step
+        self.cassie_state = self.sim.step_pd(self.u)
 
         return self.get_full_state()
 
@@ -320,13 +372,13 @@ class CassieIKEnv:
             self.cassie_state.joint.velocity[:]                                      # unactuated joint velocities
         ])
 
-        return np.concatenate([robot_state,  
+        if self.state_est:
+            return np.concatenate([robot_state,  
                                ext_state])
-
-
-        # return np.concatenate([qpos[pos_index], 
-        #                        qvel[vel_index], 
-        #                        ext_state])
+        else:
+            return np.concatenate([qpos[pos_index], 
+                               qvel[vel_index], 
+                               ext_state])
 
     def reset_for_normalization(self):
         return self.reset()

@@ -69,8 +69,18 @@ class ReplayBuffer_remote(object):
         return np.array(x), np.array(u)
 
     def plot_actor_results(self, actor_id, actor_timesteps, episode_reward):
-        self.logger.plot('return', 'Actor timesteps','actor {}'.format(actor_id), 'Actor Episode Return', actor_timesteps, episode_reward)
+        self.logger.plot('Return', 'Actor Timesteps',split_name='actor {}'.format(actor_id),title_name='Actor Episode Return', x=actor_timesteps, y=episode_reward)
 
-    def plot_learner_results(self, step_count, avg_reward):
-        self.logger.record('Agent Return', avg_reward, step_count, 'Agent Return', x_var_name='Global Timesteps', split_name='eval')
+    def plot_eval_results(self, step_count, avg_reward, avg_eplen):
+        self.logger.record('Eval Return', avg_reward, step_count, title_name='Eval Return', x_var_name='Global Timesteps', split_name='eval')
+        self.logger.record('Eval Eplen', avg_eplen, step_count, title_name='Eval Eplen', x_var_name='Global Timesteps', split_name='eval')
         self.logger.dump()
+
+    def plot_actor_loss(self, update_count, actor_loss):
+        self.logger.plot('Actor Loss', 'Update Count',split_name='train',title_name='Actor Network Loss', x=update_count, y=actor_loss)
+
+    def plot_critic_loss(self, update_count, critic_loss):
+        self.logger.plot('Critic Loss', 'Update Count',split_name='train',title_name='Critic Network Loss', x=update_count, y=critic_loss)
+
+    def plot_learner_progress(self, update_count, step_count):
+        self.logger.plot('Step Count', 'Update Count',split_name='train',title_name='Total Updates', x=step_count, y=update_count)

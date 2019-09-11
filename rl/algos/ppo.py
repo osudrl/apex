@@ -122,6 +122,9 @@ class PPO:
 
         self.max_return = 0
 
+        self.total_steps = 0
+        self.highest_reward = -1
+
         ray.init()
 
     @staticmethod
@@ -212,9 +215,11 @@ class PPO:
                 traj_len += 1
                 num_steps += 1
 
+            self.total_steps += num_steps
+
             value, _ = policy.act(state)
             memory.finish_path(last_val=(not done) * value.numpy())
-        
+
         return memory
 
     def sample_parallel(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
@@ -345,23 +350,28 @@ class PPO:
                 test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, self.max_traj_len, deterministic=True)
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
+                avg_eval_reward = np.mean(test.ep_returns)
+
                 _, pdf     = policy.evaluate(observations)
                 _, old_pdf = old_policy.evaluate(observations)
 
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
-                logger.record('Return (test)', np.mean(test.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='test')
-                logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
-                logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
+                logger.record('Return (test)', avg_eval_reward, self.total_steps, 'Return', x_var_name='Timesteps', split_name='test')
+                logger.record('Return (batch)', np.mean(batch.ep_returns), self.total_steps, 'Return', x_var_name='Timesteps', split_name='batch')
+                logger.record('Mean Eplen', np.mean(batch.ep_lens), self.total_steps, 'Mean Eplen', x_var_name='Timesteps', split_name='batch')
 
-                logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
-                logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
+                logger.record('Mean KL Div', kl, self.total_steps, 'Mean KL Div', x_var_name='Timesteps', split_name='batch')
+                logger.record('Mean Entropy', entropy, self.total_steps, 'Mean Entropy', x_var_name='Timesteps', split_name='batch')
+
+                logger.record('Iteration', itr, self.total_steps, 'Iterations', x_var_name='Timesteps', split_name='batch')
 
                 logger.dump()
 
             # TODO: add option for how often to save model
-            if itr % 10 == 0:
+            if self.highest_reward < avg_eval_reward:
+                self.highest_reward = avg_eval_reward
                 self.save(policy)
 
 

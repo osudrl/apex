@@ -125,7 +125,8 @@ parser.add_argument("--vlen", type=int, default=75,
 parser.add_argument('--env_name', default="Cassie-mimic-walking-v0",
                     help='name of the environment to run')
 parser.add_argument("--state_est", type=bool, default=True)     # use state estimator or not
-
+# mirror actions or not
+parser.add_argument("--mirror", type=bool, default=False)
 # parser.add_argument('--algo_name', default="TD3",
 #                     help='name of the algo model to load')
 args = parser.parse_args()
@@ -149,15 +150,17 @@ if(args.env_name in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"])
     env_fn = functools.partial(CassieIKEnv)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
-    if args.state_est:
-        # with state estimator
-        env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
-    else:
-        # without state estimator
-        env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-                                        18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-                                        -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-                                        mirrored_act = [0,1,2,3,4,5,6,7,8,9])
+    # Mirror Loss
+    if args.mirror:
+        if args.state_est:
+            # with state estimator
+            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
+        else:
+            # without state estimator
+            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+                                            18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+                                            -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+                                            mirrored_act = [0,1,2,3,4,5,6,7,8,9])
     max_episode_steps = 400
 else:
     import gym

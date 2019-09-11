@@ -3,7 +3,7 @@ import argparse
 import time
 
 from rl.algos.td3 import Actor, Learner
-from rl.utils import ReplayBuffer_remote
+from rl.utils import ReplayBuffer_remote, evaluator
 from rl.envs.wrappers import SymmetricEnv
 
 import functools
@@ -131,7 +131,7 @@ if __name__ == "__main__":
         # env_fn = gym_factory(args.env_name)
         #env_fn = make_env_fn(state_est=args.state_est)
         #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv)
+        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
 
@@ -160,9 +160,12 @@ if __name__ == "__main__":
     # create remote visdom logger
     # plotter_id = VisdomLinePlotter.remote(env_name=experiment_name, port=args.viz_port)
 
+    # Create remote evaluator(s)
+    evaluator_ids = evaluator.remote(env_fn, max_traj_len=400)
+
     # Create remote learner (learner will create the evaluators) and replay buffer
     memory_id = ReplayBuffer_remote.remote(args.replay_size, experiment_name, args)
-    learner_id = Learner.remote(env_fn, memory_id, args.training_episodes, obs_dim, action_dim, batch_size=args.batch_size, discount=args.discount, eval_update_freq=args.eval_update_freq, evaluate_freq=args.evaluate_freq, num_of_evaluators=args.num_evaluators, render_policy=args.render_policy, hidden_size=args.hidden_size)
+    learner_id = Learner.remote(env_fn, memory_id, args.training_episodes, obs_dim, action_dim, evaluator_ids, batch_size=args.batch_size, discount=args.discount, eval_update_freq=args.eval_update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size)
 
     # Create remote actors
     actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_actors, args.initial_load_freq,
