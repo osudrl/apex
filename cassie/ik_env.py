@@ -26,13 +26,17 @@ class CassieIKEnv:
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
+        self.foo = "foo"
+
         self.clock_based = clock_based
         self.state_est = state_est
 
         if clock_based:
             self.observation_space = np.zeros(42)
+            self.clock_inds = [40, 41]
             if self.state_est:
                 self.observation_space = np.zeros(48)       # Size for use with state est
+                self.clock_inds = [46, 47]
         else:
             self.observation_space = np.zeros(80)
             if self.state_est:
@@ -74,7 +78,6 @@ class CassieIKEnv:
 
         # Output of Cassie's state estimation code
         self.cassie_state = state_out_t()
-
 
     def step_simulation(self, action):
 

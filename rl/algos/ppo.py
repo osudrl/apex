@@ -45,6 +45,12 @@ class PPOBuffer:
 
         self.ptr, self.path_idx = 0, 0
     
+    def __len__(self):
+        return len(self.states)
+
+    def storage_size(self):
+        return len(self.states)
+
     def store(self, state, action, reward, value):
         """
         Append one timestep of agent-environment interaction to the buffer.
@@ -215,8 +221,6 @@ class PPO:
                 traj_len += 1
                 num_steps += 1
 
-            self.total_steps += num_steps
-
             value, _ = policy.act(state)
             memory.finish_path(last_val=(not done) * value.numpy())
 
@@ -246,6 +250,8 @@ class PPO:
                 merged.ep_lens    += buf.ep_lens
 
             return merged
+
+        
 
         return merge(result)
 
@@ -278,6 +284,7 @@ class PPO:
             minibatch_size = self.minibatch_size or advantages.numel()
 
             print("timesteps in batch: %i" % advantages.numel())
+            self.total_steps += advantages.numel()
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
 
@@ -358,14 +365,14 @@ class PPO:
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
-                logger.record('Return (test)', avg_eval_reward, self.total_steps, 'Return', x_var_name='Timesteps', split_name='test')
-                logger.record('Return (batch)', np.mean(batch.ep_returns), self.total_steps, 'Return', x_var_name='Timesteps', split_name='batch')
-                logger.record('Mean Eplen', np.mean(batch.ep_lens), self.total_steps, 'Mean Eplen', x_var_name='Timesteps', split_name='batch')
+                logger.record('Return (test)', avg_eval_reward, itr, 'Return', x_var_name='Iterations', split_name='test')
+                logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
+                logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
 
-                logger.record('Mean KL Div', kl, self.total_steps, 'Mean KL Div', x_var_name='Timesteps', split_name='batch')
-                logger.record('Mean Entropy', entropy, self.total_steps, 'Mean Entropy', x_var_name='Timesteps', split_name='batch')
+                logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
+                logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
 
-                logger.record('Iteration', itr, self.total_steps, 'Iterations', x_var_name='Timesteps', split_name='batch')
+                logger.record('Timesteps', self.total_steps, itr, 'Timesteps', x_var_name='Iterations', split_name=None)
 
                 logger.dump()
 

@@ -4,6 +4,9 @@ cassie/cassiemujoco/mjkey.txt
 cassie/cassiemujoco/mjpro150/
 cassie/pickled
 sim-to-real/
+cassie/cassieIK_SL.pt
+cassie/taskspace_to_jointpos.pt
+.vscode/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

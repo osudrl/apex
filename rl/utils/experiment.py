@@ -8,8 +8,8 @@ from .logging import Logger
 from rl.envs import Normalize, Vectorize
 
 
-def run_experiment(algo, policy, env_fn, args, log=True, monitor=False, render=False):
-    logger = Logger(args, env_name=args.name, viz=monitor) if log else None
+def run_experiment(algo, policy, env_fn, args, experiment_name, log=True, monitor=False, render=False):
+    logger = Logger(args, env_name=experiment_name, viz=monitor) if log else None
 
     # HOTFIX for Patrick's desktop: (MP is buggy on it for some reason)
     if render:

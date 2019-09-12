@@ -2,8 +2,8 @@ import ray
 import argparse
 import time
 
-from rl.algos.td3 import Actor, Learner
-from rl.utils import ReplayBuffer_remote, evaluator
+from rl.algos.td3 import Actor, Learner, evaluator
+from rl.utils import ReplayBuffer_remote
 from rl.envs.wrappers import SymmetricEnv
 
 import functools
@@ -48,61 +48,42 @@ def gym_factory(path, **kwargs):
 parser = argparse.ArgumentParser()
 
 # args common for actors and learners
-# environment name
-parser.add_argument("--env_name", default="Cassie-mimic-v0")
-parser.add_argument("--hidden_size", default=256)
-# use state estimator or not
-parser.add_argument("--state_est", type=bool, default=True)
-# mirror actions or not
-parser.add_argument("--mirror", type=bool, default=False)
+parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
+parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
+parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
+parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
 
 # learner specific args
-# replay buffer size
-parser.add_argument("--replay_size", default=1e8, type=int)
-# Max time steps to run environment for
-parser.add_argument("--max_timesteps", default=1e8, type=float)
-parser.add_argument("--training_episodes", default=10000000,
-                    type=float)           # Max episodes to learn from
-# Batch size for both actor and critic
-parser.add_argument("--batch_size", default=500, type=int)
-# exploration/exploitation discount factor
-parser.add_argument("--discount", default=0.99, type=float)
-# target update rate (tau)
-parser.add_argument("--tau", default=0.005, type=float)
-# how often to update learner
-parser.add_argument("--eval_update_freq", default=10, type=int)
-# how often to evaluate learner
-parser.add_argument("--evaluate_freq", default=50, type=int)
+parser.add_argument("--replay_size", default=1e8, type=int)                     # Max size of replay buffer
+parser.add_argument("--max_timesteps", default=1e8, type=float)                 # Max time steps to run environment for
+parser.add_argument("--training_episodes", default=10000000, type=float)        # Max episodes to learn from
+parser.add_argument("--batch_size", default=4096, type=int)                     # Batch size for both actor and critic
+parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
+parser.add_argument("--tau", default=0.005, type=float)                         # target update rate (tau)
+parser.add_argument("--eval_update_freq", default=10, type=int)                 # how often to update learner
+parser.add_argument("--evaluate_freq", default=50, type=int)                    # how often to evaluate learner
 
 # actor specific args
-# Number of actors
-parser.add_argument("--num_actors", default=1, type=int)
-# Policy name
-parser.add_argument("--policy_name", default="TD3")
-# How many time steps purely random policy is run for
-parser.add_argument("--start_timesteps", default=1e4, type=int)
-# initial amount of time between loading global model
-parser.add_argument("--initial_load_freq", default=10, type=int)
-# Std of Gaussian exploration noise (used to be 0.1)
-parser.add_argument("--act_noise", default=0.1, type=float)
+parser.add_argument("--num_actors", default=1, type=int)                        # Number of actors
+parser.add_argument("--policy_name", default="TD3")                             # Policy name
+parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
+parser.add_argument("--initial_load_freq", default=10, type=int)                # initial amount of time between loading global model
+parser.add_argument("--act_noise", default=0.1, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
 parser.add_argument('--param_noise', type=bool, default=True)                   # param noise
-# noise scale for param noise
-parser.add_argument('--noise_scale', type=float, default=0.3)
-# initial amount of time between loading global model
-parser.add_argument("--taper_load_freq", type=bool, default=True)
-# Visualize actors in visdom or not
-parser.add_argument("--viz_actors", type=bool, default=False)
+parser.add_argument('--noise_scale', type=float, default=0.3)                   # noise scale for param noise
+parser.add_argument("--taper_load_freq", type=bool, default=True)               # initial amount of time between loading global model
+parser.add_argument("--viz_actors", type=bool, default=False)                   # Visualize actors in visdom or not
 
 # evaluator args
 parser.add_argument("--num_trials", default=10, type=int)                       # Number of evaluators
 parser.add_argument("--num_evaluators", default=10, type=int)                   # Number of evaluators
-parser.add_argument("--viz_port", default=8097)                                # visdom server port
-parser.add_argument("--render_policy", type=bool, default=False)               # render during eval
+parser.add_argument("--viz_port", default=8097)                                 # visdom server port
+parser.add_argument("--render_policy", type=bool, default=False)                # render during eval
 
 # misc args
 parser.add_argument("--name", type=str, default="model")
 parser.add_argument("--seed", type=int, default=1, help="RNG seed")
-parser.add_argument("--logdir", type=str, default="./logs/apex/experiments/",
+parser.add_argument("--logdir", type=str, default="./logs/td3/experiments/",
                     help="Where to log diagnostics to")
 
 args = parser.parse_args()
@@ -132,6 +113,7 @@ if __name__ == "__main__":
         #env_fn = make_env_fn(state_est=args.state_est)
         #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
         env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+        print(env_fn().clock_inds)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
 

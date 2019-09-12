@@ -143,6 +143,7 @@ class MirrorPPO(PPO):
             minibatch_size = self.minibatch_size or advantages.numel()
 
             print("timesteps in batch: %i" % advantages.numel())
+            self.total_steps += advantages.numel()
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
 
@@ -170,6 +171,7 @@ class MirrorPPO(PPO):
 
                 logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
                 logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
+                logger.record('Timesteps', self.total_steps, itr, 'Timesteps', x_var_name='Iterations', split_name=None)
 
                 logger.dump()
 
