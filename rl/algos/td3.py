@@ -1,4 +1,4 @@
-from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_parameters
+from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_parameters, evaluator
 from rl.policies.td3_actor_critic import LN_Actor as LN_Actor, LN_TD3Critic as Critic
 
 import time
@@ -26,55 +26,6 @@ def select_action(perturbed_policy, unperturbed_policy, state, device, param_noi
         return perturbed_policy(state).cpu().data.numpy().flatten()
     else:
         return unperturbed_policy(state).cpu().data.numpy().flatten()
-
-def select_greedy_action(Policy, state, device):
-    state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-
-    Policy.eval()
-
-    return Policy(state).cpu().data.numpy().flatten()
-
-@ray.remote
-class evaluator():
-    def __init__(self, env_fn, max_traj_len, render_policy=False):
-        self.env = env_fn()
-
-        self.max_traj_len = max_traj_len
-
-        self.render_policy = render_policy
-
-    def evaluate_policy(self, policy, eval_episodes):
-
-        avg_reward = 0.0
-        avg_eplen = 0.0
-
-        for _ in range(eval_episodes):
-
-            state = self.env.reset()
-            done = False
-
-            # evaluate performance of the passed model for one episode
-            while avg_eplen < self.max_traj_len and not done:
-                if self.render_policy:
-                    env.render()
-
-                # use model's greedy policy to predict action
-                action = select_greedy_action(policy, np.array(state), device)
-
-                # take a step in the simulation
-                next_state, reward, done, _ = self.env.step(action)
-
-                # update state
-                state = next_state
-
-                # increment total_reward and step count
-                avg_reward += reward
-                avg_eplen += 1
-
-        avg_reward /= eval_episodes
-        avg_eplen /= eval_episodes
-
-        return avg_reward, avg_eplen
 
 class ActorBuffer(object):
     def __init__(self, size):
@@ -127,7 +78,7 @@ class ActorBuffer(object):
 
 @ray.remote
 class Actor():
-    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256):
+    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256, viz_actor=False):
         self.env = env_fn()
 
         self.state_dim = self.env.observation_space.shape[0]
@@ -147,8 +98,7 @@ class Actor():
 
         # Initialize param noise (or set to none)
         self.noise_scale = noise_scale
-        self.param_noise = AdaptiveParamNoiseSpec(
-            initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
+        self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
 
         # Termination condition: max episode length
         self.max_traj_len = 400
@@ -165,6 +115,8 @@ class Actor():
         self.local_buffer = ActorBuffer(self.max_traj_len * self.load_freq)
 
         self.id = id
+
+        self.viz_actor = viz_actor
 
         self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(
             self.learner_id.get_global_policy.remote())
@@ -197,8 +149,7 @@ class Actor():
                         states, perturbed_actions = self.local_buffer.get_transitions()
                         unperturbed_actions = np.array([select_action(
                             self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
-                        dist = distance_metric(
-                            perturbed_actions, unperturbed_actions)
+                        dist = distance_metric(perturbed_actions, unperturbed_actions)
                         self.param_noise.adapt(dist)
                         # print("loaded global model and adapted parameter noise. Load duration = {}".format(duration))
                         # print("loaded global model and adapted parameter noise")
@@ -252,8 +203,8 @@ class Actor():
                     self.local_buffer.add(transition)
                     self.memory_id.add.remote(transition)
 
-                    # call update from model server
-                    self.learner_id.update_and_evaluate.remote()
+                    # # call update from model server
+                    #= self.learner_id.update_eval_model.remote()
 
                     # update state
                     obs = new_obs
@@ -262,59 +213,61 @@ class Actor():
                     episode_timesteps += 1
                     self.actor_timesteps += 1
 
+                    # TODO: Is this inefficient because of how many actors there are?
                     # increment global step count
                     self.learner_id.increment_step_count.remote()
 
                 # episode is over, increment episode count and plot episode info
                 self.episode_num += 1
 
-                # pass episode details to visdom logger on memory server
-                self.memory_id.plot_actor_results.remote(
-                    self.id, self.actor_timesteps, episode_reward)
+                # # call update from model server
+                self.learner_id.update_model.remote(iterations=episode_timesteps)
 
-                ray.wait(
-                    [self.learner_id.increment_episode_count.remote()], num_returns=1)
+                # pass episode details to visdom logger on memory server
+                if(self.viz_actor):
+                    self.memory_id.plot_actor_results.remote(
+                        self.id, self.actor_timesteps, episode_reward)
+
+                # # TODO: check if this is inefficient
+                # # increment episode count and wait for that to complete
+                # ray.wait([self.learner_id.increment_episode_count.remote()], num_returns=1)
 
                 if self.taper_load_freq and self.taper_timesteps >= 2000:
                     self.load_freq = self.load_freq // 2
                     print("Increased load frequency")
 
+                
+
 
 @ray.remote(num_gpus=0)
 class Learner():
-    def __init__(self, env_fn, memory_server, learning_episodes, state_space, action_space, evaluator_id,
-                 batch_size=500, discount=0.99, tau=0.005, eval_update_freq=10,
-                 target_update_freq=2000, evaluate_freq=50, render_policy=False, hidden_size=256):
-
-        # THIS WORKS, but rest doesn't when trying to use GPU for learner
-        print("This function is allowed to use GPUs {}.".format(ray.get_gpu_ids()))
+    def __init__(self, env_fn, memory_server, max_timesteps, state_space, action_space,
+                 batch_size=500, discount=0.99, tau=0.005, update_freq=10,
+                 target_update_freq=2000, evaluate_freq=1000, render_policy=True, hidden_size=256):
 
         self.device = torch.device('cpu')
 
         # keep uninstantiated constructor for evaluator
         self.env_fn = env_fn
 
-        # evaluator ids
-        self.evaluator_id = evaluator_id
-
         self.env = env_fn()
-        self.learning_episodes = learning_episodes
-        #self.max_timesteps = max_timesteps
+        self.max_timesteps = max_timesteps
 
-        # self.start_memory_size=1000
         self.batch_size = batch_size
 
-        self.eval_update_freq = eval_update_freq
+        self.update_freq = update_freq
         self.target_update_freq = target_update_freq
         self.evaluate_freq = evaluate_freq     # how many steps before each eval
 
+        self.num_of_evaluators = 4
+
         # counters
-        self.step_count = 0
+        self.step_count = 0                     # global step count
         self.eval_step_count = 0
         self.target_step_count = 0
 
-        self.episode_count = 0
-        self.eval_episode_count = 0
+        # self.episode_count = 0
+        # self.eval_episode_count = 0
 
         self.update_counter = 0
 
@@ -356,7 +309,7 @@ class Learner():
         # visdom plotter
         # self.plotter_id = plotter_id
 
-        # evaluate learned policy
+        # evaluate untrained policy
         self.evaluate()
 
         # also dump ray timeline
@@ -365,58 +318,29 @@ class Learner():
         # render policy?
         self.render_policy = render_policy
 
-        self.update_and_evaluate()
-
     def increment_step_count(self):
         self.step_count += 1        # global step count
+        self.eval_step_count += 1   # eval step count
 
-        # increment models' step counts
-        # step count between calls of updating policy and targets (TD3)
-        self.eval_step_count += 1
-        self.target_step_count += 1   # time between each eval
-
-    def update_and_evaluate(self):
-
-        # update eval model every 'eval_update_freq'
-        if self.eval_step_count >= self.eval_update_freq:
-            # reset step count
-            self.eval_step_count = 0
-
-            # update model
-            self.update_eval_model()
-
-    def increment_episode_count(self):
-        self.episode_count += 1
-        self.eval_episode_count += 1
-        # print(self.episode_count)
-
-        if self.eval_episode_count >= self.evaluate_freq:
-
-            self.eval_episode_count = 0
-
-            # evaluate learned policy
-            self.evaluate()            
-
-            # save policy if it has highest return so far
-            if self.highest_return < self.results[-1][0]:
-                self.highest_return = self.results[-1][0]
-                self.save()
-
-            # also dump ray timelines
-            # ray.timeline(filename="./ray_timeline.json")
-            # ray.object_transfer_timeline(filename="./ray_object_transfer_timeline.json")
+    # def increment_episode_count(self):
+    #     self.episode_count += 1
+    #     self.eval_episode_count += 1
+    #     # print(self.episode_count)
 
     def is_training_finished(self):
-        return self.episode_count >= self.learning_episodes
+        return self.step_count >= self.max_timesteps
 
-    def update_eval_model(self, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
-        with ray.profile("Learner optimization loop", extra_data={'Episode count': str(self.episode_count)}):
+    def update_model(self, iterations, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
 
-            start_time = time.time()
+        start_time = time.time()
 
-            if ray.get(self.memory.storage_size.remote()) < self.batch_size * 2:
-                #print("not enough experience yet")
-                return
+        if ray.get(self.memory.storage_size.remote()) < self.batch_size:
+            #print("not enough experience yet")
+            time.sleep(1.0)
+            return
+
+        # TODO: figure out if this is bottleneck for distributed setting, or is actually essential for fast learning
+        for it in range(iterations):
 
             # randomly sample a mini-batch transition from memory_server
             x, y, u, r, d = ray.get(self.memory.sample.remote(self.batch_size))
@@ -432,7 +356,7 @@ class Learner():
                 0, policy_noise).to(self.device)
             noise = noise.clamp(-noise_clip, noise_clip)
             next_action = (self.actor_target(next_state) +
-                           noise).clamp(-self.max_action, self.max_action)
+                            noise).clamp(-self.max_action, self.max_action)
 
             # Compute the target Q value
             target_Q1, target_Q2 = self.critic_target(next_state, next_action)
@@ -480,18 +404,48 @@ class Learner():
 
                 self.memory.plot_actor_loss.remote(self.update_counter, actor_loss)
 
-            #self.memory.plot_learner_progress.remote(self.update_counter, self.step_count)
+                # Evaluate and possibly save
+                if self.eval_step_count > self.evaluate_freq:
+                    self.eval_step_count = 0
+                    self.results.append(self.evaluate(trials=self.num_of_evaluators))
 
-    def evaluate(self, trials=30, render_policy=False):
+                    # save policy if it has highest return so far
+                    if self.highest_return < self.results[-1]:
+                        self.highest_return = self.results[-1]
+                        self.save()
+
+    def evaluate(self, trials=30, render_policy=True):
 
         start_time = time.time()
 
-        # call evaluators and get results
-        self.results.append(ray.get(self.evaluator_id.evaluate_policy.remote(self.actor, 1)))
-        avg_reward, avg_eplen = self.results[-1]
+        # initialize evaluators
+        evaluators = [evaluator.remote(self.env_fn, self.actor, max_traj_len=400)
+                      for _ in range(self.num_of_evaluators)]
+
+        total_rewards = 0
+        total_eplen = 0
+
+        for t in range(trials):
+            # get result from a worker
+            ready_ids, _ = ray.wait(evaluators, num_returns=1)
+
+            # update total rewards
+            rewards, eplens = ray.get(ready_ids[0])
+            total_rewards += rewards
+            total_eplen += eplens
+
+            # remove ready_ids from the evaluators
+            evaluators.remove(ready_ids[0])
+
+            # start a new worker
+            evaluators.append(evaluator.remote(self.env_fn, self.actor, self.max_traj_len))
+
+        # return average reward
+        avg_reward = total_rewards / trials
+        avg_eplen = total_eplen / trials
         self.memory.plot_eval_results.remote(self.step_count, avg_reward, avg_eplen, self.update_counter)
 
-        print('Timestep {} | eval time: {}'.format(self.step_count, time.time()-start_time))
+        print("eval time: {}".format(time.time()-start_time))
 
         return avg_reward
 

@@ -2,7 +2,7 @@ import ray
 import argparse
 import time
 
-from rl.algos.td3 import Actor, Learner, evaluator
+from rl.algos.td3 import Actor, Learner
 from rl.utils import ReplayBuffer_remote
 from rl.envs.wrappers import SymmetricEnv
 
@@ -55,23 +55,22 @@ parser.add_argument("--mirror", default=False, action='store_true')             
 
 # learner specific args
 parser.add_argument("--replay_size", default=1e8, type=int)                     # Max size of replay buffer
-parser.add_argument("--max_timesteps", default=1e8, type=float)                 # Max time steps to run environment for
-parser.add_argument("--training_episodes", default=10000000, type=float)        # Max episodes to learn from
-parser.add_argument("--batch_size", default=4096, type=int)                     # Batch size for both actor and critic
+parser.add_argument("--max_timesteps", default=1e8, type=float)                 # Max time steps to run environment for 1e8 == 100,000,000
+parser.add_argument("--batch_size", default=400, type=int)                      # Batch size for both actor and critic
 parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
 parser.add_argument("--tau", default=0.005, type=float)                         # target update rate (tau)
-parser.add_argument("--eval_update_freq", default=10, type=int)                 # how often to update learner
-parser.add_argument("--evaluate_freq", default=50, type=int)                    # how often to evaluate learner
+parser.add_argument("--update_freq", default=2, type=int)                      # how often to update learner
+parser.add_argument("--evaluate_freq", default=500, type=int)                    # how often to evaluate learner
 
 # actor specific args
-parser.add_argument("--num_actors", default=1, type=int)                        # Number of actors
+parser.add_argument("--num_actors", default=4, type=int)                        # Number of actors
 parser.add_argument("--policy_name", default="TD3")                             # Policy name
 parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
-parser.add_argument("--initial_load_freq", default=10, type=int)                # initial amount of time between loading global model
+parser.add_argument("--initial_load_freq", default=1, type=int)                # initial amount of time between loading global model
 parser.add_argument("--act_noise", default=0.1, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
-parser.add_argument('--param_noise', type=bool, default=True)                   # param noise
+parser.add_argument('--param_noise', type=bool, default=False)                   # param noise
 parser.add_argument('--noise_scale', type=float, default=0.3)                   # noise scale for param noise
-parser.add_argument("--taper_load_freq", type=bool, default=True)               # initial amount of time between loading global model
+parser.add_argument("--taper_load_freq", type=bool, default=False)               # initial amount of time between loading global model
 parser.add_argument("--viz_actors", type=bool, default=False)                   # Visualize actors in visdom or not
 
 # evaluator args
@@ -142,19 +141,12 @@ if __name__ == "__main__":
     # create remote visdom logger
     # plotter_id = VisdomLinePlotter.remote(env_name=experiment_name, port=args.viz_port)
 
-    # Create remote evaluator(s)
-    evaluator_ids = evaluator.remote(env_fn, max_traj_len=400)
-
     # Create remote learner (learner will create the evaluators) and replay buffer
     memory_id = ReplayBuffer_remote.remote(args.replay_size, experiment_name, args)
-    learner_id = Learner.remote(env_fn, memory_id, args.training_episodes, obs_dim, action_dim, evaluator_ids, batch_size=args.batch_size, discount=args.discount, eval_update_freq=args.eval_update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size)
+    learner_id = Learner.remote(env_fn, memory_id, args.max_timesteps, obs_dim, action_dim, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size)
 
     # Create remote actors
-    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_actors, args.initial_load_freq,
-                               args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size) for i in range(args.num_actors)]
-
-    # # start learner loop process (non-blocking)
-    # learner_id.update_and_evaluate.remote()
+    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_actors, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size, viz_actor=args.viz_actors) for i in range(args.num_actors)]
 
     start = time.time()
 

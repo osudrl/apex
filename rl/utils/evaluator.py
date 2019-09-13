@@ -7,7 +7,7 @@ import numpy as np
 
 device = torch.device("cpu")
 
-def select_greedy_action(Policy, state, device):
+def select_action(Policy, state, device):
     state = torch.FloatTensor(state.reshape(1, -1)).to(device)
 
     Policy.eval()
@@ -15,43 +15,55 @@ def select_greedy_action(Policy, state, device):
     return Policy(state).cpu().data.numpy().flatten()
 
 @ray.remote
-class evaluator():
-    def __init__(self, env_fn, max_traj_len, render_policy=False):
-        self.env = env_fn()
+def evaluator(env, policy, max_traj_len, render_policy=False):
 
-        self.max_traj_len = max_traj_len
+    env = env()
 
-        self.render_policy = render_policy
+    state = env.reset()
+    total_reward = 0
+    total_steps = 0
+    steps = 0
+    done = False
 
-    def evaluate_policy(self, policy, eval_episodes):
+    # evaluate performance of the passed model for one episode
+    while steps < max_traj_len and not done:
+        if render_policy:
+            env.render()
 
-        avg_reward = 0.0
-        avg_eplen = 0.0
+        # use model's greedy policy to predict action
+        action = select_action(policy, np.array(state), device)
 
-        for _ in range(eval_episodes):
+        # take a step in the simulation
+        next_state, reward, done, _ = env.step(action)
 
-            state = self.env.reset()
-            done = False
+        # update state
+        state = next_state
 
-            # evaluate performance of the passed model for one episode
-            while avg_eplen < self.max_traj_len and not done:
-                if self.render_policy:
-                    env.render()
+        # increment total_reward and step count
+        total_reward += reward
+        steps += 1
+        total_steps += 1
 
-                # use model's greedy policy to predict action
-                action = select_greedy_action(policy, np.array(state), device)
+    return total_reward, total_steps
 
-                # take a step in the simulation
-                next_state, reward, done, _ = self.env.step(action)
 
-                # update state
-                state = next_state
+def evaluate_policy(env, policy, max_episode_steps, eval_episodes=1):
+    avg_reward = 0.
+    for _ in range(eval_episodes):
+        obs = env.reset()
+        t = 0
+        done_bool = 0.0
+        while not done_bool:
+            env.render()
+            t += 1
+            action = select_action(policy, np.array(obs), device)
+            obs, reward, done, _ = env.step(action)
+            done_bool = 1.0 if t + 1 == max_episode_steps else float(done)
+            avg_reward += reward
 
-                # increment total_reward and step count
-                avg_reward += reward
-                avg_eplen += 1
+    avg_reward /= eval_episodes
 
-        avg_reward /= eval_episodes
-        avg_eplen /= eval_episodes
-
-        return avg_reward, avg_eplen
+    # print("---------------------------------------")
+    # print("Evaluation over %d episodes: %f" % (eval_episodes, avg_reward))
+    # print("---------------------------------------")
+    return avg_reward

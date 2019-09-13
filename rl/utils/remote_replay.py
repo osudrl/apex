@@ -84,6 +84,6 @@ class ReplayBuffer_remote(object):
     def plot_critic_loss(self, update_count, critic_loss):
         self.logger.plot('Critic Loss', 'Update Count',split_name='train',title_name='Critic Network Loss', x=update_count, y=critic_loss)
 
-    # Used to verify that updates are not being bottlenecked (should keep going up straight)
-    def plot_learner_progress(self, update_count, step_count):
-        self.logger.plot('Step Count', 'Update Count',split_name='train',title_name='Total Updates', x=step_count, y=update_count)
+    # # Used to verify that updates are not being bottlenecked (should keep going up straight)
+    # def plot_learner_progress(self, update_count, step_count):
+    #     self.logger.plot('Step Count', 'Update Count',split_name='train',title_name='Total Updates', x=step_count, y=update_count)
