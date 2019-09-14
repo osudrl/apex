@@ -80,6 +80,7 @@ class ActorBuffer(object):
 class Actor():
     def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256, viz_actor=False):
         self.env = env_fn()
+        self.cassieEnv = True
 
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.shape[0]
@@ -118,123 +119,114 @@ class Actor():
 
         self.viz_actor = viz_actor
 
-        self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(
-            self.learner_id.get_global_policy.remote())
+        self.policy, self.training_done = ray.get(self.learner_id.get_global_policy.remote())
 
     def collect_experience(self):
 
-        with ray.profile("Actor collection loop", extra_data={'Actor id': str(self.id)}):
-            # collection loop -  COLLECTS EPISODES OF EXPERIENCE UNTIL training_done
-            while True:
+        while not self.training_done:
 
-                cassieEnv = True
+            if self.actor_timesteps % self.load_freq == 0:
+                # PUTTING WAIT ON THIS SHOULD MAKE THIS EXACT SAME AS NON-DISTRIBUTED, if using one actor
+                # Query learner for latest model and termination flag
 
-                if self.actor_timesteps % self.load_freq == 0:
-                    # PUTTING WAIT ON THIS SHOULD MAKE THIS EXACT SAME AS NON-DISTRIBUTED, if using one actor
-                    # Query learner for latest model and termination flag
+                # time this for debugging (need to implement sharded parameter server or not)
+                # start = time.time()
 
-                    # time this for debugging (need to implement sharded parameter server or not)
-                    # start = time.time()
+                self.policy, self.training_done = ray.get(self.learner_id.get_global_policy.remote())
 
-                    self.policy, self.training_done, self.global_timestep_at_last_update = ray.get(
-                        self.learner_id.get_global_policy.remote())
+                # duration = time.time() - start
 
-                    # duration = time.time() - start
+                #global_policy_state_dict, training_done = ray.get(self.learner_id.get_global_policy.remote())
+                # self.policy.load_state_dict(global_policy_state_dict)
 
-                    #global_policy_state_dict, training_done = ray.get(self.learner_id.get_global_policy.remote())
-                    # self.policy.load_state_dict(global_policy_state_dict)
+                # If we have loaded a global model, we also need to update the param_noise based on the distance metric
+                if self.param_noise is not None:
+                    states, perturbed_actions = self.local_buffer.get_transitions()
+                    unperturbed_actions = np.array([select_action(
+                        self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
+                    dist = distance_metric(perturbed_actions, unperturbed_actions)
+                    self.param_noise.adapt(dist)
+                    # print("loaded global model and adapted parameter noise. Load duration = {}".format(duration))
+                    print("loaded global model and adapted parameter noise")
+                else:
+                    # print("loaded global model.  Load duration = {}".format(duration))
+                    print("loaded global model.")
+                    pass
 
-                    # If we have loaded a global model, we also need to update the param_noise based on the distance metric
-                    if self.param_noise is not None:
-                        states, perturbed_actions = self.local_buffer.get_transitions()
-                        unperturbed_actions = np.array([select_action(
-                            self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
-                        dist = distance_metric(perturbed_actions, unperturbed_actions)
-                        self.param_noise.adapt(dist)
-                        # print("loaded global model and adapted parameter noise. Load duration = {}".format(duration))
-                        # print("loaded global model and adapted parameter noise")
-                    else:
-                        # print("loaded global model.  Load duration = {}".format(duration))
-                        # print("loaded global model.")
-                        pass
+            obs = self.env.reset()
+            done = False
+            episode_reward = 0
+            episode_timesteps = 0
 
-                if self.training_done:
-                    break
+            # nested collection loop - COLLECTS TIMESTEPS OF EXPERIENCE UNTIL episode is over
+            while episode_timesteps < self.max_traj_len and not done:
 
-                obs = self.env.reset()
-                done = False
-                episode_reward = 0
-                episode_timesteps = 0
+                # self.env.render()
 
-                # nested collection loop - COLLECTS TIMESTEPS OF EXPERIENCE UNTIL episode is over
-                while episode_timesteps < self.max_traj_len and not done:
+                # Param Noise
+                if self.param_noise:
+                    perturb_actor_parameters(
+                        self.policy_perturbed, self.policy, self.param_noise, device)
 
-                    # self.env.render()
+                # Select action randomly or according to policy
+                if self.actor_timesteps < self.start_timesteps:
+                    #print("selecting action randomly {}".format(done_bool))
+                    action = torch.randn(
+                        self.env.action_space.shape[0]) if self.cassieEnv is True else self.env.action_space.sample()
+                    action = action.numpy()
+                else:
+                    #print("selecting from policy")
+                    action = select_action(self.policy_perturbed, self.policy, np.array(
+                        obs), device, param_noise=self.param_noise)
+                    if self.act_noise != 0:
+                        # action = (action + np.random.normal(0, self.act_noise,
+                        #                                     size=self.env.action_space.shape[0])).clip(self.env.action_space.low, self.env.action_space.high)
+                        action = (action + np.random.normal(0, self.act_noise,
+                                                                size=self.env.action_space.shape[0])).clip(-1, 1)
 
-                    # Param Noise
-                    if self.param_noise:
-                        perturb_actor_parameters(
-                            self.policy_perturbed, self.policy, self.param_noise, device)
+                # Perform action
+                new_obs, reward, done, _ = self.env.step(action)
+                done_bool = 1.0 if episode_timesteps + \
+                    1 == self.max_traj_len else float(done)
+                episode_reward += reward
 
-                    # Select action randomly or according to policy
-                    if self.actor_timesteps < self.start_timesteps:
-                        #print("selecting action randomly {}".format(done_bool))
-                        action = torch.randn(
-                            self.env.action_space.shape[0]) if cassieEnv is True else self.env.action_space.sample()
-                        action = action.numpy()
-                    else:
-                        #print("selecting from policy")
-                        action = select_action(self.policy_perturbed, self.policy, np.array(
-                            obs), device, param_noise=self.param_noise)
-                        if self.act_noise != 0:
-                            # action = (action + np.random.normal(0, self.act_noise,
-                            #                                     size=self.env.action_space.shape[0])).clip(self.env.action_space.low, self.env.action_space.high)
-                            action = (action + np.random.normal(0, self.act_noise,
-                                                                  size=self.env.action_space.shape[0])).clip(-1, 1)
-
-                    # Perform action
-                    new_obs, reward, done, _ = self.env.step(action)
-                    done_bool = 1.0 if episode_timesteps + \
-                        1 == self.max_traj_len else float(done)
-                    episode_reward += reward
-
-                    # Store data in replay buffer
-                    transition = (obs, new_obs, action, reward, done_bool)
-                    self.local_buffer.add(transition)
-                    self.memory_id.add.remote(transition)
-
-                    # # call update from model server
-                    #= self.learner_id.update_eval_model.remote()
-
-                    # update state
-                    obs = new_obs
-
-                    # increment step counts
-                    episode_timesteps += 1
-                    self.actor_timesteps += 1
-
-                    # TODO: Is this inefficient because of how many actors there are?
-                    # increment global step count
-                    self.learner_id.increment_step_count.remote()
-
-                # episode is over, increment episode count and plot episode info
-                self.episode_num += 1
+                # Store data in replay buffer
+                transition = (obs, new_obs, action, reward, done_bool)
+                self.local_buffer.add(transition)
+                self.memory_id.add.remote(transition)
 
                 # # call update from model server
-                self.learner_id.update_model.remote(iterations=episode_timesteps)
+                # self.learner_id.update_model.remote(iterations=1)
+                #= self.learner_id.update_eval_model.remote()
 
-                # pass episode details to visdom logger on memory server
-                if(self.viz_actor):
-                    self.memory_id.plot_actor_results.remote(
-                        self.id, self.actor_timesteps, episode_reward)
+                # update state
+                obs = new_obs
 
-                # # TODO: check if this is inefficient
-                # # increment episode count and wait for that to complete
-                # ray.wait([self.learner_id.increment_episode_count.remote()], num_returns=1)
+                # increment step counts
+                episode_timesteps += 1
+                self.actor_timesteps += 1
 
-                if self.taper_load_freq and self.taper_timesteps >= 2000:
-                    self.load_freq = self.load_freq // 2
-                    print("Increased load frequency")
+                # TODO: Is this inefficient because of how many actors there are?
+                # increment global step count
+                self.learner_id.increment_step_count.remote()
+
+            # episode is over, increment episode count and plot episode info
+            self.episode_num += 1
+
+            # # call update from model server
+            # self.learner_id.update_model.remote(iterations=episode_timesteps)
+
+            # pass episode details to visdom logger on memory server
+            if(self.viz_actor):
+                self.memory_id.plot_actor_results.remote(self.id, self.actor_timesteps, episode_reward)
+
+            # # TODO: check if this is inefficient
+            # # increment episode count and wait for that to complete
+            # ray.wait([self.learner_id.increment_episode_count.remote()], num_returns=1)
+
+            if self.taper_load_freq and self.taper_timesteps >= 2000:
+                self.load_freq = self.load_freq // 2
+                print("Increased load frequency")
 
                 
 
@@ -309,14 +301,12 @@ class Learner():
         # visdom plotter
         # self.plotter_id = plotter_id
 
-        # evaluate untrained policy
-        self.evaluate()
-
-        # also dump ray timeline
-        # ray.timeline(filename="./ray_timeline.json")
-
         # render policy?
         self.render_policy = render_policy
+
+    def train(self):
+        while self.step_count < self.max_timesteps:
+            self.update_model()
 
     def increment_step_count(self):
         self.step_count += 1        # global step count
@@ -330,90 +320,91 @@ class Learner():
     def is_training_finished(self):
         return self.step_count >= self.max_timesteps
 
-    def update_model(self, iterations, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
+    def update_model(self, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
+
+        foo = ray.get(self.memory.storage_size.remote())
+
+        if foo < self.batch_size:
+            # print("not enough experience yet: {}".format(foo))
+            return
 
         start_time = time.time()
 
-        if ray.get(self.memory.storage_size.remote()) < self.batch_size:
-            #print("not enough experience yet")
-            time.sleep(1.0)
-            return
+        # randomly sample a mini-batch transition from memory_server
+        x, y, u, r, d = ray.get(self.memory.sample.remote(self.batch_size))
+        #print("sampled from replay buffer. Duration = {}".format(time.time() - start_time))
+        state = torch.FloatTensor(x).to(self.device)
+        action = torch.FloatTensor(u).to(self.device)
+        next_state = torch.FloatTensor(y).to(self.device)
+        done = torch.FloatTensor(1 - d).to(self.device)
+        reward = torch.FloatTensor(r).to(self.device)
 
-        # TODO: figure out if this is bottleneck for distributed setting, or is actually essential for fast learning
-        for it in range(iterations):
+        # Select action according to policy and add clipped noise
+        noise = torch.FloatTensor(u).data.normal_(
+            0, policy_noise).to(self.device)
+        noise = noise.clamp(-noise_clip, noise_clip)
+        next_action = (self.actor_target(next_state) +
+                        noise).clamp(-self.max_action, self.max_action)
 
-            # randomly sample a mini-batch transition from memory_server
-            x, y, u, r, d = ray.get(self.memory.sample.remote(self.batch_size))
-            #print("sampled from replay buffer. Duration = {}".format(time.time() - start_time))
-            state = torch.FloatTensor(x).to(self.device)
-            action = torch.FloatTensor(u).to(self.device)
-            next_state = torch.FloatTensor(y).to(self.device)
-            done = torch.FloatTensor(1 - d).to(self.device)
-            reward = torch.FloatTensor(r).to(self.device)
+        # Compute the target Q value
+        target_Q1, target_Q2 = self.critic_target(next_state, next_action)
+        target_Q = torch.min(target_Q1, target_Q2)
+        target_Q = reward + (done * self.discount * target_Q).detach()
 
-            # Select action according to policy and add clipped noise
-            noise = torch.FloatTensor(u).data.normal_(
-                0, policy_noise).to(self.device)
-            noise = noise.clamp(-noise_clip, noise_clip)
-            next_action = (self.actor_target(next_state) +
-                            noise).clamp(-self.max_action, self.max_action)
+        # Get current Q estimates
+        current_Q1, current_Q2 = self.critic(state, action)
 
-            # Compute the target Q value
-            target_Q1, target_Q2 = self.critic_target(next_state, next_action)
-            target_Q = torch.min(target_Q1, target_Q2)
-            target_Q = reward + (done * self.discount * target_Q).detach()
+        # Compute critic loss
+        critic_loss = F.mse_loss(
+            current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-            # Get current Q estimates
-            current_Q1, current_Q2 = self.critic(state, action)
+        # Optimize the critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
 
-            # Compute critic loss
-            critic_loss = F.mse_loss(
-                current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
+        self.memory.plot_critic_loss.remote(self.update_counter, critic_loss)
 
-            # Optimize the critic
-            self.critic_optimizer.zero_grad()
-            critic_loss.backward()
-            self.critic_optimizer.step()
+        self.update_counter += 1            
 
-            self.memory.plot_critic_loss.remote(self.update_counter, critic_loss)
+        # Delayed policy updates
+        if self.update_counter % policy_freq == 0:
 
-            self.update_counter += 1            
+            # print("optimizing at timestep {} | time = {} | replay size = {} | episode count = {} | update count = {} ".format(
+            #     self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.episode_count, self.update_counter))
 
-            # Delayed policy updates
-            if self.update_counter % policy_freq == 0:
+            # Compute actor loss
+            actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
 
-                # print("optimizing at timestep {} | time = {} | replay size = {} | episode count = {} | update count = {} ".format(
-                #     self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.episode_count, self.update_counter))
+            # Optimize the actor
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
 
-                # Compute actor loss
-                actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
+            # Update the frozen target models
+            for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
+                target_param.data.copy_(
+                    self.tau * param.data + (1 - self.tau) * target_param.data)
 
-                # Optimize the actor
-                self.actor_optimizer.zero_grad()
-                actor_loss.backward()
-                self.actor_optimizer.step()
+            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+                target_param.data.copy_(
+                    self.tau * param.data + (1 - self.tau) * target_param.data)
 
-                # Update the frozen target models
-                for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
-                    target_param.data.copy_(
-                        self.tau * param.data + (1 - self.tau) * target_param.data)
+            self.memory.plot_actor_loss.remote(self.update_counter, actor_loss)
 
-                for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
-                    target_param.data.copy_(
-                        self.tau * param.data + (1 - self.tau) * target_param.data)
+            # Evaluate and possibly save
+            if self.eval_step_count > self.evaluate_freq:
+                self.eval_step_count = 0
+                self.results.append(self.evaluate(trials=self.num_of_evaluators))
 
-                self.memory.plot_actor_loss.remote(self.update_counter, actor_loss)
+                # save policy if it has highest return so far
+                if self.highest_return < self.results[-1]:
+                    self.highest_return = self.results[-1]
+                    self.save()
+            
+        #print("optimize time elapsed: {}".format(time.time() - start_time))
 
-                # Evaluate and possibly save
-                if self.eval_step_count > self.evaluate_freq:
-                    self.eval_step_count = 0
-                    self.results.append(self.evaluate(trials=self.num_of_evaluators))
-
-                    # save policy if it has highest return so far
-                    if self.highest_return < self.results[-1]:
-                        self.highest_return = self.results[-1]
-                        self.save()
-
+    # TODO: make evaluator another remote actor to speed this up (currently bottleneck)
     def evaluate(self, trials=30, render_policy=True):
 
         start_time = time.time()
@@ -446,14 +437,14 @@ class Learner():
         self.memory.plot_eval_results.remote(self.step_count, avg_reward, avg_eplen, self.update_counter)
 
         print("eval time: {}".format(time.time()-start_time))
-
         return avg_reward
 
     def test(self):
         return 0
 
     def get_global_policy(self):
-        return self.actor, self.is_training_finished(), self.step_count
+        print("returning global policy")
+        return self.actor, self.is_training_finished()
 
     def get_global_timesteps(self):
         return self.step_count

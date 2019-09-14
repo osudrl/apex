@@ -54,24 +54,24 @@ parser.add_argument("--state_est", default=True, action='store_true')           
 parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
 
 # learner specific args
-parser.add_argument("--replay_size", default=1e8, type=int)                     # Max size of replay buffer
+parser.add_argument("--replay_size", default=1e6, type=int)                     # Max size of replay buffer
 parser.add_argument("--max_timesteps", default=1e8, type=float)                 # Max time steps to run environment for 1e8 == 100,000,000
-parser.add_argument("--batch_size", default=400, type=int)                      # Batch size for both actor and critic
+parser.add_argument("--batch_size", default=100, type=int)                      # Batch size for both actor and critic
 parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
 parser.add_argument("--tau", default=0.005, type=float)                         # target update rate (tau)
 parser.add_argument("--update_freq", default=2, type=int)                      # how often to update learner
 parser.add_argument("--evaluate_freq", default=500, type=int)                    # how often to evaluate learner
 
 # actor specific args
-parser.add_argument("--num_actors", default=4, type=int)                        # Number of actors
+parser.add_argument("--num_actors", default=1, type=int)                        # Number of actors
 parser.add_argument("--policy_name", default="TD3")                             # Policy name
 parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
-parser.add_argument("--initial_load_freq", default=1, type=int)                # initial amount of time between loading global model
+parser.add_argument("--initial_load_freq", default=10, type=int)                # initial amount of time between loading global model
 parser.add_argument("--act_noise", default=0.1, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
 parser.add_argument('--param_noise', type=bool, default=False)                   # param noise
 parser.add_argument('--noise_scale', type=float, default=0.3)                   # noise scale for param noise
-parser.add_argument("--taper_load_freq", type=bool, default=False)               # initial amount of time between loading global model
-parser.add_argument("--viz_actors", type=bool, default=False)                   # Visualize actors in visdom or not
+parser.add_argument("--taper_load_freq", type=bool, default=True)               # initial amount of time between loading global model
+parser.add_argument("--viz_actors", default=False, action='store_true')         # Visualize actors in visdom or not
 
 # evaluator args
 parser.add_argument("--num_trials", default=10, type=int)                       # Number of evaluators
@@ -87,10 +87,10 @@ parser.add_argument("--logdir", type=str, default="./logs/td3/experiments/",
 
 args = parser.parse_args()
 
-ray.init(num_gpus=0, include_webui=True, temp_dir="./ray_tmp")
-
 if __name__ == "__main__":
     torch.set_num_threads(1)
+    ray.init(num_gpus=0, include_webui=True, temp_dir="./ray_tmp")
+    futures = []
 
     # Experiment Name
     experiment_name = "{}_{}_{}".format(
@@ -151,13 +151,19 @@ if __name__ == "__main__":
     start = time.time()
 
     # start collection loop for each actor
-    ray.wait([actors_ids[i].collect_experience.remote()
-              for i in range(args.num_actors)], num_returns=args.num_actors)
+    futures = [actor_id.collect_experience.remote() for actor_id in actors_ids]
 
-    # get results from learner
-    results, evaluation_freq = ray.get(learner_id.get_results.remote())
+    # start training loop for learner
+    while True:
+        learner_id.update_model.remote()
 
-    end = time.time()
+    # TODO: make evaluator its own ray object with separate loop
+    # futures.append(evaluator_id...)
+
+    # wait for training to complete
+    ray.wait(futures, num_returns=len(futures))
+
+    print("Training over. Total Time Elapsed = {}".format(start - end))
 
     # also dump ray timeline
-    #ray.global_state.chrome_tracing_dump(filename="./ray_timeline.json")
+    ray.global_state.chrome_tracing_dump(filename="./ray_timeline.json")
