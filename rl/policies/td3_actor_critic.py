@@ -4,6 +4,8 @@ import torch.nn.functional as F
 
 # By default all the modules are initialized to train mode (self.training = True)
 
+# Layernorm (marked by LN) used to make correlated parameter noise possible for DDPG and TD3
+
 
 class LN_Actor(nn.Module):
     def __init__(self, state_dim, action_dim, max_action, hidden_size1, hidden_size2):
@@ -23,6 +25,7 @@ class LN_Actor(nn.Module):
         x = torch.tanh(self.l3(x))
         #x = self.max_action * torch.tanh(self.l3(x))
         return x
+
 
 class LN_DDPGCritic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size1, hidden_size2):
@@ -48,8 +51,6 @@ class LN_DDPGCritic(nn.Module):
         return x1
 
 # critic uses 2 action-value functions (and uses smaller one to form targets)
-
-
 class LN_TD3Critic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size1, hidden_size2):
         super(LN_TD3Critic, self).__init__()
