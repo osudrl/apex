@@ -1,5 +1,5 @@
 from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_parameters, evaluator
-from rl.policies.td3_actor_critic import LN_Actor as LN_Actor, LN_TD3Critic as Critic
+from rl.policies.td3_actor_critic import Original_Actor as O_Actor, TD3Critic as Critic
 
 import time
 import os
@@ -88,8 +88,6 @@ class Actor():
         self.max_action = 1
 
         #self.policy = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
-        self.policy_perturbed = LN_Actor(
-            self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(device)
         self.learner_id = learner_id
         self.memory_id = memory_id
 
@@ -100,6 +98,7 @@ class Actor():
         # Initialize param noise (or set to none)
         self.noise_scale = noise_scale
         self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
+        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(device)
 
         # Termination condition: max episode length
         self.max_traj_len = 400
@@ -165,8 +164,7 @@ class Actor():
 
                 # Param Noise
                 if self.param_noise:
-                    perturb_actor_parameters(
-                        self.policy_perturbed, self.policy, self.param_noise, device)
+                    perturb_actor_parameters(self.policy_perturbed, self.policy, self.param_noise, device)
 
                 # Select action randomly or according to policy
                 if self.actor_timesteps < self.start_timesteps:
@@ -176,8 +174,7 @@ class Actor():
                     action = action.numpy()
                 else:
                     #print("selecting from policy")
-                    action = select_action(self.policy_perturbed, self.policy, np.array(
-                        obs), device, param_noise=self.param_noise)
+                    action = select_action(self.policy_perturbed, self.policy, np.array(obs), device, param_noise=self.param_noise)
                     if self.act_noise != 0:
                         # action = (action + np.random.normal(0, self.act_noise,
                         #                                     size=self.env.action_space.shape[0])).clip(self.env.action_space.low, self.env.action_space.high)
@@ -258,9 +255,6 @@ class Learner():
         self.eval_step_count = 0
         self.target_step_count = 0
 
-        # self.episode_count = 0
-        # self.eval_episode_count = 0
-
         self.update_counter = 0
 
         # hyperparams
@@ -284,24 +278,17 @@ class Learner():
         self.max_traj_len = 400
 
         # models and optimizers
-        self.actor = LN_Actor(self.state_dim, self.action_dim,
-                              self.max_action, hidden_size, hidden_size).to(self.device)
-        self.actor_target = LN_Actor(
-            self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
+        self.actor = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
+        self.actor_target = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters())
 
-        self.critic = Critic(self.state_dim, self.action_dim,
-                             hidden_size, hidden_size).to(self.device)
-        self.critic_target = Critic(
-            self.state_dim, self.action_dim, hidden_size, hidden_size).to(self.device)
+        self.critic = Critic(self.state_dim, self.action_dim,hidden_size, hidden_size).to(self.device)
+        self.critic_target = Critic(self.state_dim, self.action_dim, hidden_size, hidden_size).to(self.device)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters())
 
-        # visdom plotter
-        # self.plotter_id = plotter_id
-
-        # render policy?
+        # render policy? This doesn't do anything atm
         self.render_policy = render_policy
 
     def train(self):
@@ -403,6 +390,7 @@ class Learner():
                     self.save()
             
         #print("optimize time elapsed: {}".format(time.time() - start_time))
+        self.memory.plot_policy_hist.remote(self.actor, self.update_counter)
 
     # TODO: make evaluator another remote actor to speed this up (currently bottleneck)
     def evaluate(self, trials=30, render_policy=True):

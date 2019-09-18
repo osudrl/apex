@@ -54,7 +54,7 @@ parser.add_argument("--state_est", default=True, action='store_true')           
 parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
 
 # learner specific args
-parser.add_argument("--replay_size", default=1e6, type=int)                     # Max size of replay buffer
+parser.add_argument("--replay_size", default=1e8, type=int)                     # Max size of replay buffer
 parser.add_argument("--max_timesteps", default=1e8, type=float)                 # Max time steps to run environment for 1e8 == 100,000,000
 parser.add_argument("--batch_size", default=100, type=int)                      # Batch size for both actor and critic
 parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
@@ -82,8 +82,8 @@ parser.add_argument("--render_policy", type=bool, default=False)                
 # misc args
 parser.add_argument("--name", type=str, default="model")
 parser.add_argument("--seed", type=int, default=1, help="RNG seed")
-parser.add_argument("--logdir", type=str, default="./logs/td3/experiments/",
-                    help="Where to log diagnostics to")
+parser.add_argument("--logger_name", type=str, default="tensorboard")           # logger to use (tensorboard or visdom)
+parser.add_argument("--logdir", type=str, default="./logs/td3/experiments/", help="Where to log diagnostics to")
 
 args = parser.parse_args()
 
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     # TODO: make evaluator its own ray object with separate loop
     # futures.append(evaluator_id...)
 
-    # wait for training to complete
+    # wait for training to complete (THIS DOESN'T WORK AND I DON'T KNOW WHY)
     ray.wait(futures, num_returns=len(futures))
 
     print("Training over. Total Time Elapsed = {}".format(start - end))
