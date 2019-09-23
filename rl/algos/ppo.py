@@ -131,7 +131,10 @@ class PPO:
         self.total_steps = 0
         self.highest_reward = -1
 
-        ray.init()
+        if args['redis_address'] is not None:
+            ray.init(redis_address=args['redis_address'])
+        else:
+            ray.init()
 
     @staticmethod
     def add_arguments(parser):

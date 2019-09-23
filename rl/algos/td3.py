@@ -146,10 +146,10 @@ class Actor():
                     dist = distance_metric(perturbed_actions, unperturbed_actions)
                     self.param_noise.adapt(dist)
                     # print("loaded global model and adapted parameter noise. Load duration = {}".format(duration))
-                    print("loaded global model and adapted parameter noise")
+                    #print("loaded global model and adapted parameter noise")
                 else:
                     # print("loaded global model.  Load duration = {}".format(duration))
-                    print("loaded global model.")
+                    #print("loaded global model.")
                     pass
 
             obs = self.env.reset()
@@ -291,6 +291,9 @@ class Learner():
         # render policy? This doesn't do anything atm
         self.render_policy = render_policy
 
+        # start time for logging duration later
+        self.start_time = time.time()
+
     def train(self):
         while self.step_count < self.max_timesteps:
             self.update_model()
@@ -350,7 +353,7 @@ class Learner():
         critic_loss.backward()
         self.critic_optimizer.step()
 
-        self.memory.plot_critic_loss.remote(self.update_counter, critic_loss)
+        self.memory.plot_critic_loss.remote(self.update_counter, critic_loss, torch.mean(current_Q1), torch.mean(current_Q2))
 
         self.update_counter += 1            
 
@@ -390,7 +393,7 @@ class Learner():
                     self.save()
             
         #print("optimize time elapsed: {}".format(time.time() - start_time))
-        self.memory.plot_policy_hist.remote(self.actor, self.update_counter)
+        
 
     # TODO: make evaluator another remote actor to speed this up (currently bottleneck)
     def evaluate(self, trials=30, render_policy=True):
@@ -425,13 +428,17 @@ class Learner():
         self.memory.plot_eval_results.remote(self.step_count, avg_reward, avg_eplen, self.update_counter)
 
         print("eval time: {}".format(time.time()-start_time))
+
+        # tell replay to plot hist of actor policy weights
+        self.memory.plot_policy_hist.remote(self.actor, self.update_counter)
+
         return avg_reward
 
     def test(self):
         return 0
 
     def get_global_policy(self):
-        print("returning global policy")
+        #print("returning global policy")
         return self.actor, self.is_training_finished()
 
     def get_global_timesteps(self):

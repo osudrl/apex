@@ -66,11 +66,11 @@ parser.add_argument("--evaluate_freq", default=500, type=int)                   
 parser.add_argument("--num_actors", default=1, type=int)                        # Number of actors
 parser.add_argument("--policy_name", default="TD3")                             # Policy name
 parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
-parser.add_argument("--initial_load_freq", default=10, type=int)                # initial amount of time between loading global model
+parser.add_argument("--initial_load_freq", default=1, type=int)                # initial amount of time between loading global model
 parser.add_argument("--act_noise", default=0.1, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
 parser.add_argument('--param_noise', type=bool, default=False)                   # param noise
 parser.add_argument('--noise_scale', type=float, default=0.3)                   # noise scale for param noise
-parser.add_argument("--taper_load_freq", type=bool, default=True)               # initial amount of time between loading global model
+parser.add_argument("--taper_load_freq", type=bool, default=False)               # initial amount of time between loading global model
 parser.add_argument("--viz_actors", default=False, action='store_true')         # Visualize actors in visdom or not
 
 # evaluator args
@@ -84,12 +84,13 @@ parser.add_argument("--name", type=str, default="model")
 parser.add_argument("--seed", type=int, default=1, help="RNG seed")
 parser.add_argument("--logger_name", type=str, default="tensorboard")           # logger to use (tensorboard or visdom)
 parser.add_argument("--logdir", type=str, default="./logs/td3/experiments/", help="Where to log diagnostics to")
+parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
 
 args = parser.parse_args()
 
 if __name__ == "__main__":
     torch.set_num_threads(1)
-    ray.init(num_gpus=0, include_webui=True, temp_dir="./ray_tmp")
+    ray.init(num_gpus=0, include_webui=True, temp_dir="./ray_tmp", redis_address=args.redis_address)
     futures = []
 
     # Experiment Name

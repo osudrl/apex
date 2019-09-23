@@ -4,7 +4,6 @@ import ray
 
 # tensorboard
 from datetime import datetime
-import torch
 from torch.utils.tensorboard import SummaryWriter
 from colorama import Fore, Style
 
@@ -98,22 +97,25 @@ class ReplayBuffer_remote(object):
             self.logger.record('Replay Size', len(self.storage), step_count, title_name='Replay Size', x_var_name='Global Timesteps', split_name='eval')
             self.logger.dump()
         else:
-            self.logger.add_scalar("Data/Return Test", avg_reward, update_count)
-            self.logger.add_scalar("Data/Mean Eplen", avg_eplen, update_count)
-            self.logger.add_scalar("Misc/Total Timesteps", step_count, update_count)
-            self.logger.add_scalar("Misc/Replay Size", len(self.storage), update_count)
+            self.logger.add_scalar("Eval/Return Test", avg_reward, update_count)
+            self.logger.add_scalar("Eval/Mean Eplen", avg_eplen, update_count)
+            self.logger.add_scalar("Total/Total Timesteps", step_count, update_count)
+            self.logger.add_scalar("Total/Replay Size", len(self.storage), update_count)
 
     def plot_actor_loss(self, update_count, actor_loss):
         if not self.using_tensorboard:
             self.logger.plot('Actor Loss', 'Update Count',split_name='train',title_name='Actor Network Loss', x=update_count, y=actor_loss)
         else:
-            self.logger.add_scalar("Losses/actor_network_loss", actor_loss, update_count)
+            self.logger.add_scalar("Train/actor_network_loss", actor_loss, update_count)
 
-    def plot_critic_loss(self, update_count, critic_loss):
+    def plot_critic_loss(self, update_count, critic_loss, Q1_mean, Q2_mean):
         if not self.using_tensorboard:
             self.logger.plot('Critic Loss', 'Update Count',split_name='train',title_name='Critic Network Loss', x=update_count, y=critic_loss)
         else:
-            self.logger.add_scalar("Losses/critic_network_loss", critic_loss, update_count)
+            self.logger.add_scalar("Train/critic_network_loss", critic_loss, update_count)
+            self.logger.add_scalar("Train/critic_Q1_mean", Q1_mean, update_count)
+            self.logger.add_scalar("Train/critic_Q2_mean", Q2_mean, update_count)
+            self.logger.add_scalar("Train/critic_Qs_mean", (Q1_mean + Q2_mean) / 2, update_count)
 
     def plot_policy_hist(self, policy, update_count):
         if self.using_tensorboard:
