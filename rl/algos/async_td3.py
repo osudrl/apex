@@ -448,19 +448,19 @@ class Learner():
         return self.results, self.evaluate_freq
 
     def save(self):
-        if not os.path.exists('trained_models/apex/'):
-            os.makedirs('trained_models/apex/')
+        if not os.path.exists('trained_models/asyncTD3/'):
+            os.makedirs('trained_models/asyncTD3/')
 
         print("Saving model")
 
         filetype = ".pt"  # pytorch model
         torch.save(self.actor.state_dict(), os.path.join(
-            "./trained_models/apex", "global_policy" + filetype))
+            "./trained_models/asyncTD3", "actor_model" + filetype))
         torch.save(self.critic.state_dict(), os.path.join(
-            "./trained_models/apex", "critic_model" + filetype))
+            "./trained_models/asyncTD3", "critic_model" + filetype))
 
     def load(self, model_path):
-        actor_path = os.path.join(model_path, "global_policy.pt")
+        actor_path = os.path.join(model_path, "actor_model.pt")
         critic_path = os.path.join(model_path, "critic_model.pt")
         print('Loading models from {} and {}'.format(actor_path, critic_path))
         if actor_path is not None:

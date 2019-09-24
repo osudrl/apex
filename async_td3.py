@@ -2,7 +2,7 @@ import ray
 import argparse
 import time
 
-from rl.algos.td3 import Actor, Learner
+from rl.algos.async_td3 import Actor, Learner
 from rl.utils import ReplayBuffer_remote
 from rl.envs.wrappers import SymmetricEnv
 
@@ -83,7 +83,7 @@ parser.add_argument("--render_policy", type=bool, default=False)                
 parser.add_argument("--name", type=str, default="model")
 parser.add_argument("--seed", type=int, default=1, help="RNG seed")
 parser.add_argument("--logger_name", type=str, default="tensorboard")           # logger to use (tensorboard or visdom)
-parser.add_argument("--logdir", type=str, default="./logs/td3/experiments/", help="Where to log diagnostics to")
+parser.add_argument("--logdir", type=str, default="./logs/asynctd3/experiments/", help="Where to log diagnostics to")
 parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
 
 args = parser.parse_args()
