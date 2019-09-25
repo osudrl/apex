@@ -1,7 +1,7 @@
 # TODO: organize this file
 from rl.utils import select_action
 from rl.envs.wrappers import SymmetricEnv
-from rl.policies.td3_actor_critic import LN_Actor as Actor
+from rl.policies.td3_actor_critic import Original_Actor as O_Actor
 import numpy as np
 import argparse
 
@@ -178,8 +178,8 @@ min_action = -1
 
 
 # Load Policy
-actor = Actor(state_dim, action_dim, max_action, 256, 256).to(device)
-actor_path = os.path.join(args.model_path, "global_policy.pt")
+actor = O_Actor(state_dim, action_dim, max_action, 256, 256).to(device)
+actor_path = os.path.join(args.model_path, "actor_model.pt")
 print('Loading model from {}'.format(actor_path))
 if actor_path is not None:
     actor.load_state_dict(torch.load(actor_path))
