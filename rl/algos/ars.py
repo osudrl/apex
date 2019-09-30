@@ -163,9 +163,9 @@ class ARS:
     timesteps = sum([item['timesteps'] for item in results])
 
 
-    #print("\nMEAN TIMESTEPS FOR ROLLOUTS: ", np.mean([item['timesteps'] for item in results]))
-    #print([item['timesteps'] for item in results])
-    #input()
+    print("\nMEAN TIMESTEPS FOR ROLLOUTS: ", np.mean([item['timesteps'] for item in results]))
+    print([item['timesteps'] for item in results])
+    print()
 
     #print("TIME TAKEN TO DO ROLLOUTS AND COLLATE: {}, TIMESTEPS {}".format(time.time() - start, timesteps))
     #print([item['timesteps'] for item in results])
@@ -191,7 +191,8 @@ class ARS:
 
     for r_p, r_n, d in zip(r_pos, r_neg, delta):
       for param, d_param in zip(self.policy.parameters(), d):
-        print("Adding {} to {}".format((self.step_size * (r_p - r_n) * torch.from_numpy(d_param).data)[:5], param.data[:5]))
-        param.data += self.step_size * (r_p - r_n) * torch.from_numpy(d_param).data
+        #print("Adding {} to {}".format((self.step_size * (r_p - r_n) * torch.from_numpy(d_param).data)[:5], param.data[:5]))
+        param.data += (self.step_size) / (self.top_n * r_std) * (r_p - r_n) * torch.from_numpy(d_param).data
+        #input()
     return timesteps
 

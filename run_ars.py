@@ -46,6 +46,10 @@ def train(policy_thunk, env_thunk, args):
     elapsed = time.time() - start
     reward, _ = eval_fn(algo.policy, env, 0, args.traj_len)
 
+    #for p in algo.policy.parameters():
+    #  print(p.data[0][:5])
+    #  break
+
     timesteps += samples
     avg_reward += reward
     secs_per_sample = 1000 * elapsed / samples
