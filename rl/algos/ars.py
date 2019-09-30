@@ -9,7 +9,7 @@ import time
 # Over the course of the experiment, workers will access the deltas allocated and returned
 # by this function.
 @ray.remote
-def create_shared_noise(seed=12345, count=2500000, std=1):
+def create_shared_noise(seed=12345, count=25000000, std=1):
   rand_state = np.random.RandomState(seed)
   noise = np.random.RandomState(seed).randn(count).astype(np.float32) * std
   return noise
@@ -31,7 +31,6 @@ class SharedNoiseTable(object):
     return self.noise[i:i+self.param_size]
 
   def get_delta(self, idx=None):
-
     if idx is None:
       idx = self.get_random_idx()
 
@@ -42,10 +41,7 @@ class SharedNoiseTable(object):
     for x in self.param_shape:
       size = np.prod(x)
       chunk = raw_noise[i:i+size]
-      #np.reshape(chunk, x)
       ret.append(np.reshape(chunk, x))
-      #ret.append(chunk)
-
       i += size
     return idx, ret
 
@@ -60,48 +56,27 @@ class ARS_process(object):
     self.deltas = SharedNoiseTable(deltas, self.param_shape, seed=process_seed)
 
   def update_policy(self, new_params):
-    pass
-    #for p, new_p in zip(self.policy.parameters(), new_params):
-      #new_p.copy_(p)
-
-  """
-  def tmp_run_rollout(self, reward_shift=1):
-    self.env.seed(0)
-    state = torch.tensor(self.env.reset()).float()
-    rollout_reward = 0
-    done = False
-
-    timesteps = 0
-    while not done:
-      action = self.policy.forward(state).detach()
-
-      #if not timesteps:
-        #print("first action:", action[:3])
-
-      state, reward, done, _ = self.env.step(action)
-      #self.env.render()
-      state = torch.tensor(state).float()
-      rollout_reward += reward - reward_shift
-      timesteps+=1
-    #print("end state:", state[:3])
-    return rollout_reward, timesteps
-  """
+    for p, new_p in zip(self.policy.parameters(), new_params):
+      p.data.copy_(new_p)
 
   def rollout(self, current_params, black_box, rollouts=1):
-  #def rollout(self, current_params, rollouts=1):
+    """
+    for p in current_params:
+      print("PARAMS RECEIVED BY WORKER: {}".format(p[0]))
+      break
+    """
     self.update_policy(current_params)
     idx, delta = self.deltas.get_delta()
-    #print("STARTING WITH params {}".format([x.data[0] for x in self.policy.parameters()]))
 
     ret = []
     for _ in range(rollouts):
       timesteps = 0
       for p, dp in zip(self.policy.parameters(), delta):
-        p.data += torch.from_numpy(self.std * dp);
+        p.data += torch.from_numpy(dp);
       r_pos = black_box(self.policy, self.env)
 
       for p, dp in zip(self.policy.parameters(), delta):
-        p.data -= 2*torch.from_numpy(self.std * dp);
+        p.data -= 2*torch.from_numpy(dp);
       r_neg = black_box(self.policy, self.env)
 
       #for p, dp in zip(self.policy.parameters(), delta):
@@ -142,7 +117,6 @@ class ARS:
 
     self.deltas = SharedNoiseTable(noise, self.param_shape, seed=seed+7)
     self.workers = [ARS_process.remote(policy_thunk, env_thunk, deltas_id, std, seed+97+i) for i in range(workers)]
-    #self.workers = [ARS_process.remote(policy_thunk, env_thunk, deltas_id, std, 97) for i in range(workers)]
 
   def step(self, black_box):
     start = time.time()
@@ -151,10 +125,8 @@ class ARS:
     rollouts = self.num_deltas // self.num_workers # number of rollouts per worker
 
     rollout_ids = [w.rollout.remote(pid, black_box, rollouts) for w in self.workers] # do rollouts
-    #rollout_ids = [w.rollout.remote(pid, rollouts) for w in self.workers] # do rollouts
     results = ray.get(rollout_ids) # retrieve rollout results from pool
 
-    #print(results)
     results = [item for sublist in results for item in sublist] # flattens list of lists
 
     r_pos = [item['r_pos'] for item in results]
@@ -162,19 +134,9 @@ class ARS:
     delta_indices = [item['delta_idx'] for item in results]
     timesteps = sum([item['timesteps'] for item in results])
 
-
-    #print("\nMEAN TIMESTEPS FOR ROLLOUTS: ", np.mean([item['timesteps'] for item in results]))
-    #print([item['timesteps'] for item in results])
-    #input()
-
-    #print("TIME TAKEN TO DO ROLLOUTS AND COLLATE: {}, TIMESTEPS {}".format(time.time() - start, timesteps))
-    #print([item['timesteps'] for item in results])
-    #input()
-
     delta = []
     for idx in delta_indices:
       _, d = self.deltas.get_delta(idx)
-      #print("tensor at idx {} ended up being {}".format(idx, d.data[5:]))
       delta.append(d)
 
     r_std = np.std(r_pos + r_neg)
@@ -191,7 +153,7 @@ class ARS:
 
     for r_p, r_n, d in zip(r_pos, r_neg, delta):
       for param, d_param in zip(self.policy.parameters(), d):
-        print("Adding {} to {}".format((self.step_size * (r_p - r_n) * torch.from_numpy(d_param).data)[:5], param.data[:5]))
-        param.data += self.step_size * (r_p - r_n) * torch.from_numpy(d_param).data
+        param.data += self.step_size * (r_p - r_n) * torch.from_numpy(d_param).data / self.std
+
     return timesteps
 
