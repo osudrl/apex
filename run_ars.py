@@ -11,14 +11,14 @@ locale.setlocale(locale.LC_ALL, '')
 from rl.algos.ars import ARS
 from rl.policies import LinearMLP
 
-def eval_fn(policy, env, visualize=False, reward_shift=0):
+def eval_fn(policy, env, reward_shift, traj_len, visualize=False):
 
   state = torch.tensor(env.reset()).float()
   rollout_reward = 0
   done = False
 
   timesteps = 0
-  while not done:
+  while not done and timesteps < traj_len:
     action = policy.forward(state).detach()
 
     state, reward, done, _ = env.step(action)
@@ -31,7 +31,7 @@ def train(policy_thunk, env_thunk, args):
   algo = ARS(policy_thunk, env_thunk, deltas=args.deltas, step_size=args.lr, std=args.std, workers=args.workers)
 
   def black_box(p, env):
-    return eval_fn(p, env, args.reward_shift)
+    return eval_fn(p, env, args.reward_shift, args.traj_len)
 
   avg_reward = 0
   timesteps = 0
@@ -44,7 +44,7 @@ def train(policy_thunk, env_thunk, args):
     start = time.time()
     samples = algo.step(black_box)
     elapsed = time.time() - start
-    reward, _ = eval_fn(algo.policy, env)
+    reward, _ = eval_fn(algo.policy, env, 0, args.traj_len)
 
     timesteps += samples
     avg_reward += reward
@@ -67,15 +67,16 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--workers", type=int, default=4)
   parser.add_argument("--env_name",     "-e",   default="Hopper-v2")
-  parser.add_argument("--hidden_size",          default=64)
+  parser.add_argument("--hidden_size",          default=16)
   parser.add_argument("--seed",         "-s",   default=0, type=int)
   parser.add_argument("--timesteps",    "-t",   default=1e8, type=int)
   parser.add_argument("--load_model",   "-l",   default=None, type=str)
   parser.add_argument("--save_model",   "-m",   default="./trained_models/ars.pt", type=str)
-  parser.add_argument('--std',          "-sd",  default=0.0075, type=float)
+  parser.add_argument('--std',          "-sd",  default=0.02, type=float)
   parser.add_argument("--deltas",       "-d",   default=64, type=int)
-  parser.add_argument("--lr",           "-lr",  default=5e-3, type=float)
+  parser.add_argument("--lr",           "-lr",  default=0.02, type=float)
   parser.add_argument("--reward_shift", "-rs",  default=1, type=float)
+  parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)
   parser.add_argument("--recurrent",    "-r",  action='store_true')
 
   parser.add_argument("--log_dir",      default="./logs/ars/experiments/", type=str)
