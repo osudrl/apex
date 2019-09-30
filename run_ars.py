@@ -46,10 +46,6 @@ def train(policy_thunk, env_thunk, args):
     elapsed = time.time() - start
     reward, _ = eval_fn(algo.policy, env, 0, args.traj_len)
 
-    #for p in algo.policy.parameters():
-    #  print(p.data[0][:5])
-    #  break
-
     timesteps += samples
     avg_reward += reward
     secs_per_sample = 1000 * elapsed / samples
@@ -71,7 +67,7 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--workers", type=int, default=4)
   parser.add_argument("--env_name",     "-e",   default="Hopper-v2")
-  parser.add_argument("--hidden_size",          default=16)
+  parser.add_argument("--hidden_size",          default=32)
   parser.add_argument("--seed",         "-s",   default=0, type=int)
   parser.add_argument("--timesteps",    "-t",   default=1e8, type=int)
   parser.add_argument("--load_model",   "-l",   default=None, type=str)
