@@ -139,9 +139,6 @@ class ARS:
       r_neg = r_neg[sorted_indices]
       delta = delta[sorted_indices]
 
-    #r_pos /= self.top_n * r_std
-    #r_neg /= self.top_n * r_std
-
     for r_p, r_n, d in zip(r_pos, r_neg, delta):
       for param, d_param in zip(self.policy.parameters(), d):
         param.data += (self.step_size) / (self.top_n * r_std) * (r_p - r_n) * torch.from_numpy(d_param).data
