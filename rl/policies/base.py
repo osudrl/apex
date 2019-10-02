@@ -17,12 +17,12 @@ class FFPolicy(nn.Module):
         value, x = self(inputs)
         return value, self.dist.evaluate(x)
 
+"""
 class RecurrentPolicy(nn.module):
     def __init__(self):
         super(Recurrent, self).__init__()
         self.env = None # Gym environment name string
 
-"""
 class Actor(nn.Module):
     def __init__(self):
         super(Actor, self).__init__()
