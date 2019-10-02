@@ -15,9 +15,6 @@ def fanin_init(size, fanin=None):
 
 # By default all the modules are initialized to train mode (self.training = True)
 
-<<<<<<< HEAD
-# Layernorm (marked by LN) used to make correlated parameter noise possible for DDPG and TD3
-=======
 class Original_Actor(nn.Module):
     def __init__(self, state_dim, action_dim, max_action, hidden_size1, hidden_size2, init_w=3e-3):
         super(Original_Actor, self).__init__()
@@ -110,7 +107,6 @@ class TD3Critic(nn.Module):
         x1 = self.l3(x1)
 
         return x1
->>>>>>> master
 
 
 class LN_Actor(nn.Module):

@@ -4,6 +4,8 @@ import torch
 import argparse
 import os
 
+from apex import print_logo
+
 from rl.utils import ReplayBuffer
 from rl.algos.sync_td3 import TD3, parallel_collect_experience
 from rl_algos.utils import AdaptiveParamNoiseSpec, distance_metric
@@ -58,7 +60,7 @@ def evaluate_policy(env, policy, eval_episodes=1):
             t += 1
             action = policy.select_action(np.array(obs), param_noise=None)
             obs, reward, done, _ = env.step(action)
-            done_bool = 1.0 if t + 1 == max_episode_steps else float(done)
+            done_bool = 1.0 if t + 1 == max_traj_len else float(done)
             avg_reward += reward
         avg_eplen += t
 
@@ -74,8 +76,11 @@ if __name__ == "__main__":
 
     # General
     parser = argparse.ArgumentParser()
+    parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
     parser.add_argument("--policy_name", default="TD3")					            # Policy name
-    parser.add_argument("--num_actors", type=int, default=4)                        # neurons in hidden layer
+    parser.add_argument("--num_procs", type=int, default=4)                         # neurons in hidden layer
+    parser.add_argument("--min_steps", type=int, default=1000)                      # number of steps of experience each process should collect
+    parser.add_argument("--max_traj_len", type=int, default=400)                      # max steps in each episode
 
     parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
     parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
@@ -95,7 +100,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--batch_size", default=100, type=int)                      # Batch size for both actor and critic
     parser.add_argument("--discount", default=0.99, type=float)                     # Discount factor
-    parser.add_argument("--tau", default=0.005, type=float)                         # Target network update rate
+    parser.add_argument("--tau", default=0.001, type=float)                         # Target network update rate
+    parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
+    parser.add_argument("--c_lr", type=float, default=1e-3)                         # Critic: Adam learning rate
 
     # TD3 Specific
     parser.add_argument("--policy_noise", default=0.2, type=float)                  # Noise added to target policy during critic update
@@ -107,7 +114,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    ray.init()
+    print_logo(subtitle="Distributed Twin-Delayed DDPG")
+
+    ray.init(num_gpus=0, include_webui=True, temp_dir="./ray_tmp", redis_address=args.redis_address)
 
     file_name = "%s_%s_%s" % (args.policy_name, args.env_name, str(args.seed))
     print("---------------------------------------")
@@ -156,7 +165,7 @@ if __name__ == "__main__":
                                                 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
                                                 -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
                                                 mirrored_act = [0,1,2,3,4,5,6,7,8,9])
-        max_episode_steps = 400
+        max_traj_len = args.max_traj_len
     else:
         cassieEnv = False
         import gym
@@ -164,7 +173,7 @@ if __name__ == "__main__":
         #max_episode_steps = env_fn()._max_episode_steps
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
-        max_episode_steps = 1000
+        max_traj_len = 1000
 
     # Set seeds
     torch.manual_seed(args.seed)
@@ -178,10 +187,10 @@ if __name__ == "__main__":
     print("state_dim: {}".format(state_dim))
     print("action_dim: {}".format(action_dim))
     print("max_action dim: {}".format(max_action))
-    print("max_episode_steps: {}".format(max_episode_steps))
+    print("max_episode_steps: {}".format(max_traj_len))
 
     # Initialize policy
-    policy = TD3(state_dim, action_dim, max_action)
+    policy = TD3(state_dim, action_dim, max_action, a_lr=args.a_lr, c_lr=args.c_lr)
 
     replay_buffer = ReplayBuffer()
 
@@ -201,11 +210,11 @@ if __name__ == "__main__":
     while total_timesteps < args.max_timesteps:
 
         # collect parallel experience and add to replay buffer
-        merged_transitions, episode_timesteps = parallel_collect_experience(policy, env_fn, args.act_noise, num_actors=args.num_actors)
+        merged_transitions, episode_timesteps = parallel_collect_experience(policy, env_fn, args.act_noise, args.min_steps, max_traj_len, num_procs=args.num_procs)
         replay_buffer.add_parallel(merged_transitions)
         total_timesteps += episode_timesteps
         timesteps_since_eval += episode_timesteps
-        episode_num += args.num_actors
+        episode_num += args.num_procs
 
         # Logging rollouts
         print("Total T: {} Episode Num: {} Episode T: {}".format(total_timesteps, episode_num, episode_timesteps))

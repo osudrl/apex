@@ -58,12 +58,14 @@ parser.add_argument("--replay_size", default=1e8, type=int)                     
 parser.add_argument("--max_timesteps", default=1e8, type=float)                 # Max time steps to run environment for 1e8 == 100,000,000
 parser.add_argument("--batch_size", default=100, type=int)                      # Batch size for both actor and critic
 parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
-parser.add_argument("--tau", default=0.005, type=float)                         # target update rate (tau)
+parser.add_argument("--tau", default=0.001, type=float)                         # target update rate (tau)
 parser.add_argument("--update_freq", default=2, type=int)                      # how often to update learner
 parser.add_argument("--evaluate_freq", default=500, type=int)                    # how often to evaluate learner
+parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
+parser.add_argument("--c_lr", type=float, default=1e-3)                         # Critic: Adam learning rate
 
 # actor specific args
-parser.add_argument("--num_actors", default=1, type=int)                        # Number of actors
+parser.add_argument("--num_procs", default=30, type=int)                        # Number of actors
 parser.add_argument("--policy_name", default="TD3")                             # Policy name
 parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
 parser.add_argument("--initial_load_freq", default=1, type=int)                # initial amount of time between loading global model
@@ -95,9 +97,9 @@ if __name__ == "__main__":
 
     # Experiment Name
     experiment_name = "{}_{}_{}".format(
-        args.policy_name, args.env_name, args.num_actors)
+        args.policy_name, args.env_name, args.num_procs)
     print("DISTRIBUTED Policy: {}\nEnvironment: {}\n# of Actors:{}".format(
-        args.policy_name, args.env_name, args.num_actors))
+        args.policy_name, args.env_name, args.num_procs))
 
     # Environment
     if(args.env_name in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
@@ -144,10 +146,10 @@ if __name__ == "__main__":
 
     # Create remote learner (learner will create the evaluators) and replay buffer
     memory_id = ReplayBuffer_remote.remote(args.replay_size, experiment_name, args)
-    learner_id = Learner.remote(env_fn, memory_id, args.max_timesteps, obs_dim, action_dim, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size)
+    learner_id = Learner.remote(env_fn, memory_id, args.max_timesteps, obs_dim, action_dim, args.a_lr, args.c_lr, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size)
 
     # Create remote actors
-    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_actors, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size, viz_actor=args.viz_actors) for i in range(args.num_actors)]
+    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_procs, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size, viz_actor=args.viz_actors) for i in range(args.num_procs)]
 
     start = time.time()
 

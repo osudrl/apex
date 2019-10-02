@@ -1,6 +1,8 @@
 """Python file for automatically running experiments from command line."""
 import argparse
 
+from apex import print_logo
+
 from rl.envs.wrappers import SymmetricEnv
 from rl.utils import run_experiment
 from rl.policies import GaussianMLP, BetaMLP
@@ -88,6 +90,8 @@ args.num_steps = 3000 // args.num_procs
 
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
+
+    print_logo(subtitle="Distributed Proximal Policy Optimization")
 
     experiment_name = "PPO_{}_{}".format(args.env, args.num_procs)
 

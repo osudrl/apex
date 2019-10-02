@@ -17,62 +17,65 @@ device = torch.device("cpu")
 # Paper: https://arxiv.org/abs/1802.09477
 
 # TODO: Make each worker collect fixed amount of experience / don't stop computation once episodes are done
-def parallel_collect_experience(policy, env_fn, act_noise, num_actors=4):
+def parallel_collect_experience(policy, env_fn, act_noise, min_steps, max_traj_len, num_procs=4):
 
-    all_transitions = ray.get([collect_experience.remote(env_fn, policy, act_noise) for i in range(num_actors)])
+    all_transitions = ray.get([collect_experience.remote(env_fn, policy, min_steps, max_traj_len, act_noise) for i in range(num_procs)])
 
     merged_transitions = np.concatenate(all_transitions)
     return merged_transitions, len(merged_transitions)
 
 # sample experience for one episode and send to replay buffer
 @ray.remote
-def collect_experience(env_fn, policy, act_noise, max_traj_len=400):
+def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
 
     env = env_fn()
 
-    # reset environment
-    obs = env.reset()
-    done = False
-    episode_reward = 0
-    episode_timesteps = 0
-
     local_buffer = ReplayBuffer(max_size=max_traj_len)
 
+    num_steps = 0
     # nested collection loop - collect experience until episode is over
-    while episode_timesteps < max_traj_len and not done:
+    while num_steps < min_steps:
+        
+        # reset environment
+        obs = env.reset()
+        done = False
+        episode_reward = 0
+        episode_timesteps = 0
 
-        # select action from policy
-        action = policy.select_action(obs)
-        if act_noise != 0:
-            action = (action + np.random.normal(0, act_noise, size=1)).clip(-1, 1)
+        while not done and episode_timesteps < max_traj_len:
 
-        # Perform action
-        new_obs, reward, done, _ = env.step(action)
-        done_bool = 1.0 if episode_timesteps + 1 == max_traj_len else float(done)
-        episode_reward += reward
+            # select action from policy
+            action = policy.select_action(obs)
+            if act_noise != 0:
+                action = (action + np.random.normal(0, act_noise, size=1)).clip(-1, 1)
 
-        # Store data in replay buffer
-        transition = (obs, new_obs, action, reward, done_bool)
-        local_buffer.add(transition)
+            # Perform action
+            new_obs, reward, done, _ = env.step(action)
+            done_bool = 1.0 if episode_timesteps + 1 == max_traj_len else float(done)
+            episode_reward += reward
 
-        # update state
-        obs = new_obs
+            # Store data in replay buffer
+            transition = (obs, new_obs, action, reward, done_bool)
+            local_buffer.add(transition)
+
+            # update state
+            obs = new_obs
 
     # episode is over, return all transitions from this episode (list of tuples)
     return local_buffer.get_all_transitions()
 
 class TD3():
-    def __init__(self, state_dim, action_dim, max_action):
+    def __init__(self, state_dim, action_dim, max_action, a_lr, c_lr):
         self.actor = O_Actor(state_dim, action_dim, max_action, 256, 256).to(device)
         self.actor_target = O_Actor(state_dim, action_dim, max_action, 256, 256).to(device)
         self.actor_perturbed = O_Actor(state_dim, action_dim, max_action, 256, 256).to(device)
         self.actor_target.load_state_dict(self.actor.state_dict())
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters())
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
         self.critic = Critic(state_dim, action_dim, 256, 256).to(device)
         self.critic_target = Critic(state_dim, action_dim, 256, 256).to(device)
         self.critic_target.load_state_dict(self.critic.state_dict())
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters())
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=c_lr)
 
         self.max_action = max_action
 

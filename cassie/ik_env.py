@@ -1,7 +1,5 @@
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
-from .trajectory import CassieTrajectory
-
 from math import floor
 
 import numpy as np 
@@ -10,23 +8,22 @@ import random
 
 import pickle
 
-class CassieIKTrajectory:
-    def __init__(self, filepath):
-        with open(filepath, "rb") as f:
-            trajectory = pickle.load(f)
 
-        self.qpos = np.copy(trajectory["qpos"])
-        self.qvel = np.copy(trajectory["qvel"])
+class Cassie_ROM_IK_Trajectory:
+    def __init__(self, filepath):
+        data = np.load(filepath)
+        self.sin = data[:,0]
+        self.cos = data[:,1]
+        self.qpos = data[:,2:37]
+        self.qvel = data[:,38:]
     
     def __len__(self):
         return len(self.qpos)
 
 class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, filename="traj_from_ref_foot_data.pkl"):
+    def __init__(self, simrate=60, clock_based=True, state_est=True, filename="rom_ik_traj_data.npy"):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
-
-        self.foo = "foo"
 
         self.clock_based = clock_based
         self.state_est = state_est
@@ -46,7 +43,7 @@ class CassieIKEnv:
         dirname = os.path.dirname(__file__)
         traj_path = os.path.join(dirname, "trajectory", filename)
 
-        self.trajectory = CassieIKTrajectory(traj_path)
+        self.trajectory = Cassie_ROM_IK_Trajectory(traj_path)
 
         self.P = np.array([100,  100,  88,  96,  50]) 
         self.D = np.array([10.0, 10.0, 8.0, 9.6, 5.0])
