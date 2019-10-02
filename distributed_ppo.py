@@ -15,6 +15,9 @@ import torch
 import numpy as np
 import os
 
+from datetime import datetime
+from torch.utils.tensorboard import SummaryWriter
+from colorama import Fore, Style
 
 def make_env_fn(state_est=False):
     def _thunk():
@@ -53,7 +56,10 @@ parser = argparse.ArgumentParser()
 #PPO.add_arguments(parser)
 parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
 parser.add_argument("--seed", type=int, default=1,help="RNG seed")
-parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/", help="Where to log diagnostics to")
+
+# For tensorboard logger
+parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")       # Where to log diagnostics to
+
 parser.add_argument("--name", type=str, default="model")
 parser.add_argument("--env", type=str, default="Cassie-mimic-walking-v0")
 parser.add_argument("--state_est", type=bool, default=True)
@@ -80,15 +86,17 @@ parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode h
 args = parser.parse_args()
 args.num_steps = 3000 // args.num_procs
 
-# TODO: add ability to select graphs by number
-# switch to tensorboard?
-# More detailed logging
-# Logging timestamps
-
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
 
     experiment_name = "PPO_{}_{}".format(args.env, args.num_procs)
+
+    # Tensorboard logging
+    now = datetime.now()
+    # NOTE: separate by trial name first and time of run after
+    log_path = args.logdir + now.strftime("%Y%m%d-%H%M%S")+"/"
+    logger = SummaryWriter(log_path, flush_secs=0.1)
+    print(Fore.GREEN + Style.BRIGHT + "Logging data using TensorBoard to {}".format(log_path + Style.RESET_ALL))
 
     # Environment
     if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
@@ -157,7 +165,7 @@ if __name__ == "__main__":
         env_fn=env_fn,
         experiment_name=experiment_name,
         args=args,
-        log=True,
+        logger=logger,
         monitor=True,
         render=False # NOTE: CassieVis() hangs when launched in seperate thread. BUG?
                     # Also, waitpid() hangs sometimes in mp.Process. BUG?

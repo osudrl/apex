@@ -77,7 +77,6 @@ if __name__ == "__main__":
     parser.add_argument("--policy_name", default="TD3")					            # Policy name
     parser.add_argument("--num_actors", type=int, default=4)                        # neurons in hidden layer
 
-
     parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
     parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
     parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not

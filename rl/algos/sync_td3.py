@@ -16,6 +16,7 @@ device = torch.device("cpu")
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
 # Paper: https://arxiv.org/abs/1802.09477
 
+# TODO: Make each worker collect fixed amount of experience / don't stop computation once episodes are done
 def parallel_collect_experience(policy, env_fn, act_noise, num_actors=4):
 
     all_transitions = ray.get([collect_experience.remote(env_fn, policy, act_noise) for i in range(num_actors)])
