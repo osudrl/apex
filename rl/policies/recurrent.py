@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class RecurrentActor(nn.Module):
+class RecurrentNet(nn.Module):
   def __init__(self, input_dim, action_dim, hidden_size=6, hidden_layers=3, has_critic=False):
     super(RecurrentActor, self).__init__()
 
@@ -11,7 +11,7 @@ class RecurrentActor(nn.Module):
     for _ in range(hidden_layers-1):
         self.actor_layers += [nn.LSTMCell(hidden_size, hidden_size)]
 
-    self.actor_out = nn.Linear(hidden_size, action_dim)
+    self.network_out = nn.Linear(hidden_size, action_dim)
 
     #ref: https://discuss.pytorch.org/t/correct-way-to-declare-hidden-and-cell-states-of-lstm/15745/3
     #possibly outdated? tensors might be good enough to save hidden states, may not need nn.Variable()
@@ -19,19 +19,18 @@ class RecurrentActor(nn.Module):
     self.hidden = [torch.zeros(1, hidden_size) for _ in self.actor_layers]
     self.cells = [torch.zeros(1, hidden_size) for _ in self.actor_layers]
 
-    print(self.get_hidden_state())
-    exit(1)
-
   def get_hidden_state(self):
     return self.hidden, self.cells
 
   def init_hidden_state(self):
-    #self.cells
-    pass
-    
+    self.hidden = [torch.zeros(1, hidden_size) for _ in self.actor_layers]
+    self.cells = [torch.zeros(1, hidden_size) for _ in self.actor_layers]
   
   def forward(self, x):
-    #print(x.size(0), h.size(0))
-    self.cells, self.hidden = self.actor_recurrent_layer(x, self.get_hidden_state())
-    
-    print("GOT ", self.cells, self.hidden)
+    for idx, layer in enumerate(self.actor_layers): #, self.hidden, self.cells):
+      c, h = self.cells[idx], self.hidden[idx]
+      self.cells[idx], self.hidden[idx] = layer(x, (c, h))
+      x = self.hidden[idx]
+
+    x = self.network_out(x)
+    return F.tanh(x)
