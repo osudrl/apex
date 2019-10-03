@@ -49,7 +49,7 @@ def gym_factory(path, **kwargs):
     return partial(cls, **_kwargs)
 
 # Runs policy for X episodes and returns average reward. Optionally render policy
-def evaluate_policy(env, policy, eval_episodes=1):
+def evaluate_policy(env, policy, eval_episodes=10):
     avg_reward = 0.0
     avg_eplen = 0.0
     for _ in range(eval_episodes):
@@ -148,8 +148,8 @@ if __name__ == "__main__":
         # import gym_cassie
         # env_fn = gym_factory(args.env_name)
         #env_fn = make_env_fn(state_est=args.state_est)
-        #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+        # env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
         print(env_fn().clock_inds)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]

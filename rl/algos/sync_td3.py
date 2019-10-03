@@ -19,54 +19,97 @@ device = torch.device("cpu")
 # TODO: Make each worker collect fixed amount of experience / don't stop computation once episodes are done
 def parallel_collect_experience(policy, env_fn, act_noise, min_steps, max_traj_len, num_procs=4):
 
-    all_transitions = ray.get([collect_experience.remote(env_fn, policy, min_steps, max_traj_len, act_noise) for i in range(num_procs)])
+    all_transitions = ray.get([collect_experience.remote(env_fn, policy, min_steps // num_procs, max_traj_len, act_noise) for i in range(num_procs)])
 
     merged_transitions = np.concatenate(all_transitions)
+
+    print(merged_transitions.shape)
     return merged_transitions, len(merged_transitions)
 
 # sample experience for one episode and send to replay buffer
 @ray.remote
+@torch.no_grad()
 def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
 
     env = env_fn()
 
-    local_buffer = ReplayBuffer(max_size=max_traj_len)
+    local_buffer = ReplayBuffer(max_size=min_steps)
 
-    num_steps = 0
-    # nested collection loop - collect experience until episode is over
-    while num_steps < min_steps:
-        
-        # reset environment
-        obs = env.reset()
-        done = False
-        episode_reward = 0
-        episode_timesteps = 0
+    # reset environment
+    obs = env.reset()
+    done = False
+    episode_reward = 0
+    episode_timesteps = 0
 
-        while not done and episode_timesteps < max_traj_len:
 
-            # increment counters
-            num_steps += 1
-            episode_timesteps += 1
+    while not done and episode_timesteps < max_traj_len:
 
-            # select action from policy
-            action = policy.select_action(obs)
-            if act_noise != 0:
-                action = (action + np.random.normal(0, act_noise, size=1)).clip(-1, 1)
+        # select action from policy
+        action = policy.select_action(obs)
+        if act_noise != 0:
+            action = (action + np.random.normal(0, act_noise, size=1)).clip(-1, 1)
 
-            # Perform action
-            new_obs, reward, done, _ = env.step(action)
-            done_bool = 1.0 if episode_timesteps == max_traj_len else float(done)
-            episode_reward += reward
+        # Perform action
+        new_obs, reward, done, _ = env.step(action)
+        done_bool = 1.0 if episode_timesteps + 1 == max_traj_len else float(done)
+        episode_reward += reward
 
-            # Store data in replay buffer
-            transition = (obs, new_obs, action, reward, done_bool)
-            local_buffer.add(transition)
+        # Store data in replay buffer
+        transition = (obs, new_obs, action, reward, done_bool)
+        local_buffer.add(transition)
 
-            # update state
-            obs = new_obs
+        # update state
+        obs = new_obs
+
+        # increment counters
+        episode_timesteps += 1
 
     # episode is over, return all transitions from this episode (list of tuples)
     return local_buffer.get_all_transitions()
+
+# @ray.remote
+# @torch.no_grad()
+# def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
+
+#     env = env_fn()
+
+#     local_buffer = ReplayBuffer(max_size=min_steps)
+
+#     num_steps = 0
+#     # nested collection loop - collect experience until episode is over
+#     while num_steps < min_steps:
+        
+#         # reset environment
+#         obs = env.reset()
+#         done = False
+#         episode_reward = 0
+#         episode_timesteps = 0
+
+#         while not done and episode_timesteps < max_traj_len:
+
+#             # select action from policy
+#             action = policy.select_action(obs)
+#             if act_noise != 0:
+#                 action = (action + np.random.normal(0, act_noise, size=1)).clip(-1, 1)
+
+#             # Perform action
+#             new_obs, reward, done, _ = env.step(action)
+#             done_bool = 1.0 if episode_timesteps + 1 == max_traj_len else float(done)
+#             episode_reward += reward
+
+#             # Store data in replay buffer
+#             transition = (obs, new_obs, action, reward, done_bool)
+#             local_buffer.add(transition)
+
+#             # update state
+#             obs = new_obs
+
+#             # increment counters
+#             num_steps += 1
+#             episode_timesteps += 1
+
+#     # episode is over, return all transitions from this episode (list of tuples)
+#     return local_buffer.get_all_transitions()
 
 class TD3():
     def __init__(self, state_dim, action_dim, max_action, a_lr, c_lr):
