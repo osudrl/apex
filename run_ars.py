@@ -9,9 +9,12 @@ import locale
 locale.setlocale(locale.LC_ALL, '')
 
 from rl.algos.ars import ARS
-from rl.policies import LinearMLP
+from rl.policies import LinearMLP, RecurrentNet
 
 def eval_fn(policy, env, reward_shift, traj_len, visualize=False, normalize=False):
+
+  if hasattr(policy, 'init_hidden_state'):
+    policy.init_hidden_state()
 
   state = torch.tensor(env.reset()).float()
   rollout_reward = 0
@@ -79,9 +82,9 @@ if __name__ == "__main__":
   parser.add_argument("--timesteps",    "-t",   default=1e8, type=int)
   parser.add_argument("--load_model",   "-l",   default=None, type=str)
   parser.add_argument("--save_model",   "-m",   default="./trained_models/ars/ars.pt", type=str)
-  parser.add_argument('--std',          "-sd",  default=0.02, type=float)
+  parser.add_argument('--std',          "-sd",  default=0.005, type=float)
   parser.add_argument("--deltas",       "-d",   default=64, type=int)
-  parser.add_argument("--lr",           "-lr",  default=0.02, type=float)
+  parser.add_argument("--lr",           "-lr",  default=0.01, type=float)
   parser.add_argument("--reward_shift", "-rs",  default=1, type=float)
   parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)
   parser.add_argument("--recurrent",    "-r",  action='store_true')
@@ -110,9 +113,12 @@ if __name__ == "__main__":
       return torch.load(args.load_model)
     else:
       if not args.recurrent:
-        return LinearMLP(obs_space, act_space, hidden_size = args.hidden_size).float()
+        policy = LinearMLP(obs_space, act_space, hidden_size=args.hidden_size).float()
       else:
-        raise NotImplementedError
+        policy = RecurrentNet(obs_space, act_space, hidden_size=args.hidden_size).float()
+      for p in policy.parameters():
+        p.data = torch.zeros(p.shape)
+      return policy
 
   print("Augmented Random Search:")
   print("\tenv:          {}".format(args.env_name))
