@@ -44,6 +44,10 @@ def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
 
         while not done and episode_timesteps < max_traj_len:
 
+            # increment counters
+            num_steps += 1
+            episode_timesteps += 1
+
             # select action from policy
             action = policy.select_action(obs)
             if act_noise != 0:
@@ -51,7 +55,7 @@ def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
 
             # Perform action
             new_obs, reward, done, _ = env.step(action)
-            done_bool = 1.0 if episode_timesteps + 1 == max_traj_len else float(done)
+            done_bool = 1.0 if episode_timesteps == max_traj_len else float(done)
             episode_reward += reward
 
             # Store data in replay buffer
