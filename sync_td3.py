@@ -147,8 +147,9 @@ if __name__ == "__main__":
         # set up cassie environment
         # import gym_cassie
         # env_fn = gym_factory(args.env_name)
-        #env_fn = make_env_fn(state_est=args.state_est)
-        env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+        # env_fn = make_env_fn(state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv, "walking", clock_based=True, state_est=args.state_est)
+        # env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
         # env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
         print(env_fn().clock_inds)
         obs_dim = env_fn().observation_space.shape[0]
