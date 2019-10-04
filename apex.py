@@ -87,55 +87,34 @@ if __name__ == "__main__":
     parser.add_argument("--average_every", default=10, type=int)
     args = parser.parse_args()
 
-    # wrapper function for creating parallelized envs
-    env_thunk = gym_factory(args.env_name)
-    with env_thunk() as env:
-        obs_space = env.observation_space.shape[0]
-        act_space = env.action_space.shape[0]
+    run_experiment(args)
 
-    # wrapper function for creating parallelized policies
-    def policy_thunk():
-      from rl.policies import LinearMLP, RecurrentNet
-      if args.load_model is not None:
-        return torch.load(args.load_model)
-      else:
-        if not args.recurrent:
-          policy = LinearMLP(obs_space, act_space, hidden_size=args.hidden_size).float()
-        else:
-          policy = RecurrentNet(obs_space, act_space, hidden_size=args.hidden_size).float()
-
-        # policy parameters should be zero initialized according to ARS paper
-        for p in policy.parameters():
-          p.data = torch.zeros(p.shape)
-        return policy
-
-    # the 'black box' function that will get passed into ARS
-    def eval_fn(policy, env, reward_shift, traj_len, visualize=False, normalize=False):
-      if hasattr(policy, 'init_hidden_state'):
-        policy.init_hidden_state()
-
-      state = torch.tensor(env.reset()).float()
-      rollout_reward = 0
-      done = False
-
-      timesteps = 0
-      while not done and timesteps < traj_len:
-        action = policy.forward(state, update_normalizer=normalize).detach()
-        state, reward, done, _ = env.step(action)
-        state = torch.tensor(state).float()
-        rollout_reward += reward - reward_shift
-        timesteps+=1
-      return rollout_reward, timesteps
-
-    run_experiment(policy_thunk, env_thunk, eval_fn, args)
   elif sys.argv[1] == 'ddpg':
     sys.argv.remove(sys.argv[1])
     """
       Utility for running Deep Deterministic Policy Gradients.
 
     """
-    raise NotImplementedError
-    import rl.algos.ddpg
+    from rl.algos.ddpg import run_experiment
+    sys.argv.remove(sys.argv[1])
+    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--env_name",     "-e",   default="Hopper-v2")
+    parser.add_argument("--hidden_size",          default=32, type=int)
+    parser.add_argument("--seed",         "-s",   default=0, type=int)
+    parser.add_argument("--timesteps",    "-t",   default=1e8, type=int)
+    parser.add_argument("--load_model",   "-l",   default=None, type=str)
+    parser.add_argument("--save_model",   "-m",   default="./trained_models/ars/ars.pt", type=str)
+    parser.add_argument('--tau',                  default=0.01, type=float)
+    parser.add_argument("--actor_lr",     "-alr", default=0.001, type=float)
+    parser.add_argument("--critic_lr",    "-clr", default=0.005, type=float)
+    parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)
+    parser.add_argument("--recurrent",    "-r",   action='store_true')
+    parser.add_argument("--log_dir",       default="./logs/ddpg/experiments/", type=str)
+    parser.add_argument("--average_every", default=10, type=int)
+    args = parser.parse_args()
+
+    run_experiment(args)
+
   elif sys.argv[1] == 'rdpg':
     sys.argv.remove(sys.argv[1])
     """
