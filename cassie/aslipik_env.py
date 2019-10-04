@@ -16,13 +16,13 @@ class CassieIKTrajectory:
             trajectory = pickle.load(f)
 
         self.qpos = np.copy(trajectory["qpos"])
+        self.length = self.qpos.shape[0]
         self.qvel = np.copy(trajectory["qvel"])
-    
-    def __len__(self):
-        return len(self.qpos)
 
+# simrate used to be 60
+# 196 / 4 == 49 (phaselen)
 class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, filename="30hz_aslip_trajs.pkl"):
+    def __init__(self, traj="stepping", simrate=4, clock_based=True, state_est=True, filename="30hz_aslip_trajs.pkl"):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -63,15 +63,15 @@ class CassieIKEnv:
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(len(self.trajectory) / self.simrate) - 1
+        self.phaselen = floor(self.trajectory.length / self.simrate) - 1
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
         # params for changing the trajectory
-        self.speed = 2 # how fast (m/s) do we go
-        self.gait = [1,0,0,0]   # one-hot vector of gaits:
+        # self.speed = 2 # how fast (m/s) do we go
+        # self.gait = [1,0,0,0]   # one-hot vector of gaits:
                                 # [1, 0, 0, 0] -> walking/running (left single stance, right single stance)
                                 # [0, 1, 0, 0] -> hopping (double stance, flight phase)
                                 # [0, 0, 1, 0] -> skipping (double stance, right single stance, flight phase, right single stance)
@@ -81,7 +81,7 @@ class CassieIKEnv:
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.prev_action = ref_pos[self.pos_idx]
-        self.phase_add = 1 + 1 + len(self.gait)
+        self.phase_add = 1
 
         # Output of Cassie's state estimation code
         self.cassie_state = state_out_t()
@@ -155,7 +155,8 @@ class CassieIKEnv:
         return self.get_full_state(), reward, done, {}
 
     def reset(self):
-        self.phase = random.randint(0, self.phaselen)
+        # self.phase = random.randint(0, self.phaselen)
+        self.phase = 0
         self.time = 0
         self.counter = 0
 
@@ -163,7 +164,7 @@ class CassieIKEnv:
         # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel)
+        self.sim.set_qvel(np.zeros(qvel.shape))
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -254,14 +255,14 @@ class CassieIKEnv:
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
-        # print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-        #             0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-        #             0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-        #             0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-        #             0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
-        #             reward
-        #         )
-        #     )  
+        print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
+        0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
+        0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
+        0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
+        0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
+        reward
+        )
+        )
 
         return reward
 
