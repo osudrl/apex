@@ -1,5 +1,7 @@
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
+from .trajectory import CassieTrajectory
+
 from math import floor
 
 import numpy as np 
@@ -8,20 +10,19 @@ import random
 
 import pickle
 
-
-class Cassie_ROM_IK_Trajectory:
+class CassieIKTrajectory:
     def __init__(self, filepath):
-        data = np.load(filepath)
-        self.sin = data[:,0]
-        self.cos = data[:,1]
-        self.qpos = data[:,2:37]
-        self.qvel = data[:,38:]
+        with open(filepath, "rb") as f:
+            trajectory = pickle.load(f)
+
+        self.qpos = np.copy(trajectory["qpos"])
+        self.qvel = np.copy(trajectory["qvel"])
     
     def __len__(self):
         return len(self.qpos)
 
 class CassieIKEnv:
-    def __init__(self, simrate=60, clock_based=True, state_est=True, filename="rom_ik_traj_data.npy"):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, filename="30hz_aslip_trajs.pkl"):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -37,13 +38,13 @@ class CassieIKEnv:
         else:
             self.observation_space = np.zeros(80)
             if self.state_est:
-                self.observation_space = np.zeros(86)       # Size for use with state est
+                self.observation_space = np.zeros(86)       # Size for use without state est
         self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
         traj_path = os.path.join(dirname, "trajectory", filename)
 
-        self.trajectory = Cassie_ROM_IK_Trajectory(traj_path)
+        self.trajectory = CassieIKTrajectory(traj_path)
 
         self.P = np.array([100,  100,  88,  96,  50]) 
         self.D = np.array([10.0, 10.0, 8.0, 9.6, 5.0])
@@ -68,10 +69,19 @@ class CassieIKEnv:
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
+        # params for changing the trajectory
+        self.speed = 2 # how fast (m/s) do we go
+        self.gait = [1,0,0,0]   # one-hot vector of gaits:
+                                # [1, 0, 0, 0] -> walking/running (left single stance, right single stance)
+                                # [0, 1, 0, 0] -> hopping (double stance, flight phase)
+                                # [0, 0, 1, 0] -> skipping (double stance, right single stance, flight phase, right single stance)
+                                # [0, 0, 0, 1] -> galloping (double stance, right single stance, flight, left single stance)
+
+
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.prev_action = ref_pos[self.pos_idx]
-        self.phase_add = 1
+        self.phase_add = 1 + 1 + len(self.gait)
 
         # Output of Cassie's state estimation code
         self.cassie_state = state_out_t()

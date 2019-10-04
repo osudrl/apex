@@ -137,6 +137,7 @@ class LN_Actor(nn.Module):
         #x = self.max_action * torch.tanh(self.l3(x))
         return x
 
+
 class LN_DDPGCritic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size1, hidden_size2, init_w=3e-3):
         super(LN_DDPGCritic, self).__init__()
@@ -166,8 +167,6 @@ class LN_DDPGCritic(nn.Module):
         return x1
 
 # critic uses 2 action-value functions (and uses smaller one to form targets)
-
-
 class LN_TD3Critic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size1, hidden_size2, init_w=3e-3):
         super(LN_TD3Critic, self).__init__()

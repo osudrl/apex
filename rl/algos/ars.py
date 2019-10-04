@@ -60,11 +60,12 @@ class ARS_process(object):
       p.data.copy_(new_p)
 
   def rollout(self, current_params, black_box, rollouts=1):
-    self.update_policy(current_params)
-    idx, delta = self.deltas.get_delta()
 
     ret = []
     for _ in range(rollouts):
+      self.update_policy(current_params)
+      idx, delta = self.deltas.get_delta()
+
       timesteps = 0
       for p, dp in zip(self.policy.parameters(), delta):
         p.data += torch.from_numpy(dp);
@@ -73,6 +74,9 @@ class ARS_process(object):
       for p, dp in zip(self.policy.parameters(), delta):
         p.data -= 2*torch.from_numpy(dp);
       r_neg = black_box(self.policy, self.env)
+
+      #for p, dp in zip(self.policy.parameters(), delta):
+      #  p.data += torch.from_numpy(dp);
 
       if isinstance(r_pos, tuple):
         timesteps += r_pos[1]
@@ -132,6 +136,8 @@ class ARS:
 
     r_std = np.std(r_pos + r_neg)
 
+    #print("{:5.1f}".format(r_std), end=" | ")
+
     # if use top performing directions
     if self.top_n < self.num_deltas:
       sorted_indices = np.argsort(np.maximum(r_pos, r_neg))
@@ -139,8 +145,10 @@ class ARS:
       r_neg = r_neg[sorted_indices]
       delta = delta[sorted_indices]
 
+    weighting = 1 / (self.top_n * r_std * self.std)
     for r_p, r_n, d in zip(r_pos, r_neg, delta):
+      reward_factor = r_p - r_n
       for param, d_param in zip(self.policy.parameters(), d):
-        param.data += (self.step_size) / (self.top_n * r_std) * (r_p - r_n) * torch.from_numpy(d_param).data
+        param.data += self.step_size * weighting * reward_factor * torch.from_numpy(d_param).data
     return timesteps
 
