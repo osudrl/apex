@@ -52,17 +52,21 @@ def train(policy_thunk, env_thunk, args):
     start = time.time()
     samples = algo.step(black_box)
     elapsed = time.time() - start
-    reward, _ = eval_fn(algo.policy, env, 0, args.traj_len, normalize=normalize_states)
+    #reward, _ = eval_fn(algo.policy, env, 0, args.traj_len, normalize=normalize_states)
+    iter_reward = 0
+    for eval_rollout in range(10):
+      reward, _ = eval_fn(algo.policy, env, 0, args.traj_len, normalize=normalize_states)
+      iter_reward += reward / 10
 
     timesteps += samples
-    avg_reward += reward
+    avg_reward += iter_reward
     secs_per_sample = 1000 * elapsed / samples
     print(("iter {:4d} | "
            "ret {:6.2f} | "
            "last {:3d} iters: {:6.2f} | "
            "{:0.4f}s per 1k steps | "
            "timesteps {:10n}").format(i+1,  \
-            reward, (i%args.average_every)+1,      \
+            iter_reward, (i%args.average_every)+1,      \
             avg_reward/((i%args.average_every)+1), \
             secs_per_sample, timesteps),    \
             end="\r")
@@ -82,16 +86,16 @@ if __name__ == "__main__":
   parser.add_argument("--timesteps",    "-t",   default=1e8, type=int)
   parser.add_argument("--load_model",   "-l",   default=None, type=str)
   parser.add_argument("--save_model",   "-m",   default="./trained_models/ars/ars.pt", type=str)
-  parser.add_argument('--std',          "-sd",  default=0.005, type=float)
+  parser.add_argument('--std',          "-sd",  default=0.0075, type=float)
   parser.add_argument("--deltas",       "-d",   default=64, type=int)
   parser.add_argument("--lr",           "-lr",  default=0.01, type=float)
   parser.add_argument("--reward_shift", "-rs",  default=1, type=float)
   parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)
-  parser.add_argument("--recurrent",    "-r",  action='store_true')
   parser.add_argument("--algo",         "-a",   default='v1', type=str)
+  parser.add_argument("--recurrent",    "-r",   action='store_true')
 
-  parser.add_argument("--log_dir",      default="./logs/ars/experiments/", type=str)
-  parser.add_argument("--average_every",default=10, type=int)
+  parser.add_argument("--log_dir",       default="./logs/ars/experiments/", type=str)
+  parser.add_argument("--average_every", default=10, type=int)
   args = parser.parse_args()
 
   if args.algo not in ['v1', 'v2']:

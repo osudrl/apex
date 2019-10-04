@@ -1,6 +1,8 @@
 from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_parameters, evaluator
 from rl.policies.td3_actor_critic import Original_Actor as O_Actor, TD3Critic as Critic
 
+from apex import print_logo
+
 import time
 import os
 
@@ -230,7 +232,7 @@ class Actor():
 
 @ray.remote(num_gpus=0)
 class Learner():
-    def __init__(self, env_fn, memory_server, max_timesteps, state_space, action_space,
+    def __init__(self, env_fn, memory_server, max_timesteps, state_space, action_space, a_lr, c_lr,
                  batch_size=500, discount=0.99, tau=0.005, update_freq=10,
                  target_update_freq=2000, evaluate_freq=1000, render_policy=True, hidden_size=256):
 
@@ -281,12 +283,12 @@ class Learner():
         self.actor = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
         self.actor_target = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
         self.actor_target.load_state_dict(self.actor.state_dict())
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters())
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
         self.critic = Critic(self.state_dim, self.action_dim,hidden_size, hidden_size).to(self.device)
         self.critic_target = Critic(self.state_dim, self.action_dim, hidden_size, hidden_size).to(self.device)
         self.critic_target.load_state_dict(self.critic.state_dict())
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters())
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=c_lr)
 
         # render policy? This doesn't do anything atm
         self.render_policy = render_policy
