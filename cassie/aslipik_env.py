@@ -85,6 +85,9 @@ class CassieIKEnv:
         # Output of Cassie's state estimation code
         self.cassie_state = state_out_t()
 
+        # for print statements
+        self.debug = False
+
     def step_simulation(self, action):
 
         # maybe make ref traj only send relevant idxs?
@@ -132,8 +135,6 @@ class CassieIKEnv:
     def step(self, action):
         for _ in range(self.simrate):
             self.step_simulation(action)
-
-        input()
 
         height = self.sim.qpos()[2]
 
@@ -256,14 +257,15 @@ class CassieIKEnv:
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
-        print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-        0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-        0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-        0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-        0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
-        reward
-        )
-        )
+        if self.debug:
+            print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
+            0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
+            0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
+            0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
+            0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
+            reward
+            )
+            )
 
         return reward
 
