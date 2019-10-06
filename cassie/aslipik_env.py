@@ -20,9 +20,8 @@ class CassieIKTrajectory:
         self.qvel = np.copy(trajectory["qvel"])
 
 # simrate used to be 60
-# 196 / 4 == 49 (phaselen)
 class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=4, clock_based=True, state_est=True, filename="30hz_aslip_trajs.pkl"):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, filename="30hz_aslip_trajs.pkl"):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -133,6 +132,8 @@ class CassieIKEnv:
     def step(self, action):
         for _ in range(self.simrate):
             self.step_simulation(action)
+
+        input()
 
         height = self.sim.qpos()[2]
 
