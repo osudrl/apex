@@ -6,9 +6,8 @@ import os
 
 from apex import print_logo
 
-from rl.utils import ReplayBuffer
+from rl.utils import ReplayBuffer, AdaptiveParamNoiseSpec, distance_metric
 from rl.algos.sync_td3 import TD3, parallel_collect_experience
-from rl_algos.utils import AdaptiveParamNoiseSpec, distance_metric
 
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
