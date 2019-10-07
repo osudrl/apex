@@ -3,6 +3,8 @@ import torch
 import ray
 import time
 
+from apex import gym_factory
+
 # This function adapted from https://github.com/modestyachts/ARS/blob/master/code/shared_noise.py
 # (Thanks to Horia Mania)
 # In a nutshell, this created the deltas to be used in the experiment ahead of time.
@@ -150,7 +152,47 @@ class ARS:
         param.data += self.step_size * weighting * reward_factor * torch.from_numpy(d_param).data
     return timesteps
 
-def run_experiment(policy_thunk, env_thunk, eval_fn, args):
+def run_experiment(args):
+
+  # wrapper function for creating parallelized envs
+  env_thunk = gym_factory(args.env_name)
+  with env_thunk() as env:
+      obs_space = env.observation_space.shape[0]
+      act_space = env.action_space.shape[0]
+
+  # wrapper function for creating parallelized policies
+  def policy_thunk():
+    from rl.policies import LinearMLP, RecurrentNet
+    if args.load_model is not None:
+      return torch.load(args.load_model)
+    else:
+      if not args.recurrent:
+        policy = LinearMLP(obs_space, act_space, hidden_size=args.hidden_size).float()
+      else:
+        policy = RecurrentNet(obs_space, act_space, hidden_size=args.hidden_size).float()
+
+      # policy parameters should be zero initialized according to ARS paper
+      for p in policy.parameters():
+        p.data = torch.zeros(p.shape)
+      return policy
+
+  # the 'black box' function that will get passed into ARS
+  def eval_fn(policy, env, reward_shift, traj_len, visualize=False, normalize=False):
+    if hasattr(policy, 'init_hidden_state'):
+      policy.init_hidden_state()
+
+    state = torch.tensor(env.reset()).float()
+    rollout_reward = 0
+    done = False
+
+    timesteps = 0
+    while not done and timesteps < traj_len:
+      action = policy.forward(state, update_normalizer=normalize).detach()
+      state, reward, done, _ = env.step(action)
+      state = torch.tensor(state).float()
+      rollout_reward += reward - reward_shift
+      timesteps+=1
+    return rollout_reward, timesteps
   import locale
   locale.setlocale(locale.LC_ALL, '')
 
