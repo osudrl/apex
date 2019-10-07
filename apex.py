@@ -96,7 +96,6 @@ if __name__ == "__main__":
 
     """
     from rl.algos.ddpg import run_experiment
-    sys.argv.remove(sys.argv[1])
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--env_name",     "-e",   default="Hopper-v2")
     parser.add_argument("--hidden_size",          default=32, type=int)
@@ -104,10 +103,12 @@ if __name__ == "__main__":
     parser.add_argument("--timesteps",    "-t",   default=1e8, type=int)
     parser.add_argument("--load_model",   "-l",   default=None, type=str)
     parser.add_argument("--save_model",   "-m",   default="./trained_models/ars/ars.pt", type=str)
+    parser.add_argument('--discount',             default=0.01, type=float)
     parser.add_argument('--tau',                  default=0.01, type=float)
     parser.add_argument("--actor_lr",     "-alr", default=0.001, type=float)
     parser.add_argument("--critic_lr",    "-clr", default=0.005, type=float)
     parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)
+    parser.add_argument("--batch_size",           default=64, type=int)
     parser.add_argument("--recurrent",    "-r",   action='store_true')
     parser.add_argument("--log_dir",       default="./logs/ddpg/experiments/", type=str)
     parser.add_argument("--average_every", default=10, type=int)
