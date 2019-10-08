@@ -5,12 +5,12 @@ import torch.nn.functional as F
 import numpy as np
 
 from apex import gym_factory
-import copy
+#import copy
 
 # Based on https://github.com/sfujim/TD3/blob/master/DDPG.py
 
 class Actor_tmp(nn.Module):
-  def __init__(self, state_dim, output_dim, hidden_size=64):
+  def __init__(self, state_dim, output_dim, hidden_size=256):
     super(Actor_tmp, self).__init__()
 
     self.l1 = nn.Linear(state_dim, hidden_size)
@@ -25,7 +25,7 @@ class Actor_tmp(nn.Module):
     return torch.tanh(self.l3(x))
 
 class Critic_tmp(nn.Module):
-  def __init__(self, state_dim, action_dim, hidden_size=64):
+  def __init__(self, state_dim, action_dim, hidden_size=256):
     super(Critic_tmp, self).__init__()
 
     print("Creating critic with input {} + {} = {}".format(state_dim, action_dim, state_dim + action_dim))
@@ -72,17 +72,27 @@ class ReplayBuffer():
     return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx]
 
 class DDPG():
-  def __init__(self, actor, critic, max_action, a_lr, c_lr, discount=0.99, tau=0.01):
+  def __init__(self, actor, critic, max_action, a_lr, c_lr, discount=0.99, tau=0.001):
     self.behavioral_actor  = actor
     self.behavioral_critic = critic
 
-    #self.recurrent = True if actor.recurrent == True or critic.recurrent == True else False
+    import pickle
 
-    self.target_actor  = copy.deepcopy(actor)
-    self.target_critic = copy.deepcopy(critic)
+    #self.target_actor  = copy.deepcopy(actor)
+    #self.target_critic = copy.deepcopy(critic)
 
-    self.actor_optimizer  = torch.optim.SGD(self.behavioral_actor.parameters(), lr=a_lr)
-    self.critic_optimizer = torch.optim.SGD(self.behavioral_critic.parameters(), lr=a_lr)
+    self.target_actor  = pickle.loads(pickle.dumps(actor))
+    self.target_critic = pickle.loads(pickle.dumps(critic))
+    """
+    self.target_actor = type(actor)
+    self.target_actor.load_state_dict(actor.state_dict())
+
+    self.target_critic = type(critic)
+    self.target_critic.load_state_dict(critic.state_dict())
+    """
+
+    self.actor_optimizer  = torch.optim.Adam(self.behavioral_actor.parameters(), lr=a_lr)
+    self.critic_optimizer = torch.optim.Adam(self.behavioral_critic.parameters(), weight_decay=1e-2)
 
     self.max_action = max_action
     self.discount   = discount
@@ -112,9 +122,20 @@ class DDPG():
     actor_loss.backward()
     self.actor_optimizer.step()
 
+    """
+    for param, target_param in zip(self.behavioral_critic.parameters(), self.target_critic.parameters()):
+      print("BEFORE UPDATE:", param.data[0])
+      break
+    """
     # Update the frozen target models
     for param, target_param in zip(self.behavioral_critic.parameters(), self.target_critic.parameters()):
       target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+    """
+    for param, target_param in zip(self.behavioral_critic.parameters(), self.target_critic.parameters()):
+      print("AFTER UPDATE:", param.data[0])
+      break
+    """
 
     for param, target_param in zip(self.behavioral_actor.parameters(), self.target_actor.parameters()):
       target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
@@ -142,11 +163,13 @@ def run_experiment(args):
   eval_every = 100
   while timesteps < args.timesteps:
 
-    action_noise = np.random.normal(0, 0.2, size=act_space)
-    action = actor.forward(torch.Tensor(state)).detach().numpy()
-    #print("action: {}, noise: {}".format(action, action_noise))
-    action += action_noise
-    #print("action updated: {}".format(action))
+    if timesteps > args.start_timesteps:
+      #print("doing policy actions")
+      action_noise = np.random.normal(0, 0.2, size=act_space)
+      action = algo.behavioral_actor.forward(torch.Tensor(state)).detach().numpy()
+      action += action_noise
+    else:
+      action = env.action_space.sample()
     next_state, reward, done, _ = env.step(action)
 
     state = state.astype(np.float32)
@@ -164,7 +187,7 @@ def run_experiment(args):
     if done:
       state = env.reset()
       done = False
-      print("Finished iteration {}, timesteps {}, reward {}, episode timesteps {}\t\t\r".format(iter, timesteps, episode_reward, episode_timesteps))
+      #print("Finished iteration {}, timesteps {}, reward {}, episode timesteps {}\t\t\r".format(iter, timesteps, episode_reward, episode_timesteps))
       state, done = env.reset(), False
       episode_reward, episode_timesteps, iter = 0, 0, iter+1
 
@@ -173,10 +196,10 @@ def run_experiment(args):
         for _ in range(10):
           state = env.reset()
           while not done:
-            action = actor.forward(torch.Tensor(state)).detach().numpy()
+            action = algo.behavioral_actor.forward(torch.Tensor(state)).detach().numpy()
             state, reward, done, _ = env.step(action)
             eval_reward += reward
-        print("*******************\n Evaluation over ten episodes: {:4.3f} ***\n".format(eval_reward/10))
+        print("Episodes: {:4d} | evaluation: {:4.3f}\n".format(iter, eval_reward/10))
         next_state = env.reset()
 
     timesteps += 1
