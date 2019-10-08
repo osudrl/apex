@@ -28,6 +28,7 @@ class Critic_tmp(nn.Module):
   def __init__(self, state_dim, action_dim, hidden_size=64):
     super(Critic_tmp, self).__init__()
 
+    print("Creating critic with input {} + {} = {}".format(state_dim, action_dim, state_dim + action_dim))
     self.l1 = nn.Linear(state_dim + action_dim, hidden_size)
     self.l2 = nn.Linear(hidden_size, hidden_size)
     self.l3 = nn.Linear(hidden_size, 1)
@@ -36,6 +37,7 @@ class Critic_tmp(nn.Module):
 
   def forward(self, state, action):
     x = torch.cat([state, action])
+    #print(x, x.size(), self.l1.in_features, self.l1.out_features)
     x = F.relu(self.l1(x))
     x = F.relu(self.l2(x))
     return self.l3(x)
@@ -43,30 +45,30 @@ class Critic_tmp(nn.Module):
 class ReplayBuffer():
   def __init__(self, state_dim, action_dim, max_size):
     self.max_size   = int(max_size)
-    self.state      = np.zeros((self.max_size, state_dim))
-    self.next_state = np.zeros((self.max_size, state_dim))
-    self.action     = np.zeros((self.max_size, action_dim))
-    self.reward     = np.zeros((self.max_size, 1))
-    self.not_done   = np.zeros((self.max_size, 1))
+    self.state      = torch.zeros((self.max_size, state_dim))
+    self.next_state = torch.zeros((self.max_size, state_dim))
+    self.action     = torch.zeros((self.max_size, action_dim))
+    self.reward     = torch.zeros((self.max_size, 1))
+    self.not_done   = torch.zeros((self.max_size, 1))
 
     self.size = 1
 
   def push(self, state, action, next_state, reward, done):
     if self.size == self.max_size:
-      idx = np.random.randint(0) % self.size
+      idx = np.random.randint(0, self.size)
     else:
       idx = self.size-1
 
-    self.state[idx]      = state
-    self.next_state[idx] = next_state
-    self.action[idx]     = action
+    self.state[idx]      = torch.Tensor(state)
+    self.next_state[idx] = torch.Tensor(next_state)
+    self.action[idx]     = torch.Tensor(action)
     self.reward[idx]     = reward
     self.not_done[idx]   = 1 - done
 
     self.size = min(self.size+1, self.max_size)
 
   def sample(self, batch_size):
-    idx = np.random.randint(0) % self.size
+    idx = np.random.randint(0, self.size)
     return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx]
 
 class DDPG():
@@ -89,7 +91,13 @@ class DDPG():
   def update_policy(self, replay_buffer, batch_size=64):
     states, actions, next_states, rewards, not_dones = replay_buffer.sample(batch_size)
 
-    target_q = reward + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states))).detach()
+    states = torch.Tensor(states)
+    next_states = torch.Tensor(next_states)
+    actions = torch.Tensor(actions)
+
+    #print("DOING TARGET CRITIC FORWARD")
+    target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states))).detach()
+    #print("DOING BEHAVIORAL CRITIC FORWARD")
     current_q = self.behavioral_critic(states, actions)
 
     critic_loss = F.mse_loss(current_q, target_q)
@@ -98,7 +106,7 @@ class DDPG():
     critic_loss.backward()
     self.critic_optimizer.step()
 
-    actor_loss = -self.critic(states, self.actor(states)).mean()
+    actor_loss = -self.behavioral_critic(states, self.behavioral_actor(states)).mean()
 
     self.actor_optimizer.zero_grad()
     actor_loss.backward()
@@ -127,25 +135,50 @@ def run_experiment(args):
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
   timesteps = 0
+  iter = 0
+  episode_reward = 0
+  episode_timesteps = 0
   state = env.reset()
+  eval_every = 100
   while timesteps < args.timesteps:
-    state = torch.Tensor(state)
 
-    action = actor.forward(state).detach()
+    action_noise = np.random.normal(0, 0.2, size=act_space)
+    action = actor.forward(torch.Tensor(state)).detach().numpy()
+    #print("action: {}, noise: {}".format(action, action_noise))
+    action += action_noise
+    #print("action updated: {}".format(action))
     next_state, reward, done, _ = env.step(action)
+
+    state = state.astype(np.float32)
+    next_state = next_state.astype(np.float32)
+
+    episode_reward += reward
+    episode_timesteps += 1
     
     replay_buff.push(state, action, next_state, reward, done)
 
     if replay_buff.size > args.batch_size:
       algo.update_policy(replay_buff, batch_size=args.batch_size)
 
-    state = next_state 
 
     if done:
       state = env.reset()
-    env.render()
+      done = False
+      print("Finished iteration {}, timesteps {}, reward {}, episode timesteps {}\t\t\r".format(iter, timesteps, episode_reward, episode_timesteps))
+      state, done = env.reset(), False
+      episode_reward, episode_timesteps, iter = 0, 0, iter+1
 
+      if iter % eval_every == 0:
+        eval_reward = 0
+        for _ in range(10):
+          state = env.reset()
+          while not done:
+            action = actor.forward(torch.Tensor(state)).detach().numpy()
+            state, reward, done, _ = env.step(action)
+            eval_reward += reward
+        print("*******************\n Evaluation over ten episodes: {:4.3f} ***\n".format(eval_reward/10))
+        next_state = env.reset()
 
-
-
+    timesteps += 1
+    state = next_state 
 
