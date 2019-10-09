@@ -160,7 +160,7 @@ def run_experiment(args):
   eval_every = 100
   while timesteps < args.timesteps:
 
-    if True: #timesteps > args.start_timesteps:
+    if timesteps > args.start_timesteps:
       action_noise = np.random.normal(0, 0.2, size=act_space)
       action = algo.behavioral_actor.forward(torch.Tensor(state)).detach().numpy()
       action += action_noise
@@ -179,7 +179,8 @@ def run_experiment(args):
     if replay_buff.size > args.batch_size:
       algo.update_policy(replay_buff, batch_size=args.batch_size)
 
-    if done:
+    if done or episode_timesteps > args.traj_len:
+      print("Episode {}, return {:4.3f}, steps {:3d}".format(iter, episode_reward, episode_timesteps))
       state = env.reset()
       done = False
       state, done = env.reset(), False
@@ -196,7 +197,7 @@ def run_experiment(args):
             state, reward, done, _ = env.step(action)
             eval_reward += reward
             eval_steps += 1
-            env.render()
+            #env.render()
         print("Episodes: {:4d} | Return: {:4.3f} | Timesteps {:n} | Evaluation steps: {:4.3f}\n".format(iter, eval_reward/10, timesteps, eval_steps))
         next_state = env.reset()
 
