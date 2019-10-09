@@ -104,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument("--start_timesteps",         default=1e4, type=int)
     parser.add_argument("--load_model",      "-l",   default=None, type=str)
     parser.add_argument("--save_model",      "-m",   default="./trained_models/ars/ars.pt", type=str)
-    parser.add_argument('--discount',             default=0.01, type=float)
+    parser.add_argument('--discount',             default=0.99, type=float)
     parser.add_argument('--tau',                  default=0.005, type=float)
     parser.add_argument("--actor_lr",       "-alr", default=1e-4, type=float)
     parser.add_argument("--critic_lr",      "-clr", default=1e-4, type=float)
@@ -147,4 +147,4 @@ if __name__ == "__main__":
     """
     raise NotImplementedError
   else:
-    print("Invalid argument '{}'".format(sys.argv[1]))
+    print("Invalid algorithm '{}'".format(sys.argv[1]))
