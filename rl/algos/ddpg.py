@@ -5,26 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from apex import gym_factory, create_logger
-
-from rl.policies.critic import DDPG_Critic
-
-
-# Based on https://github.com/sfujim/TD3/blob/master/DDPG.py
-
-class Actor_tmp(nn.Module):
-  def __init__(self, state_dim, output_dim, hidden_size=256):
-    super(Actor_tmp, self).__init__()
-
-    self.l1 = nn.Linear(state_dim, hidden_size)
-    self.l2 = nn.Linear(hidden_size, hidden_size)
-    self.l3 = nn.Linear(hidden_size, output_dim)
-
-  def forward(self, state):
-    x = F.relu(self.l1(state))
-    x = F.relu(self.l2(x))
-    return torch.tanh(self.l3(x))
-
 class ReplayBuffer():
   def __init__(self, state_dim, action_dim, max_size):
     self.max_size   = int(max_size)
@@ -90,7 +70,6 @@ class DDPG():
     actor_loss.backward()
     self.actor_optimizer.step()
 
-    # Update the frozen target models
     for param, target_param in zip(self.behavioral_critic.parameters(), self.target_critic.parameters()):
       target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
@@ -109,19 +88,27 @@ def eval_policy(policy, env, evals=10):
   return eval_reward/evals
 
 def run_experiment(args):
+  from time import time
 
-  torch.manual_seed(args.seed)
-  np.random.seed(args.seed)
+  from apex import gym_factory, create_logger
+  from rl.policies.critic import FF_Critic
+  from rl.policies.actor import FF_Actor
+
+  import locale
+  locale.setlocale(locale.LC_ALL, '')
 
   # wrapper function for creating parallelized envs
   env = gym_factory(args.env_name)()
+
+  torch.manual_seed(args.seed)
+  np.random.seed(args.seed)
   env.seed(args.seed)
 
   obs_space = env.observation_space.shape[0]
   act_space = env.action_space.shape[0]
 
-  actor = Actor_tmp(obs_space, act_space, hidden_size=args.hidden_size)
-  critic = DDPG_Critic(obs_space, act_space, hidden_size=args.hidden_size)
+  actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size)
+  critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size)
 
   print("Deep Deterministic Policy Gradients:")
   print("\tenv:          {}".format(args.env_name))
@@ -136,55 +123,66 @@ def run_experiment(args):
 
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
-  timesteps = 0
   iter = 0
   episode_reward = 0
   episode_timesteps = 0
   state = env.reset()
-  eval_every = 100
 
+  # create a tensorboard logging object
   logger = create_logger(args)
 
+  # do an initial, baseline evaluation
   eval_reward = eval_policy(algo.behavioral_actor, env)
-  print("Episodes: {:4d} | Return: {:4.3f} | Timesteps {:n}\n".format(iter, eval_reward, timesteps))
-  logger.add_scalar('Eval reward', eval_reward/10, timesteps)
+  logger.add_scalar('Eval reward', eval_reward, 0)
 
-  state = env.reset()
+  state = env.reset().astype(np.float32)
+
+  # Fill replay buffer, update policy until n timesteps have passed
+  training_start = time()
+  episode_start = time()
+
+  timesteps = 0
   while timesteps < args.timesteps:
 
+    # Generate a transition and append to the replay buffer
     if timesteps > args.start_timesteps:
-      action_noise = np.random.normal(0, 0.2, size=act_space)
       action = algo.behavioral_actor.forward(torch.Tensor(state)).detach().numpy()
-      action += action_noise
+      action += np.random.normal(0, args.expl_noise, size=act_space)
     else:
       action = env.action_space.sample()
     next_state, reward, done, _ = env.step(action)
-
-    state = state.astype(np.float32)
-    next_state = next_state.astype(np.float32)
+    replay_buff.push(state, action, next_state.astype(np.float32), reward, done)
 
     episode_reward += reward
     episode_timesteps += 1
     
-    replay_buff.push(state, action, next_state, reward, done)
-
+    # Update the policy once our replay buffer is big enough
     if replay_buff.size > args.batch_size:
       algo.update_policy(replay_buff, batch_size=args.batch_size)
 
+    # Do some fancy debug printing/logging
     if done or episode_timesteps > args.traj_len:
-      print("Episode {}, return {:4.3f}, steps {:3d}".format(iter, episode_reward, episode_timesteps))
+      episode_elapsed = (time() - episode_start)
+      episode_secs_per_sample = episode_elapsed / episode_timesteps
       logger.add_scalar('Episode reward', episode_reward, iter)
-      state = env.reset()
-      done = False
-      state, done = env.reset(), False
-      episode_reward, episode_timesteps, iter = 0, 0, iter+1
 
-      if iter % eval_every == 0:
+      completion = 1 - float(timesteps) / args.timesteps
+      avg_sample_r = (time() - training_start)/timesteps
+      secs_remaining = avg_sample_r * args.timesteps * completion
+      hrs_remaining = int(secs_remaining//(60*60))
+      min_remaining = int(secs_remaining - hrs_remaining*60*60)//60
+
+      print("episode {:5d} | {:3.1f}s/1k samples | approx. {:3d}:{:2d}m remain\t\t".format(iter, 1000*episode_secs_per_sample, hrs_remaining, min_remaining), end='\r')
+
+      if iter % args.eval_every == 0 and iter != 0:
         eval_reward = eval_policy(algo.behavioral_actor, env)
-        print("Episodes: {:4d} | Return: {:4.3f} | Timesteps {:n}\n".format(iter, eval_reward, timesteps))
         logger.add_scalar('Eval reward', eval_reward, timesteps)
-        next_state = env.reset()
+
+        print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}\t\t\t".format(iter, eval_reward, timesteps))
+
+      next_state, done = env.reset(), False
+      episode_start, episode_reward, episode_timesteps = time(), 0, 0
+      iter += 1
 
     timesteps += 1
     state = next_state 
-

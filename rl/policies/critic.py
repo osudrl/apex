@@ -37,9 +37,9 @@ class Critic(nn.Module):
     return (state - self.welford_state_mean) / sqrt(self.welford_state_mean_diff / self.welford_state_n)
 
 
-class DDPG_Critic(Critic):
+class FF_Critic(Critic):
   def __init__(self, state_dim, action_dim, hidden_size=256):
-    super(DDPG_Critic, self).__init__()
+    super(FF_Critic, self).__init__()
     self.l1 = nn.Linear(state_dim + action_dim, hidden_size)
     self.l2 = nn.Linear(hidden_size, hidden_size)
     self.l3 = nn.Linear(hidden_size, 1)
