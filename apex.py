@@ -138,7 +138,7 @@ if __name__ == "__main__":
     from rl.algos.ddpg import run_experiment
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--env_name",        "-e",  default="Hopper-v2")
-    parser.add_argument("--hidden_size",            default=64, type=int)
+    parser.add_argument("--hidden_size",            default=300, type=int)
     parser.add_argument("--seed",            "-s",  default=0, type=int)
     parser.add_argument("--timesteps",       "-t",  default=1e6, type=int)
     parser.add_argument("--start_timesteps",        default=1e4, type=int)
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument("--critic_lr",      "-clr", default=5e-4, type=float)
     parser.add_argument("--traj_len",       "-tl",  default=1000, type=int)
     parser.add_argument("--center_reward",  "-r",   action='store_true')
-    parser.add_argument("--batch_size",             default=256, type=int)
+    parser.add_argument("--batch_size",             default=64, type=int)
     parser.add_argument("--logdir",                default="./logs/ddpg/experiments/", type=str)
     parser.add_argument("--average_every",          default=10, type=int)
     args = parser.parse_args()

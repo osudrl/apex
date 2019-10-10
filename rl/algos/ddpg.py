@@ -120,8 +120,8 @@ def run_experiment(args):
   obs_space = env.observation_space.shape[0]
   act_space = env.action_space.shape[0]
 
-  actor = Actor_tmp(obs_space, act_space)
-  critic = DDPG_Critic(obs_space, act_space)
+  actor = Actor_tmp(obs_space, act_space, hidden_size=args.hidden_size)
+  critic = DDPG_Critic(obs_space, act_space, hidden_size=args.hidden_size)
 
   print("Deep Deterministic Policy Gradients:")
   print("\tenv:          {}".format(args.env_name))
