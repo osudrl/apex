@@ -35,7 +35,7 @@ class ReplayBuffer():
     return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx]
 
 class DDPG():
-  def __init__(self, actor, critic, a_lr, c_lr, discount=0.99, tau=0.001):
+  def __init__(self, actor, critic, a_lr, c_lr, discount=0.99, tau=0.001, center_reward=False):
     self.behavioral_actor  = actor
     self.behavioral_critic = critic
 
@@ -47,6 +47,7 @@ class DDPG():
 
     self.discount   = discount
     self.tau        = tau
+    self.center_reward = center_reward
 
   def update_policy(self, replay_buffer, batch_size=256):
     states, actions, next_states, rewards, not_dones = replay_buffer.sample(batch_size)
@@ -54,6 +55,8 @@ class DDPG():
     states      = states
     next_states = next_states
     actions     = actions
+
+    rewards = self.behavioral_critic.normalize_reward(rewards)
 
     target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states))).detach()
     current_q = self.behavioral_critic(states, actions)
