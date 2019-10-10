@@ -157,8 +157,8 @@ class CassieIKEnv:
         return self.get_full_state(), reward, done, {}
 
     def reset(self):
-        # self.phase = random.randint(0, self.phaselen)
-        self.phase = 0
+        self.phase = random.randint(0, self.phaselen)
+        # self.phase = 0
         self.time = 0
         self.counter = 0
 
@@ -166,7 +166,8 @@ class CassieIKEnv:
         # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
-        self.sim.set_qvel(np.zeros(qvel.shape))
+        self.sim.set_qvel(qvel * 0.333)
+        # self.sim.set_qvel(np.zeros(qvel.shape))
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
