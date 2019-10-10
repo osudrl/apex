@@ -1,13 +1,16 @@
 import gym
 import torch
+import hashlib, os
+from collections import OrderedDict
+
+class color:
+ BOLD   = '\033[1m\033[48m'
+ END    = '\033[0m'
+ ORANGE = '\033[38;5;202m'
+ BLACK  = '\033[38;5;240m'
+
 
 def print_logo(subtitle="", option=2):
-  class color:
-   BOLD   = '\033[1m\033[48m'
-   END    = '\033[0m'
-   ORANGE = '\033[38;5;202m'
-   BLACK  = '\033[38;5;240m'
-
   print(color.BOLD + color.ORANGE +  "         .8.         " + color.BLACK + " 8 888888888o   " + color.ORANGE + "8 8888888888   `8.`8888.      ,8' ")
   print(color.BOLD + color.ORANGE +  "        .888.        " + color.BLACK + " 8 8888    `88. " + color.ORANGE + "8 8888          `8.`8888.    ,8' ")
   print(color.BOLD + color.ORANGE +  "       :88888.       " + color.BLACK + " 8 8888     `88 " + color.ORANGE + "8 8888           `8.`8888.  ,8' ")
@@ -53,6 +56,43 @@ def gym_factory(path, **kwargs):
 
     return partial(cls, **_kwargs)
 
+def create_logger(args):
+  from torch.utils.tensorboard import SummaryWriter
+  """Use hyperparms to set a directory to output diagnostic files."""
+
+  arg_dict = args.__dict__
+  assert "seed" in arg_dict, \
+    "You must provide a 'seed' key in your command line arguments"
+  assert "logdir" in arg_dict, \
+    "You must provide a 'logdir' key in your command line arguments."
+
+  # sort the keys so the same hyperparameters will always have the same hash
+  arg_dict = OrderedDict(sorted(arg_dict.items(), key=lambda t: t[0]))
+
+  # remove seed so it doesn't get hashed, store value for filename
+  # same for logging directory
+  seed = str(arg_dict.pop("seed"))
+  logdir = str(arg_dict.pop('logdir'))
+
+  # get a unique hash for the hyperparameter settings, truncated at 10 chars
+  arg_hash = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:10] + '-seed' + seed
+  output_dir = os.path.join(logdir, arg_hash)
+
+  # create a directory with the hyperparm hash as its name, if it doesn't
+  # already exist.
+  os.makedirs(output_dir, exist_ok=True)
+
+  # Create a file with all the hyperparam settings in plaintext
+  info_path = os.path.join(output_dir, "experiment.info")
+  file = open(info_path, 'w')
+  for key, val in arg_dict.items():
+      file.write("%s: %s" % (key, val))
+      file.write('\n')
+
+  logger = SummaryWriter(output_dir, flush_secs=0.1)
+  print("Logging to " + color.BOLD + color.ORANGE + str(output_dir) + color.END)
+  return logger
+
 if __name__ == "__main__":
   import sys, argparse
   parser = argparse.ArgumentParser()
@@ -83,7 +123,7 @@ if __name__ == "__main__":
     parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)
     parser.add_argument("--algo",         "-a",   default='v1', type=str)
     parser.add_argument("--recurrent",    "-r",   action='store_true')
-    parser.add_argument("--log_dir",       default="./logs/ars/experiments/", type=str)
+    parser.add_argument("--logdir",       default="./logs/ars/experiments/", type=str)
     parser.add_argument("--average_every", default=10, type=int)
     args = parser.parse_args()
 
@@ -97,22 +137,22 @@ if __name__ == "__main__":
     """
     from rl.algos.ddpg import run_experiment
     parser.add_argument("--workers", type=int, default=1)
-    parser.add_argument("--env_name",        "-e",   default="Hopper-v2")
-    parser.add_argument("--hidden_size",            default=32, type=int)
-    parser.add_argument("--seed",            "-s",   default=0, type=int)
-    parser.add_argument("--timesteps",       "-t",   default=1e8, type=int)
-    parser.add_argument("--start_timesteps",         default=1e4, type=int)
-    parser.add_argument("--load_model",      "-l",   default=None, type=str)
-    parser.add_argument("--save_model",      "-m",   default="./trained_models/ars/ars.pt", type=str)
-    parser.add_argument('--discount',             default=0.99, type=float)
-    parser.add_argument('--tau',                  default=0.005, type=float)
-    parser.add_argument("--actor_lr",       "-alr", default=1e-4, type=float)
-    parser.add_argument("--critic_lr",      "-clr", default=1e-4, type=float)
+    parser.add_argument("--env_name",        "-e",  default="Hopper-v2")
+    parser.add_argument("--hidden_size",            default=64, type=int)
+    parser.add_argument("--seed",            "-s",  default=0, type=int)
+    parser.add_argument("--timesteps",       "-t",  default=1e6, type=int)
+    parser.add_argument("--start_timesteps",        default=1e4, type=int)
+    parser.add_argument("--load_model",      "-l",  default=None, type=str)
+    parser.add_argument("--save_model",      "-m",  default="./trained_models/ddpg/ddpg.pt", type=str)
+    parser.add_argument('--discount',               default=0.99, type=float)
+    parser.add_argument('--tau',                    default=0.001, type=float)
+    parser.add_argument("--actor_lr",       "-alr", default=5e-5, type=float)
+    parser.add_argument("--critic_lr",      "-clr", default=5e-4, type=float)
     parser.add_argument("--traj_len",       "-tl",  default=1000, type=int)
-    parser.add_argument("--batch_size",           default=256, type=int)
-    parser.add_argument("--recurrent",      "-r",   action='store_true')
-    parser.add_argument("--log_dir",       default="./logs/ddpg/experiments/", type=str)
-    parser.add_argument("--average_every", default=10, type=int)
+    parser.add_argument("--center_reward",  "-r",   action='store_true')
+    parser.add_argument("--batch_size",             default=256, type=int)
+    parser.add_argument("--logdir",                default="./logs/ddpg/experiments/", type=str)
+    parser.add_argument("--average_every",          default=10, type=int)
     args = parser.parse_args()
 
     run_experiment(args)

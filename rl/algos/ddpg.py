@@ -1,11 +1,14 @@
 import pickle
-
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-import copy
-from apex import gym_factory
+
+from apex import gym_factory, create_logger
+
+from rl.policies.critic import DDPG_Critic
+
 
 # Based on https://github.com/sfujim/TD3/blob/master/DDPG.py
 
@@ -17,36 +20,10 @@ class Actor_tmp(nn.Module):
     self.l2 = nn.Linear(hidden_size, hidden_size)
     self.l3 = nn.Linear(hidden_size, output_dim)
 
-    self.recurrent = False
-
   def forward(self, state):
     x = F.relu(self.l1(state))
     x = F.relu(self.l2(x))
     return torch.tanh(self.l3(x))
-
-class Critic_tmp(nn.Module):
-  def __init__(self, state_dim, action_dim, hidden_size=256):
-    super(Critic_tmp, self).__init__()
-
-    #self.state_linear = nn.Linear(state_dim, hidden_size)
-    #self.action_linear = nn.Linear(action_dim, hidden_size)
-
-    self.l1 = nn.Linear(state_dim, hidden_size)
-    self.l2 = nn.Linear(hidden_size + action_dim, hidden_size)
-    self.l3 = nn.Linear(hidden_size, 1)
-
-    self.recurrent = False
-
-  def forward(self, state, action):
-
-    #state = self.state_linear(state)
-    #action = self.action_linear(action)
-    #x = F.relu(torch.add(state, action))
-
-    x = F.relu(self.l1(state))
-    x = F.relu(self.l2(torch.cat([x, action], 1)))
-    #x = F.relu(self.l2(x))
-    return self.l3(x)
 
 class ReplayBuffer():
   def __init__(self, state_dim, action_dim, max_size):
@@ -78,12 +55,9 @@ class ReplayBuffer():
     return self.state[idx], self.action[idx], self.next_state[idx], self.reward[idx], self.not_done[idx]
 
 class DDPG():
-  def __init__(self, actor, critic, max_action, a_lr, c_lr, discount=0.99, tau=0.001):
+  def __init__(self, actor, critic, a_lr, c_lr, discount=0.99, tau=0.001):
     self.behavioral_actor  = actor
     self.behavioral_critic = critic
-
-    #self.target_actor  = pickle.loads(pickle.dumps(actor))
-    #self.target_critic = pickle.loads(pickle.dumps(critic))
 
     self.target_actor = copy.deepcopy(actor)
     self.target_critic = copy.deepcopy(critic)
@@ -91,7 +65,6 @@ class DDPG():
     self.actor_optimizer  = torch.optim.Adam(self.behavioral_actor.parameters(), lr=a_lr)
     self.critic_optimizer = torch.optim.Adam(self.behavioral_critic.parameters(), lr=c_lr, weight_decay=1e-2)
 
-    #self.max_action = max_action
     self.discount   = discount
     self.tau        = tau
 
@@ -124,6 +97,17 @@ class DDPG():
     for param, target_param in zip(self.behavioral_actor.parameters(), self.target_actor.parameters()):
       target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
+def eval_policy(policy, env, evals=10):
+  eval_reward = 0
+  for _ in range(evals):
+    state = env.reset()
+    done = False
+    while not done:
+      action = policy.forward(torch.Tensor(state)).detach().numpy()
+      state, reward, done, _ = env.step(action)
+      eval_reward += reward
+  return eval_reward/evals
+
 def run_experiment(args):
 
   torch.manual_seed(args.seed)
@@ -137,7 +121,7 @@ def run_experiment(args):
   act_space = env.action_space.shape[0]
 
   actor = Actor_tmp(obs_space, act_space)
-  critic = Critic_tmp(obs_space, act_space)
+  critic = DDPG_Critic(obs_space, act_space)
 
   print("Deep Deterministic Policy Gradients:")
   print("\tenv:          {}".format(args.env_name))
@@ -148,7 +132,7 @@ def run_experiment(args):
   print("\tdiscount:     {}".format(args.discount))
   print("\ttau:          {}".format(args.tau))
   print()
-  algo = DDPG(actor, critic, 1.0, args.actor_lr, args.critic_lr, discount=args.discount, tau=args.tau)
+  algo = DDPG(actor, critic, args.actor_lr, args.critic_lr, discount=args.discount, tau=args.tau)
 
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
@@ -158,6 +142,14 @@ def run_experiment(args):
   episode_timesteps = 0
   state = env.reset()
   eval_every = 100
+
+  logger = create_logger(args)
+
+  eval_reward = eval_policy(algo.behavioral_actor, env)
+  print("Episodes: {:4d} | Return: {:4.3f} | Timesteps {:n}\n".format(iter, eval_reward, timesteps))
+  logger.add_scalar('Eval reward', eval_reward/10, timesteps)
+
+  state = env.reset()
   while timesteps < args.timesteps:
 
     if timesteps > args.start_timesteps:
@@ -181,24 +173,16 @@ def run_experiment(args):
 
     if done or episode_timesteps > args.traj_len:
       print("Episode {}, return {:4.3f}, steps {:3d}".format(iter, episode_reward, episode_timesteps))
+      logger.add_scalar('Episode reward', episode_reward, iter)
       state = env.reset()
       done = False
       state, done = env.reset(), False
       episode_reward, episode_timesteps, iter = 0, 0, iter+1
 
       if iter % eval_every == 0:
-        eval_reward = 0
-        eval_steps = 0
-        for _ in range(10):
-          state = env.reset()
-          done = False
-          while not done:
-            action = algo.behavioral_actor.forward(torch.Tensor(state)).detach().numpy()
-            state, reward, done, _ = env.step(action)
-            eval_reward += reward
-            eval_steps += 1
-            #env.render()
-        print("Episodes: {:4d} | Return: {:4.3f} | Timesteps {:n} | Evaluation steps: {:4.3f}\n".format(iter, eval_reward/10, timesteps, eval_steps))
+        eval_reward = eval_policy(algo.behavioral_actor, env)
+        print("Episodes: {:4d} | Return: {:4.3f} | Timesteps {:n}\n".format(iter, eval_reward, timesteps))
+        logger.add_scalar('Eval reward', eval_reward, timesteps)
         next_state = env.reset()
 
     timesteps += 1

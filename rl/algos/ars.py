@@ -3,7 +3,7 @@ import torch
 import ray
 import time
 
-from apex import gym_factory
+from apex import gym_factory, create_logger
 
 # This function adapted from https://github.com/modestyachts/ARS/blob/master/code/shared_noise.py
 # (Thanks to Horia Mania)
@@ -222,6 +222,8 @@ def run_experiment(args):
   timesteps = 0
   i = 0
 
+  logger = create_logger(args)
+
   env = env_thunk()
   while timesteps < args.timesteps:
     if not i % args.average_every:
@@ -235,6 +237,7 @@ def run_experiment(args):
     for eval_rollout in range(10):
       reward, _ = eval_fn(algo.policy, env, 0, args.traj_len, normalize=normalize_states)
       iter_reward += reward / 10
+
 
     timesteps += samples
     avg_reward += iter_reward
@@ -250,4 +253,5 @@ def run_experiment(args):
             end="\r")
     i += 1
 
+    logger.add_scalar('eval', iter_reward, timesteps)
     torch.save(algo.policy, args.save_model)
