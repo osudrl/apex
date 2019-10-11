@@ -21,12 +21,21 @@ class Critic(nn.Module):
   
   def normalize_reward(self, r, update=True):
     if update:
-      r_old = self.welford_reward_mean
-      self.welford_reward_mean += (r - r_old) / self.welford_reward_n
-      self.welford_reward_mean_diff += (r - r_old) * (r - r_old)
-      self.welford_reward_n += 1
+      if len(r.size()) == 1:
+        r_old = self.welford_reward_mean
+        self.welford_reward_mean += (r - r_old) / self.welford_reward_n
+        self.welford_reward_mean_diff += (r - r_old) * (r - r_old)
+        self.welford_reward_n += 1
+      elif len(r.size()) == 2:
+        for r_n in r:
+          r_old = self.welford_reward_mean
+          self.welford_reward_mean += (r_n - r_old) / self.welford_reward_n
+          self.welford_reward_mean_diff += (r_n - r_old) * (r_n - r_old)
+          self.welford_reward_n += 1
+      else:
+        raise NotImplementedError
 
-    return (r - self.welford_reward_mean) / sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
+    return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
 
   def normalize_state(self, state, update=True):
     if update:
@@ -34,7 +43,7 @@ class Critic(nn.Module):
       self.welford_state_mean += (state - state_old) / self.welford_state_n
       self.welford_state_mean_diff += (state - state_old) * (state - state_old)
       self.welford_state_n += 1
-    return (state - self.welford_state_mean) / sqrt(self.welford_state_mean_diff / self.welford_state_n)
+    return (state - self.welford_state_mean) / torch.sqrt(self.welford_state_mean_diff / self.welford_state_n)
 
 
 class FF_Critic(Critic):

@@ -56,7 +56,8 @@ class DDPG():
     next_states = next_states
     actions     = actions
 
-    rewards = self.behavioral_critic.normalize_reward(rewards)
+    if self.center_reward:
+      rewards = self.behavioral_critic.normalize_reward(rewards)
 
     target_q = rewards + (not_dones * self.discount * self.target_critic(next_states, self.target_actor(next_states))).detach()
     current_q = self.behavioral_critic(states, actions)
@@ -78,6 +79,8 @@ class DDPG():
 
     for param, target_param in zip(self.behavioral_actor.parameters(), self.target_actor.parameters()):
       target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+    return critic_loss.item()
 
 def eval_policy(policy, env, evals=10):
   eval_reward = 0
@@ -121,8 +124,10 @@ def run_experiment(args):
   print("\tcritic_lr:    {}".format(args.critic_lr))
   print("\tdiscount:     {}".format(args.discount))
   print("\ttau:          {}".format(args.tau))
+  print("\tnorm reward:  {}".format(args.center_reward))
   print()
-  algo = DDPG(actor, critic, args.actor_lr, args.critic_lr, discount=args.discount, tau=args.tau)
+
+  algo = DDPG(actor, critic, args.actor_lr, args.critic_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward)
 
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
@@ -140,10 +145,12 @@ def run_experiment(args):
 
   state = env.reset().astype(np.float32)
 
-  # Fill replay buffer, update policy until n timesteps have passed
+  # Keep track of some statistics for each episode
   training_start = time()
   episode_start = time()
+  episode_loss = 0
 
+  # Fill replay buffer, update policy until n timesteps have passed
   timesteps = 0
   while timesteps < args.timesteps:
 
@@ -161,13 +168,15 @@ def run_experiment(args):
     
     # Update the policy once our replay buffer is big enough
     if replay_buff.size > args.batch_size:
-      algo.update_policy(replay_buff, batch_size=args.batch_size)
+      episode_loss = algo.update_policy(replay_buff, batch_size=args.batch_size)
 
     # Do some fancy debug printing/logging
     if done or episode_timesteps > args.traj_len:
+      episode_loss /= episode_timesteps
       episode_elapsed = (time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
-      logger.add_scalar('Episode reward', episode_reward, iter)
+      logger.add_scalar('episode reward', episode_reward, iter)
+      logger.add_scalar('episode loss', episode_reward, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time() - training_start)/timesteps
@@ -175,17 +184,21 @@ def run_experiment(args):
       hrs_remaining = int(secs_remaining//(60*60))
       min_remaining = int(secs_remaining - hrs_remaining*60*60)//60
 
-      print("episode {:5d} | {:3.1f}s/1k samples | approx. {:3d}:{:2d}m remain\t\t".format(iter, 1000*episode_secs_per_sample, hrs_remaining, min_remaining), end='\r')
-
       if iter % args.eval_every == 0 and iter != 0:
         eval_reward = eval_policy(algo.behavioral_actor, env)
-        logger.add_scalar('Eval reward', eval_reward, timesteps)
+        logger.add_scalar('eval reward', eval_reward, iter)
 
         print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}\t\t\t".format(iter, eval_reward, timesteps))
 
       next_state, done = env.reset(), False
-      episode_start, episode_reward, episode_timesteps = time(), 0, 0
+      episode_start, episode_reward, episode_timesteps, episode_loss = time(), 0, 0, 0
       iter += 1
+
+    try:
+      print("episode {:5d} | episode timestep {:5d}/{:5d} | {:3.1f}s/1k samples | approx. {:3d}h {:02d}m remain\t\t".format(iter, episode_timesteps, args.traj_len, 1000*episode_secs_per_sample, hrs_remaining, min_remaining), end='\r')
+    except NameError:
+      pass
+
 
     timesteps += 1
     state = next_state 
