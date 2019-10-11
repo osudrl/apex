@@ -141,7 +141,7 @@ def run_experiment(args):
 
   # do an initial, baseline evaluation
   eval_reward = eval_policy(algo.behavioral_actor, env)
-  logger.add_scalar('Eval reward', eval_reward, 0)
+  logger.add_scalar('eval reward', eval_reward, 0)
 
   state = env.reset().astype(np.float32)
 
@@ -176,7 +176,7 @@ def run_experiment(args):
       episode_elapsed = (time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
       logger.add_scalar('episode reward', episode_reward, iter)
-      logger.add_scalar('episode loss', episode_reward, iter)
+      logger.add_scalar('episode loss', episode_loss, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time() - training_start)/timesteps
@@ -195,7 +195,7 @@ def run_experiment(args):
       iter += 1
 
     try:
-      print("episode {:5d} | episode timestep {:5d}/{:5d} | {:3.1f}s/1k samples | approx. {:3d}h {:02d}m remain\t\t".format(iter, episode_timesteps, args.traj_len, 1000*episode_secs_per_sample, hrs_remaining, min_remaining), end='\r')
+      print("episode {:5d} | episode timestep {:5d}/{:5d} | {:3.1f}s/1k samples | approx. {:3d}h {:02d}m remain\t\t\t\t".format(iter, episode_timesteps, args.traj_len, 1000*episode_secs_per_sample, hrs_remaining, min_remaining), end='\r')
     except NameError:
       pass
 
