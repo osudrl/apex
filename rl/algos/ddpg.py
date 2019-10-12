@@ -82,15 +82,17 @@ class DDPG():
 
     return critic_loss.item()
 
-def eval_policy(policy, env, evals=10):
+def eval_policy(policy, env, evals=10, max_traj_len=1000):
   eval_reward = 0
   for _ in range(evals):
     state = env.reset()
     done = False
-    while not done:
+    timesteps = 0
+    while not done and timesteps < 1000:
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       eval_reward += reward
+      timesteps += 1
   return eval_reward/evals
 
 def run_experiment(args):
@@ -193,6 +195,9 @@ def run_experiment(args):
       next_state, done = env.reset(), False
       episode_start, episode_reward, episode_timesteps, episode_loss = time(), 0, 0, 0
       iter += 1
+
+      torch.save(algo.behavioral_actor, args.save_actor)
+      torch.save(algo.behavioral_critic, args.save_critic)
 
     try:
       print("episode {:5d} | episode timestep {:5d}/{:5d} | {:3.1f}s/1k samples | approx. {:3d}h {:02d}m remain\t\t\t\t".format(iter, episode_timesteps, args.traj_len, 1000*episode_secs_per_sample, hrs_remaining, min_remaining), end='\r')
