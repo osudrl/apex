@@ -14,6 +14,9 @@ class Actor(nn.Module):
 
   def forward(self):
     raise NotImplementedError
+
+  def get_action(self):
+    raise NotImplementedError
   
   def normalize_state(self, state, update=True):
     if update:
@@ -35,3 +38,36 @@ class FF_Actor(Actor):
     x = F.relu(self.l1(state))
     x = F.relu(self.l2(x))
     return torch.tanh(self.l3(x))
+
+class LSTM_Actor(Actor):
+  def __init__(self, input_dim, action_dim, hidden_size=32, hidden_layers=1):
+    super(Recurrent_Actor, self).__init__()
+
+    self.actor_layers = nn.ModuleList()
+    self.actor_layers += [nn.LSTMCell(input_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.actor_layers += [nn.LSTMCell(hidden_size, hidden_size)]
+    self.network_out = nn.Linear(hidden_size, 1)
+
+    self.init_hidden_state()
+    
+    self.recurrent = True
+
+  def get_hidden_state(self):
+    return self.hidden, self.cells
+
+  def init_hidden_state(self):
+    self.hidden = [torch.zeros(1, l.hidden_size) for l in self.actor_layers]
+    self.cells  = [torch.zeros(1, l.hidden_size) for l in self.actor_layers]
+  
+  def forward(self, x):
+    print("MAKE SURE THIS WORKS.")
+    if len(x.size()) == 1:
+      x = x.view(1, -1)
+
+    for idx, layer in enumerate(self.actor_layers):
+      c, h = self.cells[idx], self.hidden[idx]
+      self.cells[idx], self.hidden[idx] = layer(x, (c, h))
+      x = self.hidden[idx]
+    x = self.network_out(x)
+    return torch.tanh(x)

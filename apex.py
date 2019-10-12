@@ -164,8 +164,28 @@ if __name__ == "__main__":
       Utility for running Recurrent Deterministic Policy Gradients.
 
     """
-    raise NotImplementedError
-    import rl.algos.rdpg
+    from rl.algos.rdpg import run_experiment
+    parser.add_argument("--workers",                default=1, type=int)
+    parser.add_argument("--env_name",        "-e",  default="Hopper-v2")
+    parser.add_argument("--hidden_size",            default=300, type=int)
+    parser.add_argument("--seed",            "-s",  default=0, type=int)
+    parser.add_argument("--timesteps",       "-t",  default=1e6, type=int)
+    parser.add_argument("--start_timesteps",        default=1e4, type=int)
+    parser.add_argument("--load_model",      "-l",  default=None, type=str)
+    parser.add_argument("--save_model",      "-m",  default="./trained_models/ddpg/ddpg.pt", type=str)
+    parser.add_argument('--discount',               default=0.99, type=float)
+    parser.add_argument('--expl_noise',             default=0.2, type=float)
+    parser.add_argument('--tau',                    default=0.001, type=float)
+    parser.add_argument("--actor_lr",       "-alr", default=5e-5, type=float)
+    parser.add_argument("--critic_lr",      "-clr", default=5e-4, type=float)
+    parser.add_argument("--traj_len",       "-tl",  default=1000, type=int)
+    parser.add_argument("--center_reward",  "-r",   action='store_true')
+    parser.add_argument("--batch_size",             default=64, type=int)
+    parser.add_argument("--logdir",                 default="./logs/ddpg/experiments/", type=str)
+    parser.add_argument("--eval_every",             default=100, type=int)
+    args = parser.parse_args()
+
+    run_experiment(args)
   elif sys.argv[1] == 'td3_sync':
     sys.argv.remove(sys.argv[1])
     """
