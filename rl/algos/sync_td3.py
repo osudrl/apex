@@ -8,6 +8,8 @@ import torch.nn.functional as F
 from rl.utils.remote_replay import ReplayBuffer
 from rl.policies.td3_actor_critic import Original_Actor as O_Actor, TD3Critic as Critic
 
+import functools
+
 import ray
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -15,6 +17,31 @@ device = torch.device("cpu")
 
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
 # Paper: https://arxiv.org/abs/1802.09477
+
+# Runs policy for X episodes and returns average reward. Optionally render policy
+def evaluate_policy(env, policy, eval_episodes=10, max_traj_len=400):
+    avg_reward = 0.0
+    avg_eplen = 0.0
+    for _ in range(eval_episodes):
+        obs = env.reset()
+        t = 0
+        done_bool = 0.0
+        while not done_bool:
+            t += 1
+            action = policy.select_action(np.array(obs), param_noise=None)
+            obs, reward, done, _ = env.step(action)
+            done_bool = 1.0 if t + 1 == max_traj_len else float(done)
+            avg_reward += reward
+        avg_eplen += t
+
+    avg_reward /= eval_episodes
+    avg_eplen /= eval_episodes
+
+    print("---------------------------------------")
+    print("Evaluation over %d episodes: %f" % (eval_episodes, avg_reward))
+    print("---------------------------------------")
+    return avg_reward, avg_eplen
+
 
 # TODO: Make each worker collect fixed amount of experience / don't stop computation once episodes are done
 def parallel_collect_experience(policy, env_fn, act_noise, min_steps, max_traj_len, num_procs=4):
@@ -248,3 +275,123 @@ class TD3():
         if critic_path is not None:
             self.critic.load_state_dict(torch.load(critic_path))
             self.critic.eval()
+
+def run_experiment(args):
+    from apex import create_logger
+
+    # NOTE: importing cassie for some reason breaks openai gym, BUG ?
+    from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
+    from cassie.no_delta_env import CassieEnv_nodelta
+    from cassie.speed_env import CassieEnv_speed
+    from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+    from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+
+    env_fn = functools.partial(CassieEnv, "walking", clock_based=True, state_est=args.state_est)
+    # env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+    # env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+    # print(env_fn().clock_inds)
+
+    obs_dim = env_fn().observation_space.shape[0]
+    action_dim = env_fn().action_space.shape[0]
+
+    # Mirror Loss
+    if args.mirror:
+        if args.state_est:
+            # with state estimator
+            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
+        else:
+            # without state estimator
+            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+                                            18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+                                            -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+                                            mirrored_act = [0,1,2,3,4,5,6,7,8,9])
+    max_traj_len = args.max_traj_len
+
+    # Start ray
+    # ray.init(num_gpus=0, include_webui=True, temp_dir="./ray_tmp", redis_address=args.redis_address)
+    ray.init()
+
+    # Set seeds
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
+    state_dim = env_fn().observation_space.shape[0]
+    action_dim = env_fn().action_space.shape[0]
+    max_action = 1.0
+    #max_action = float(env.action_space.high[0])
+
+    print("state_dim: {}".format(state_dim))
+    print("action_dim: {}".format(action_dim))
+    print("max_action dim: {}".format(max_action))
+    print("max_episode_steps: {}".format(max_traj_len))
+
+    # Initialize policy, replay buffer
+    policy = TD3(state_dim, action_dim, max_action, a_lr=args.a_lr, c_lr=args.c_lr)
+
+    replay_buffer = ReplayBuffer()
+
+    # create a tensorboard logging object
+    logger = create_logger(args)
+
+    # Initialize param noise (or set to None)
+    param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=args.noise_scale, adaptation_coefficient=1.05) if args.param_noise else None
+
+    total_timesteps = 0
+    total_updates = 0
+    timesteps_since_eval = 0
+    episode_num = 0
+    
+    # Evaluate untrained policy
+    ret, eplen = evaluate_policy(env_fn(), policy)
+    logger.add_scalar("Eval/Return", ret, total_updates)
+    logger.add_scalar("Eval/Eplen", eplen, total_updates)
+
+    while total_timesteps < args.max_timesteps:
+
+        # collect parallel experience and add to replay buffer
+        merged_transitions, episode_timesteps = parallel_collect_experience(policy, env_fn, args.act_noise, args.min_steps, max_traj_len, num_procs=args.num_procs)
+        replay_buffer.add_parallel(merged_transitions)
+        total_timesteps += episode_timesteps
+        timesteps_since_eval += episode_timesteps
+        episode_num += args.num_procs
+
+        # Logging rollouts
+        print("Total T: {} Episode Num: {} Episode T: {}".format(total_timesteps, episode_num, episode_timesteps))
+
+        # update the policy
+        avg_q1, avg_q2, avg_targ_q, q_loss, pi_loss, avg_action = policy.train(replay_buffer, episode_timesteps, args.batch_size, args.discount, args.tau, args.policy_noise, args.noise_clip, args.policy_freq)
+        total_updates += episode_timesteps      # this is how many iterations we did updates for
+
+        # Logging training
+        logger.add_scalar("Train/avg_q1", avg_q1, total_updates)
+        logger.add_scalar("Train/avg_q2", avg_q2, total_updates)
+        logger.add_scalar("Train/avg_targ_q", avg_targ_q, total_updates)
+        logger.add_scalar("Train/q_loss", q_loss, total_updates)
+        logger.add_scalar("Train/pi_loss", pi_loss, total_updates)
+        logger.add_histogram("Train/avg_action", avg_action, total_updates)
+
+        # Evaluate episode
+        if timesteps_since_eval >= args.eval_freq:
+            timesteps_since_eval = 0
+            ret, eplen = evaluate_policy(env_fn(), policy)
+
+            # Logging Eval
+            logger.add_scalar("Eval/Return", ret, total_updates)
+            logger.add_scalar("Eval/Eplen", eplen, total_updates)
+            logger.add_histogram("Eval/avg_action", avg_action, total_updates)
+
+            # Logging Totals
+            logger.add_scalar("Total/Timesteps", total_timesteps, total_updates)
+            logger.add_scalar("Total/ReplaySize", replay_buffer.ptr, total_updates)
+
+            if args.save_models:
+                policy.save()
+
+    # Final evaluation
+    ret, eplen = evaluate_policy(env_fn(), policy)
+    logger.add_scalar("Eval/Return", ret, total_updates)
+    logger.add_scalar("Eval/Eplen", eplen, total_updates)
+
+    # Final Policy Save
+    if args.save_models:
+        policy.save()

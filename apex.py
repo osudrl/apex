@@ -183,7 +183,7 @@ if __name__ == "__main__":
   elif sys.argv[1] == 'rdpg':
     sys.argv.remove(sys.argv[1])
     """
-      Utility for running Recurrent Deterministic Policy Gradients.
+        Utility for running Recurrent Deterministic Policy Gradients.
 
     """
     from rl.algos.rdpg import run_experiment
@@ -214,7 +214,37 @@ if __name__ == "__main__":
       Utility for running Twin-Delayed Deep Deterministic policy gradients.
 
     """
-    raise NotImplementedError
+    from rl.algos.sync_td3 import run_experiment
+    parser.add_argument("--logdir",       default="./logs/syncTD3/experiments/", type=str)
+    parser.add_argument("--policy_name", default="TD3")					            # Policy name
+    parser.add_argument("--num_procs", type=int, default=4)                         # neurons in hidden layer
+    parser.add_argument("--min_steps", type=int, default=1000)                      # number of steps of experience each process should collect
+    parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
+    parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
+    parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
+    parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
+    parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
+
+    parser.add_argument("--seed", default=0, type=int)                              # Sets Gym, PyTorch and Numpy seeds
+    parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
+    parser.add_argument("--eval_freq", default=5e3, type=float)                     # How often (time steps) we evaluate
+    parser.add_argument("--max_timesteps", default=1e7, type=float)                 # Max time steps to run environment for
+    parser.add_argument("--save_models", default=True, action="store_true")         # Whether or not models are saved
+    parser.add_argument("--act_noise", default=0.3, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
+    parser.add_argument('--param_noise', type=bool, default=False)                  # param noise
+    parser.add_argument('--noise_scale', type=float, default=0.3, metavar='G')      # initial scale of noise for param noise
+    parser.add_argument("--batch_size", default=100, type=int)                      # Batch size for both actor and critic
+    parser.add_argument("--discount", default=0.99, type=float)                     # Discount factor
+    parser.add_argument("--tau", default=0.001, type=float)                         # Target network update rate
+    parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
+    parser.add_argument("--c_lr", type=float, default=1e-3)                         # Critic: Adam learning rate
+    # TD3 Specific
+    parser.add_argument("--policy_noise", default=0.2, type=float)                  # Noise added to target policy during critic update
+    parser.add_argument("--noise_clip", default=0.5, type=float)                    # Range to clip target policy noise
+    parser.add_argument("--policy_freq", default=2, type=int)                       # Frequency of delayed policy updates
+    args = parser.parse_args()
+
+    run_experiment(args)
   elif sys.argv[1] == 'td3_async':
     sys.argv.remove(sys.argv[1])
     """
