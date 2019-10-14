@@ -115,8 +115,8 @@ def run_experiment(args):
   obs_space = env.observation_space.shape[0]
   act_space = env.action_space.shape[0]
 
-  actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size)
-  critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size)
+  actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
+  critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
 
   print("Deep Deterministic Policy Gradients:")
   print("\tenv:          {}".format(args.env_name))
@@ -143,7 +143,8 @@ def run_experiment(args):
 
   # do an initial, baseline evaluation
   eval_reward = eval_policy(algo.behavioral_actor, env)
-  logger.add_scalar('eval reward', eval_reward, 0)
+  logger.add_scalar('eval reward episode', eval_reward, 0)
+  logger.add_scalar('eval reward timestep', eval_reward, 0)
 
   state = env.reset().astype(np.float32)
 
@@ -188,7 +189,8 @@ def run_experiment(args):
 
       if iter % args.eval_every == 0 and iter != 0:
         eval_reward = eval_policy(algo.behavioral_actor, env)
-        logger.add_scalar('eval reward', eval_reward, iter)
+        logger.add_scalar('eval reward episode', eval_reward, iter)
+        logger.add_scalar('eval reward timestep', eval_reward, timesteps)
 
         print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}\t\t\t".format(iter, eval_reward, timesteps))
 

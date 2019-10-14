@@ -47,16 +47,30 @@ class Critic(nn.Module):
 
 
 class FF_Critic(Critic):
-  def __init__(self, state_dim, action_dim, hidden_size=256):
+  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET'):
     super(FF_Critic, self).__init__()
-    self.l1 = nn.Linear(state_dim + action_dim, hidden_size)
-    self.l2 = nn.Linear(hidden_size, hidden_size)
-    self.l3 = nn.Linear(hidden_size, 1)
+    #self.l1 = nn.Linear(state_dim + action_dim, hidden_size)
+    #self.l2 = nn.Linear(hidden_size, hidden_size)
+    #self.l3 = nn.Linear(hidden_size, 1)
+
+    self.critic_layers = nn.ModuleList()
+    self.critic_layers += [nn.Linear(state_dim+action_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.critic_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.network_out = nn.Linear(hidden_size, action_dim)
+
+    self.env_name = env_name
 
   def forward(self, state, action):
-    x = F.relu(self.l1(torch.cat([state, action], 1)))
-    x = F.relu(self.l2(x))
-    return self.l3(x)
+    #x = F.relu(self.l1(torch.cat([state, action], 1)))
+    #x = F.relu(self.l2(x))
+    #return self.l3(x)
+
+    x = torch.cat([state, action], 1)
+    for idx, layer in enumerate(self.critic_layers):
+      x = F.relu(layer(x))
+
+    return self.network_out(x)
 
 class LSTM_Critic(Critic):
   def __init__(self, input_dim, action_dim, hidden_size=32, hidden_layers=1):

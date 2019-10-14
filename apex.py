@@ -93,6 +93,26 @@ def create_logger(args):
   print("Logging to " + color.BOLD + color.ORANGE + str(output_dir) + color.END)
   return logger
 
+def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
+  if env_name is None:
+    env = gym_factory(policy.env_name)()
+  else:
+    env = gym_factory(env_name)()
+
+  while True:
+    state = env.reset()
+    done = False
+    timesteps = 0
+    eval_reward = 0
+    while not done and timesteps < 1000:
+      action = policy.forward(torch.Tensor(state)).detach().numpy()
+      state, reward, done, _ = env.step(action)
+      if visualize:
+        env.render()
+      eval_reward += reward
+      timesteps += 1
+    print("Eval reward: ", eval_reward)
+
 if __name__ == "__main__":
   import sys, argparse
   parser = argparse.ArgumentParser()
@@ -100,7 +120,7 @@ if __name__ == "__main__":
   print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
 
   if len(sys.argv) < 2:
-    print("Only got", sys.argv)
+    print("Usage: python apex.py [algorithm name]", sys.argv)
 
   elif sys.argv[1] == 'ars':
     """
@@ -209,5 +229,14 @@ if __name__ == "__main__":
 
     """
     raise NotImplementedError
+  elif sys.argv[1] == 'eval':
+    sys.argv.remove(sys.argv[1])
+
+    parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
+    args = parser.parse_args()
+
+    policy = torch.load(args.policy)
+
+    eval_policy(policy)
   else:
     print("Invalid algorithm '{}'".format(sys.argv[1]))

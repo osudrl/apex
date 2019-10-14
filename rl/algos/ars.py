@@ -162,14 +162,14 @@ def run_experiment(args):
 
   # wrapper function for creating parallelized policies
   def policy_thunk():
-    from rl.policies import LinearMLP, RecurrentNet
+    from rl.policies.actor import FF_Actor, LSTM_Actor, Linear_Actor
     if args.load_model is not None:
       return torch.load(args.load_model)
     else:
       if not args.recurrent:
-        policy = LinearMLP(obs_space, act_space, hidden_size=args.hidden_size).float()
+        policy = Linear_Actor(obs_space, act_space, hidden_size=args.hidden_size).float()
       else:
-        policy = RecurrentNet(obs_space, act_space, hidden_size=args.hidden_size).float()
+        policy = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size).float()
 
       # policy parameters should be zero initialized according to ARS paper
       for p in policy.parameters():
@@ -187,7 +187,9 @@ def run_experiment(args):
 
     timesteps = 0
     while not done and timesteps < traj_len:
-      action = policy.forward(state, update_normalizer=normalize).detach()
+      if normalize:
+        state = policy.normalize_state(state)
+      action = policy.forward(state).detach()
       state, reward, done, _ = env.step(action)
       state = torch.tensor(state).float()
       rollout_reward += reward - reward_shift
