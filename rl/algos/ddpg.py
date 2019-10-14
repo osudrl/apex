@@ -82,15 +82,17 @@ class DDPG():
 
     return critic_loss.item()
 
-def eval_policy(policy, env, evals=10):
+def eval_policy(policy, env, evals=10, max_traj_len=1000):
   eval_reward = 0
   for _ in range(evals):
     state = env.reset()
     done = False
-    while not done:
+    timesteps = 0
+    while not done and timesteps < 1000:
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       eval_reward += reward
+      timesteps += 1
   return eval_reward/evals
 
 def run_experiment(args):
@@ -113,8 +115,8 @@ def run_experiment(args):
   obs_space = env.observation_space.shape[0]
   act_space = env.action_space.shape[0]
 
-  actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size)
-  critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size)
+  actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
+  critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
 
   print("Deep Deterministic Policy Gradients:")
   print("\tenv:          {}".format(args.env_name))
@@ -141,7 +143,8 @@ def run_experiment(args):
 
   # do an initial, baseline evaluation
   eval_reward = eval_policy(algo.behavioral_actor, env)
-  logger.add_scalar('Eval reward', eval_reward, 0)
+  logger.add_scalar('eval reward episode', eval_reward, 0)
+  logger.add_scalar('eval reward timestep', eval_reward, 0)
 
   state = env.reset().astype(np.float32)
 
@@ -176,7 +179,7 @@ def run_experiment(args):
       episode_elapsed = (time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
       logger.add_scalar('episode reward', episode_reward, iter)
-      logger.add_scalar('episode loss', episode_reward, iter)
+      logger.add_scalar('episode loss', episode_loss, iter)
 
       completion = 1 - float(timesteps) / args.timesteps
       avg_sample_r = (time() - training_start)/timesteps
@@ -186,7 +189,8 @@ def run_experiment(args):
 
       if iter % args.eval_every == 0 and iter != 0:
         eval_reward = eval_policy(algo.behavioral_actor, env)
-        logger.add_scalar('eval reward', eval_reward, iter)
+        logger.add_scalar('eval reward episode', eval_reward, iter)
+        logger.add_scalar('eval reward timestep', eval_reward, timesteps)
 
         print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}\t\t\t".format(iter, eval_reward, timesteps))
 
@@ -194,8 +198,11 @@ def run_experiment(args):
       episode_start, episode_reward, episode_timesteps, episode_loss = time(), 0, 0, 0
       iter += 1
 
+      torch.save(algo.behavioral_actor, args.save_actor)
+      torch.save(algo.behavioral_critic, args.save_critic)
+
     try:
-      print("episode {:5d} | episode timestep {:5d}/{:5d} | {:3.1f}s/1k samples | approx. {:3d}h {:02d}m remain\t\t".format(iter, episode_timesteps, args.traj_len, 1000*episode_secs_per_sample, hrs_remaining, min_remaining), end='\r')
+      print("episode {:5d} | episode timestep {:5d}/{:5d} | {:3.1f}s/1k samples | approx. {:3d}h {:02d}m remain\t\t\t\t".format(iter, episode_timesteps, args.traj_len, 1000*episode_secs_per_sample, hrs_remaining, min_remaining), end='\r')
     except NameError:
       pass
 
