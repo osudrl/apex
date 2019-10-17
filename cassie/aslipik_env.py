@@ -214,12 +214,20 @@ class CassieIKEnv:
 
         #weight = [.1] * 10
 
+        footpos_error     = 0
         joint_error       = 0
         com_error         = 0
         orientation_error = 0
         spring_error      = 0
 
-        # each joint pos
+        # enforce foot positions to match reference trajectory (left and right foot pos)
+        for i in [20, 34]:
+            target = ref_pos[i]
+            actual = qpos[i]
+
+            footpos_error += (target - actual) ** 2
+
+        # each joint pos, skipping feet
         for i, j in enumerate(self.pos_idx):
             target = ref_pos[j]
             actual = qpos[j]
@@ -227,7 +235,7 @@ class CassieIKEnv:
             if j == 20 or j == 34:
                 joint_error += 0
             else:
-                joint_error += 30 * weight[i] * (target - actual) ** 2
+                joint_error += (target - actual) ** 2
 
         # center of mass: x, y, z
         for j in [0, 1, 2]:
@@ -250,34 +258,24 @@ class CassieIKEnv:
             target = ref_pos[i] # NOTE: in Xie et al spring target is 0
             actual = qpos[i]
 
-            spring_error += 1000 * (target - actual) ** 2      
+            spring_error += (target - actual) ** 2      
         
-        # reward = 0.5 * np.exp(-joint_error) +       \
-        #          0.3 * np.exp(-com_error) +         \
-        #          0.1 * np.exp(-orientation_error) + \
-        #          0.1 * np.exp(-spring_error)
-        reward = 0.0 * np.exp(-joint_error) +       \
-                 0.5 * np.exp(-com_error) +         \
-                 0.2 * np.exp(-orientation_error) + \
-                 0.3 * np.exp(-spring_error)
+        reward = 0.3 * np.exp(-footpos_error) +       \
+                 0.3 * np.exp(-joint_error) +       \
+                 0.3 * np.exp(-com_error) +         \
+                 0.1 * np.exp(-orientation_error) + \
+                 0.0 * np.exp(-spring_error)
         #reward = np.exp(-joint_error)
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
         if self.debug:
-            # print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-            # 0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-            # 0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-            # 0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-            # 0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
-            # reward
-            # )
-            # )
-            print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-            0.0 * np.exp(-joint_error),       0.0 * np.exp(-joint_error) / reward * 100,
-            0.5 * np.exp(-com_error),         0.5 * np.exp(-com_error) / reward * 100,
-            0.2 * np.exp(-orientation_error), 0.2 * np.exp(-orientation_error) / reward * 100,
-            0.3 * np.exp(-spring_error),      0.3 * np.exp(-spring_error) / reward * 100,
+            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\njoint:\t{2:.2f}, % = {3:.2f}\ncom:\t{4:.2f}, % = {5:.2f}\norient:\t{6:.2f}, % = {7:.2f}\nspring:\t{8:.2f}, % = {9:.2f}\n\n".format(
+            0.3 * np.exp(-footpos_error),     0.3 * np.exp(-footpos_error) / reward * 100,
+            0.3 * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
+            0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
+            0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
+            0.0 * np.exp(-spring_error),      0.0 * np.exp(-spring_error) / reward * 100,
             reward
             )
             )
