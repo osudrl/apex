@@ -224,10 +224,12 @@ class CassieIKEnv:
 
         # enforce distance between feet and com
         ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase)
+
         # left foot
-        lfoot = np.linalg.norm(self.cassie_state.leftFoot.position - qpos[0:3])
-        rfoot = np.linalg.norm(self.cassie_state.rightFoot.position - qpos[0:3])
-        footpos_error += (ref_rfoot - rfoot) ** 2 + (ref_lfoot - lfoot) ** 2
+        lfoot = self.cassie_state.leftFoot.position[:]
+        rfoot = self.cassie_state.rightFoot.position[:]
+        for j in [0, 1, 2]:
+            footpos_error += np.linalg.norm(lfoot[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot[j] - ref_rfoot[j])
         
         if self.debug:
             print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
@@ -325,10 +327,7 @@ class CassieIKEnv:
         rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
         lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
 
-        rdist = np.linalg.norm(rfoot - self.trajectory.qpos[phase * self.simrate][4:7])
-        ldist = np.linalg.norm(lfoot - self.trajectory.qpos[phase * self.simrate][4:7])
-
-        return rdist, ldist
+        return rfoot, lfoot
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
