@@ -18,6 +18,8 @@ class CassieIKTrajectory:
         self.qpos = np.copy(trajectory["qpos"])
         self.length = self.qpos.shape[0]
         self.qvel = np.copy(trajectory["qvel"])
+        self.rfoot = np.copy(trajectory["rfoot"])
+        self.lfoot = np.copy(trajectory["lfoot"])
 
 # simrate used to be 60
 class CassieIKEnv:
@@ -220,12 +222,17 @@ class CassieIKEnv:
         orientation_error = 0
         spring_error      = 0
 
-        # enforce foot positions to match reference trajectory (left and right foot pos)
-        for i in [20, 34]:
-            target = ref_pos[i]
-            actual = qpos[i]
-
-            footpos_error += (target - actual) ** 2
+        # enforce distance between feet and com
+        ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase)
+        # left foot
+        lfoot = np.linalg.norm(self.cassie_state.leftFoot.position - qpos[0:3])
+        rfoot = np.linalg.norm(self.cassie_state.rightFoot.position - qpos[0:3])
+        footpos_error += (ref_rfoot - rfoot) ** 2 + (ref_lfoot - lfoot) ** 2
+        
+        if self.debug:
+            print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
+            print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
+            print(footpos_error)
 
         # each joint pos, skipping feet
         for i, j in enumerate(self.pos_idx):
@@ -306,6 +313,22 @@ class CassieIKEnv:
         vel = np.copy(self.trajectory.qvel[phase * self.simrate])
 
         return pos, vel
+
+    # get the corresponding state from the reference trajectory for the current phase
+    def get_ref_footdist(self, phase=None):
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
+        lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
+
+        rdist = np.linalg.norm(rfoot - self.trajectory.qpos[phase * self.simrate][4:7])
+        ldist = np.linalg.norm(lfoot - self.trajectory.qpos[phase * self.simrate][4:7])
+
+        return rdist, ldist
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
