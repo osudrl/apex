@@ -142,19 +142,19 @@ if __name__ == "__main__":
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
-    # policy = GaussianMLP(
-    #     obs_dim, action_dim, 
-    #     nonlinearity="relu", 
-    #     bounded=True, 
-    #     init_std=np.exp(-2), 
-    #     learn_std=False,
-    #     normc_init=False
-    # )
+    policy = GaussianMLP(
+        obs_dim, action_dim, 
+        nonlinearity="relu", 
+        bounded=True, 
+        init_std=np.exp(-2), 
+        learn_std=False,
+        normc_init=False
+    )
 
-    #policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
 
-    policy = torch.load("./trained_models/rom_tracking_v3.pt")
-    print("loaded model from {}".format("./trained_models/rom_tracking_v3.pt"))
+    # policy = torch.load("./trained_models/rom_tracking_v3.pt")
+    # print("loaded model from {}".format("./trained_models/rom_tracking_v3.pt"))
 
     policy.train(0)
 

@@ -23,7 +23,7 @@ class CassieIKTrajectory:
 
 # simrate used to be 60
 class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, filename="30hz_aslip_trajs.pkl"):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, speed=0.0):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -43,7 +43,7 @@ class CassieIKEnv:
         self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", filename)
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajs/walkCycle_{}.pkl".format(speed))
 
         self.trajectory = CassieIKTrajectory(traj_path)
 
