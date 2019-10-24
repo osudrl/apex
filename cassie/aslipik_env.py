@@ -44,7 +44,7 @@ class CassieIKEnv:
 
         dirname = os.path.dirname(__file__)
         traj_path = os.path.join(dirname, "trajectory", "aslipTrajs/walkCycle_{}.pkl".format(speed))
-        print("loaded trajectory file: " + "aslipTrajs/walkCycle_{}.pkl".format(speed))
+        # print("loaded trajectory file: " + "aslipTrajs/walkCycle_{}.pkl".format(speed))
 
         self.trajectory = CassieIKTrajectory(traj_path)
 

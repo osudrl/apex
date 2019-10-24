@@ -58,6 +58,7 @@ parser = argparse.ArgumentParser()
 
 # For ASLIP ENV
 parser.add_argument("--ref_speed", type=float, default=3.0, help="speed of reference trajectory")
+parser.add_argument("--previous", type=str, default=None, help="previous policy to learn from")
 
 #PPO.add_arguments(parser)
 parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
@@ -146,19 +147,22 @@ if __name__ == "__main__":
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
-    policy = GaussianMLP(
-        obs_dim, action_dim, 
-        nonlinearity="relu", 
-        bounded=True, 
-        init_std=np.exp(-2), 
-        learn_std=False,
-        normc_init=False
-    )
+    if args.previous is not None:
+        policy = torch.load(args.previous)
+        print("loaded model from {}".format(args.previous))
+    else:
+        policy = GaussianMLP(
+            obs_dim, action_dim, 
+            nonlinearity="relu", 
+            bounded=True, 
+            init_std=np.exp(-2), 
+            learn_std=False,
+            normc_init=False
+        )
 
-    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+        policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
 
-    # policy = torch.load("./trained_models/rom_tracking_v3.pt")
-    # print("loaded model from {}".format("./trained_models/rom_tracking_v3.pt"))
+
 
     policy.train(0)
 
