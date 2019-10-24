@@ -55,6 +55,10 @@ def gym_factory(path, **kwargs):
 
 # Arguments
 parser = argparse.ArgumentParser()
+
+# For ASLIP ENV
+parser.add_argument("--ref_speed", type=float, default=3.0, help="speed of reference trajectory")
+
 #PPO.add_arguments(parser)
 parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
 parser.add_argument("--seed", type=int, default=1,help="RNG seed")
@@ -115,7 +119,7 @@ if __name__ == "__main__":
         # env_fn = gym_factory(args.env_name)
         #env_fn = make_env_fn(state_est=args.state_est)
         #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est, speed=args.ref_speed)
         print(env_fn().clock_inds)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
