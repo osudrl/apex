@@ -154,7 +154,7 @@ class CassieIKEnv:
         reward = self.compute_reward()
 
         # TODO: make 0.3 a variable/more transparent
-        if reward < 0.3:
+        if reward < 0.5:
             done = True
 
         return self.get_full_state(), reward, done, {}
@@ -270,8 +270,8 @@ class CassieIKEnv:
 
             spring_error += (target - actual) ** 2      
         
-        reward = 0.3 * np.exp(-footpos_error) +       \
-                 0.3 * np.exp(-joint_error) +       \
+        reward = 0.1 * np.exp(-footpos_error) +       \
+                 0.5 * np.exp(-joint_error) +       \
                  0.3 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
                  0.0 * np.exp(-spring_error)
