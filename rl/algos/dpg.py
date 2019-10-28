@@ -25,8 +25,7 @@ class ReplayBuffer():
     if self.size == self.max_size:
       print("\nBuffer full.")
       exit(1)
-    #  idx = np.random.randint(0, self.size)
-    #else:
+
     idx = self.size-1
 
     self.state[idx]      = torch.Tensor(state)
@@ -52,14 +51,6 @@ class ReplayBuffer():
         end_idx += 1
       end_idx += 1
 
-      #if True:
-      #end_idx = min(start_idx + max_len + 1, self.trajectory_idx[traj_idx+1])
-      #print("END IDX 1: {}".format(end_idx))
-      #print("Made {} from min({} + {}, {})".format(end_idx, start_idx, max_len, self.trajectory_idx[traj_idx+1]))
-      #else:
-      #print("END IDX 2: {}".format(end_idx))
-      #input()
-
     else:
       start_idx = np.random.randint(0, self.size-1)
       end_idx = start_idx+1
@@ -69,8 +60,6 @@ class ReplayBuffer():
     actions     = self.action[start_idx:end_idx]
     rewards     = self.reward[start_idx:end_idx]
     not_dones   = self.not_done[start_idx:end_idx]
-
-    #not_dones[-1] = 0
 
     # Return an entire episode
     return traj_states, actions, next_states, rewards, not_dones
@@ -114,8 +103,6 @@ class DPG():
 
     self.target_actor = copy.deepcopy(actor)
     self.target_critic = copy.deepcopy(critic)
-    #self.target_actor = target_actor
-    #self.target_critic = target_critic
 
     self.soft_update(1.0)
 
@@ -229,7 +216,7 @@ def run_experiment(args):
     actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
     critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
 
-  algo = DPG(actor, critic, args.actor_lr, args.critic_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward)
+  algo = DPG(actor, critic, args.a_lr, args.c_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward)
 
   replay_buff = ReplayBuffer(obs_space, act_space, args.timesteps)
 
@@ -240,8 +227,8 @@ def run_experiment(args):
   print("\tenv:          {}".format(args.env_name))
   print("\tseed:         {}".format(args.seed))
   print("\ttimesteps:    {:n}".format(args.timesteps))
-  print("\tactor_lr:     {}".format(args.actor_lr))
-  print("\tcritic_lr:    {}".format(args.critic_lr))
+  print("\tactor_lr:     {}".format(args.a_lr))
+  print("\tcritic_lr:    {}".format(args.c_lr))
   print("\tdiscount:     {}".format(args.discount))
   print("\ttau:          {}".format(args.tau))
   print("\tnorm reward:  {}".format(args.center_reward))

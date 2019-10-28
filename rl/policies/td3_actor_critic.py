@@ -15,10 +15,6 @@ def fanin_init(size, fanin=None):
 
 # By default all the modules are initialized to train mode (self.training = True)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 03a720d... added rom trajectory to CassieIKEnv, variable learning rates
 class Original_Actor(nn.Module):
     def __init__(self, state_dim, action_dim, max_action, hidden_size1, hidden_size2, init_w=3e-3):
         super(Original_Actor, self).__init__()
