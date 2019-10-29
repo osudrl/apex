@@ -204,7 +204,7 @@ def run_experiment(args):
         # env_fn = gym_factory(args.env_name)
         #env_fn = make_env_fn(state_est=args.state_est)
         #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est, speed=args.speed)
         print(env_fn().clock_inds)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]

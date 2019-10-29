@@ -280,6 +280,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_procs", type=int, default=30, help="Number of threads to train on")
     parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
     parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
+
+    parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
+
     args = parser.parse_args()
 
     run_experiment(args)
