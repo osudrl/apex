@@ -336,6 +336,22 @@ def run_experiment(args):
     # Initialize param noise (or set to None)
     param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=args.noise_scale, adaptation_coefficient=1.05) if args.param_noise else None
 
+    print("Synchronous Distributed Twin-Delayed Deep Deterministic Policy Gradients:")
+    print("\tenv:          {}".format(args.env_name))
+    print("\tseed:         {}".format(args.seed))
+    print("\ttimesteps:    {:n}".format(args.max_timesteps))
+    print("\tnum procs:      {}".format(args.num_procs))
+    print("\tactor_lr:     {}".format(args.a_lr))
+    print("\tcritic_lr:    {}".format(args.c_lr))
+    print("\tdiscount:     {}".format(args.discount))
+    print("\ttau:          {}".format(args.tau))
+    print("\tact noise:    {}".format(args.act_noise))
+    print("\tparam noise:  {}".format(args.param_noise))
+    print("\tpolicy noise: {}".format(args.policy_noise))
+    print("\tnoise clip:   {}".format(args.noise_clip))
+    print("\tpolicy freq:  {}".format(args.policy_freq))
+    print()
+
     total_timesteps = 0
     total_updates = 0
     timesteps_since_eval = 0

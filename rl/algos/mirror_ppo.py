@@ -7,6 +7,10 @@ from torch.distributions import kl_divergence
 
 import numpy as np
 from rl.algos import PPO
+from rl.policies import GaussianMLP
+from rl.envs.normalize import get_normalization_params, PreNormalizer
+
+import functools
 
 # TODO:
 # env.mirror() vs env.matrix?
@@ -181,3 +185,93 @@ class MirrorPPO(PPO):
                 self.save(policy)
 
             print("Total time: {:.2f} s".format(time.time() - start_time))
+
+def run_experiment(args):
+    torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
+
+    from apex import create_logger
+
+    # Environment
+    if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
+        # NOTE: importing cassie for some reason breaks openai gym, BUG ?
+        from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
+        from cassie.no_delta_env import CassieEnv_nodelta
+        from cassie.speed_env import CassieEnv_speed
+        from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+        from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+        # set up cassie environment
+        # import gym_cassie
+        # env_fn = gym_factory(args.env_name)
+        #env_fn = make_env_fn(state_est=args.state_est)
+        #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+        print(env_fn().clock_inds)
+        obs_dim = env_fn().observation_space.shape[0]
+        action_dim = env_fn().action_space.shape[0]
+
+        # Mirror Loss
+        if args.mirror:
+            if args.state_est:
+                # with state estimator
+                env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
+            else:
+                # without state estimator
+                env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+                                                18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+                                                -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+                                                mirrored_act = [0,1,2,3,4,5,6,7,8,9])
+    else:
+        import gym
+        env_fn = gym_factory(args.env_name)
+        #max_episode_steps = env_fn()._max_episode_steps
+        obs_dim = env_fn().observation_space.shape[0]
+        action_dim = env_fn().action_space.shape[0]
+        max_episode_steps = 1000
+
+    # Set seeds
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
+    policy = GaussianMLP(
+        obs_dim, action_dim, 
+        nonlinearity="relu", 
+        bounded=True, 
+        init_std=np.exp(-2), 
+        learn_std=False,
+        normc_init=False
+    )
+
+    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+    policy.train(0)
+
+    print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
+
+    if args.mirror:
+        algo = MirrorPPO(args=vars(args))
+    else:
+        algo = PPO(args=vars(args))
+
+    # create a tensorboard logging object
+    logger = create_logger(args)
+
+
+    print("Synchronous Distributed Proximal Policy Optimization:")
+    print("\tenv:            {}".format(args.env))
+    print("\tseed:           {}".format(args.seed))
+    print("\tmirror:         {}".format(args.mirror))
+    print("\tnum procs:      {}".format(args.num_procs))
+    print("\tlr:             {}".format(args.lr))
+    print("\teps:            {}".format(args.eps))
+    print("\tlam:            {}".format(args.lam))
+    print("\tgamma:          {}".format(args.gamma))
+    print("\tentropy coeff:  {}".format(args.entropy_coeff))
+    print("\tclip:           {}".format(args.clip))
+    print("\tminibatch size: {}".format(args.minibatch_size))
+    print("\tepochs:         {}".format(args.epochs))
+    print("\tnum steps:      {}".format(args.num_steps))
+    print("\tuse gae:        {}".format(args.use_gae))
+    print("\tmax grad norm:  {}".format(args.max_grad_norm))
+    print("\tmax traj len:   {}".format(args.max_traj_len))
+    print()
+
+    algo.train(env_fn, policy, args.n_itr, logger=logger)

@@ -120,7 +120,7 @@ class PPO:
         self.num_steps     = args['num_steps']
         self.max_traj_len  = args['max_traj_len']
 
-        self.name = args['name']
+        self.name = args['policy_name']
         self.use_gae = args['use_gae']
         self.n_proc = args['num_procs']
 
@@ -181,7 +181,6 @@ class PPO:
                             help="Max episode horizon")
 
     def save(self, policy):
-        policy.env_name = self.env_name
 
         save_path = os.path.join("./trained_models", "ppo")
 

@@ -83,7 +83,7 @@ parser.add_argument("--epochs", type=int, default=3, help="Number of optimizatio
 parser.add_argument("--num_steps", type=int, default=5096, help="Number of sampled timesteps per gradient estimate")
 parser.add_argument("--use_gae", type=bool, default=True,help="Whether or not to calculate returns using Generalized Advantage Estimation")
 parser.add_argument("--num_procs", type=int, default=30, help="Number of threads to train on")
-parser.add_argument("--max_grad_norm", type=float, default=0.5, help="Value to clip gradients at.")
+parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
 parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
 args = parser.parse_args()
 args.num_steps = 3000 // args.num_procs
