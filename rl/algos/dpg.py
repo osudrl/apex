@@ -242,11 +242,6 @@ def run_experiment(args):
   # create a tensorboard logging object
   logger = create_logger(args)
 
-  # do an initial, baseline evaluation
-  eval_reward = eval_policy(algo.behavioral_actor, env)
-  logger.add_scalar('eval reward episode', eval_reward, 0)
-  logger.add_scalar('eval reward timestep', eval_reward, 0)
-
   # Keep track of some statistics for each episode
   training_start = time()
   episode_start = time()
