@@ -17,34 +17,6 @@ def normc_fn(m):
         if m.bias is not None:
             m.bias.data.fill_(0)
 
-# distributional TD3 critic that uses mixture of gaussians (D4PG)
-# action is not included until the 2nd layer of the critic (from paper)
-class LN_Distrib_TD3Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size1, hidden_size2):
-        super(LN_Distrib_TD3Critic, self).__init__()
-
-        # Q1 architecture
-        self.l1 = nn.Linear(state_dim + action_dim)
-
-
-class FFPolicy(nn.Module):
-    def __init__(self):
-        super(FFPolicy, self).__init__()
-        self.env = None # Gym environment name string
-
-    def forward(self, x):
-        raise NotImplementedError
-
-    def act(self, inputs, deterministic=False):
-        value, x = self(inputs)
-        action = self.dist.sample(x, deterministic=deterministic)
-        return value, action.detach()
-
-    def evaluate(self, inputs):
-        value, x = self(inputs)
-        return value, self.dist.evaluate(x)
-
-
 class GaussianMLP(FFPolicy):
     def __init__(self, 
                  num_inputs, 

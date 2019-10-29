@@ -206,7 +206,7 @@ if __name__ == "__main__":
     """
     from rl.algos.sync_td3 import run_experiment
     parser.add_argument("--logdir",       default="./logs/syncTD3/experiments/", type=str)
-    parser.add_argument("--policy_name", default="TD3")				        	            # Policy name
+    parser.add_argument("--policy_name", default="TD3")					            # Policy name
     parser.add_argument("--num_procs", type=int, default=4)                         # neurons in hidden layer
     parser.add_argument("--min_steps", type=int, default=1000)                      # number of steps of experience each process should collect
     parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
     parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
     parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
-
+    parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
     parser.add_argument("--seed", default=0, type=int)                              # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
     parser.add_argument("--eval_freq", default=5e3, type=float)                     # How often (time steps) we evaluate
@@ -248,7 +248,42 @@ if __name__ == "__main__":
       Utility for running Proximal Policy Optimization.
 
     """
-    raise NotImplementedError
+    from rl.algos.mirror_ppo import run_experiment
+
+    # Arguments
+    parser = argparse.ArgumentParser()
+
+    # For tensorboard logger
+    parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")       # Where to log diagnostics to
+    parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
+    parser.add_argument("--seed", default=0, type=int)                                 # Sets Gym, PyTorch and Numpy seeds
+    parser.add_argument("--policy_name", type=str, default="PPO")
+    parser.add_argument("--env", type=str, default="Cassie-mimic-v0")
+    parser.add_argument("--state_est", type=bool, default=True)
+    # mirror actions or not
+    parser.add_argument("--mirror", default=False, action='store_true')
+    # visdom server port
+    parser.add_argument("--viz_port", default=8097)
+    # PPO algo args
+    parser.add_argument("--input_norm_steps", type=int, default=10000)
+    parser.add_argument("--n_itr", type=int, default=10000, help="Number of iterations of the learning algorithm")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Adam learning rate") # Xie
+    parser.add_argument("--eps", type=float, default=1e-5, help="Adam epsilon (for numerical stability)")
+    parser.add_argument("--lam", type=float, default=0.95, help="Generalized advantage estimate discount")
+    parser.add_argument("--gamma", type=float, default=0.99, help="MDP discount")
+    parser.add_argument("--entropy_coeff", type=float, default=0.0, help="Coefficient for entropy regularization")
+    parser.add_argument("--clip", type=float, default=0.2, help="Clipping parameter for PPO surrogate loss")
+    parser.add_argument("--minibatch_size", type=int, default=64, help="Batch size for PPO updates")
+    parser.add_argument("--epochs", type=int, default=3, help="Number of optimization epochs per PPO update") #Xie
+    parser.add_argument("--num_steps", type=int, default=5096, help="Number of sampled timesteps per gradient estimate")
+    parser.add_argument("--use_gae", type=bool, default=True,help="Whether or not to calculate returns using Generalized Advantage Estimation")
+    parser.add_argument("--num_procs", type=int, default=30, help="Number of threads to train on")
+    parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
+    parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
+    args = parser.parse_args()
+
+    run_experiment(args)
+
   elif sys.argv[1] == 'eval':
     sys.argv.remove(sys.argv[1])
 
