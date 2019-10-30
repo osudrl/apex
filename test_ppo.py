@@ -366,7 +366,7 @@ def saliency(policy, state, naive=False):
 def make_env_fn(state_est=False):
     def _thunk():
         #return CassieEnv("walking", clock_based=True, state_est=state_est)
-        return CassieIKEnv("walking", clock_based=True, state_est=True, speed=0.0)
+        return CassieIKEnv("walking", clock_based=True, state_est=True, speed=args.speed)
     return _thunk
 
 
@@ -380,7 +380,7 @@ parser.add_argument("-g", "--graph", dest="plot", default=False, action='store_t
 
 parser.add_argument("--glen", type=int, default=150,
                     help="Length of trajectory to graph.")
-parser.add_argument("--vlen", type=int, default=75,
+parser.add_argument("--vlen", type=int, default=1000,
                     help="Length of trajectory to visualize")
 
 parser.add_argument("--noise", default=False, action="store_true",
@@ -388,6 +388,9 @@ parser.add_argument("--noise", default=False, action="store_true",
 
 parser.add_argument("--new", default=False, action="store_true",
                    help="Visualize new (untrained) policy")
+
+parser.add_argument("--speed", type=float, default=1.5,
+                    help="speed to pass into aslipIk env")
 
 args = parser.parse_args()
 
