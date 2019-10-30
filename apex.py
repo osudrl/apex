@@ -284,7 +284,7 @@ if __name__ == "__main__":
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
 
     args = parser.parse_args()
-
+    args.num_steps = args.num_steps // args.num_procs
     run_experiment(args)
 
   elif sys.argv[1] == 'eval':
