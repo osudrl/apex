@@ -232,16 +232,20 @@ def run_experiment(args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    policy = GaussianMLP(
-        obs_dim, action_dim, 
-        nonlinearity="relu", 
-        bounded=True, 
-        init_std=np.exp(-2), 
-        learn_std=False,
-        normc_init=False
-    )
+    if args.previous is not None:
+        policy = torch.load(args.previous)
+        print("loaded model from {}".format(args.previous))
+    else:
+        policy = GaussianMLP(
+            obs_dim, action_dim, 
+            nonlinearity="relu", 
+            bounded=True, 
+            init_std=np.exp(-2), 
+            learn_std=False,
+            normc_init=False
+        )
 
-    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+        policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
     policy.train(0)
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
