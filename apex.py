@@ -256,6 +256,7 @@ if __name__ == "__main__":
     # For tensorboard logger
     parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")       # Where to log diagnostics to
     parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
+    parser.add_argument("--previous", type=str, default=None)                  # address of redis server (for cluster setups)
     parser.add_argument("--seed", default=0, type=int)                                 # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--policy_name", type=str, default="PPO")
     parser.add_argument("--env", type=str, default="Cassie-mimic-v0")
