@@ -106,6 +106,9 @@ class CassieSim:
         self.foot_force(force)
         return force[[2, 8]]
 
+    def get_dof_damping(self):
+        return cassie_sim_dof_damping(self.c)
+
     def __del__(self):
         cassie_sim_free(self.c)
 

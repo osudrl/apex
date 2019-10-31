@@ -68,6 +68,12 @@ class CassieEnv_rand_dyn:
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.prev_action = ref_pos[self.pos_idx]
         self.phase_add = 1
+
+
+        # Record default dynamics parameters
+        self.default_damping = self.sim.get_dof_damping()
+        print(self.default_damping)
+        input()
     
 
     def step_simulation(self, action):
@@ -123,6 +129,10 @@ class CassieEnv_rand_dyn:
         return self.get_full_state(), reward, done, {}
 
     def reset(self):
+
+        # Randomize dynamics:
+        #if True:
+            
         self.phase = random.randint(0, self.phaselen)
         self.time = 0
         self.counter = 0

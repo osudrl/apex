@@ -41,14 +41,18 @@ def env_factory(path, **kwargs):
     """
 
     if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
-      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
-      from cassie.no_delta_env import CassieEnv_nodelta
+      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn
+      #from cassie.no_delta_env import
 
+      """
       if path == 'Cassie-v0':
         env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
       #elif path == 
+
+      """
+      env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
       return env_fn
 
     spec = gym.envs.registry.spec(path)
@@ -121,6 +125,10 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
     timesteps = 0
     eval_reward = 0
     while not done and timesteps < max_traj_len:
+
+      if hasattr(env, 'simrate'):
+        start = time.time()
+      
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       if visualize:
@@ -128,12 +136,16 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
       eval_reward += reward
       timesteps += 1
 
-      if hasattr(env, 'dt'):
-        print("HAS ATTR")
+      if hasattr(env, 'simrate'):
+        # assume 30hz (hack)
+        end = time.time()
+        delaytime = max(0, 1000 / 30000 - (end-start))
+        time.sleep(delaytime)
+
     print("Eval reward: ", eval_reward)
 
 if __name__ == "__main__":
-  import sys, argparse
+  import sys, argparse, time
   parser = argparse.ArgumentParser()
 
   print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
