@@ -77,13 +77,10 @@ class FF_Actor(Actor):
 
   def forward(self, state):
     x = state
-    #print(x.size())
     for idx, layer in enumerate(self.actor_layers):
       x = self.nonlinearity(layer(x))
 
     self.action = torch.tanh(self.network_out(x))
-    #print(self.action)
-    #exit(1)
     return self.action
 
   def get_action(self):

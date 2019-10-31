@@ -427,6 +427,19 @@ cassie_get_state.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(struct_cass
 cassie_set_state = _libraries['./libcassiemujoco.so'].cassie_set_state
 cassie_set_state.restype = None
 cassie_set_state.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(struct_cassie_state)]
+
+cassie_sim_set_dof_damping = _libraries['./libcassiemujoco.so'].cassie_sim_set_dof_damping
+cassie_sim_set_dof_damping.restype = None
+cassie_sim_set_dof_damping.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+
+cassie_sim_set_body_mass = _libraries['./libcassiemujoco.so'].cassie_sim_set_body_mass
+cassie_sim_set_body_mass.restype = None
+cassie_sim_set_body_mass.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+
+cassie_sim_set_body_ipos = _libraries['./libcassiemujoco.so'].cassie_sim_set_body_ipos
+cassie_sim_set_body_ipos.restype = None
+cassie_sim_set_body_ipos.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+
 class struct_c__SA_pd_motor_in_t(ctypes.Structure):
     _pack_ = True # source:False
     _fields_ = [

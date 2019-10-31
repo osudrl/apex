@@ -10,18 +10,7 @@ import random
 
 import pickle
 
-class CassieIKTrajectory:
-    def __init__(self, filepath):
-        with open(filepath, "rb") as f:
-            trajectory = pickle.load(f)
-
-        self.qpos = np.copy(trajectory["qpos"])
-        self.qvel = np.copy(trajectory["qvel"])
-    
-    def __len__(self):
-        return len(self.qpos)
-
-class CassieEnv:
+class CassieEnv_rand_dyn:
     def __init__(self, traj, simrate=60, clock_based=False, state_est=False):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -46,7 +35,6 @@ class CassieEnv:
         elif traj == "stepping":
             traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
 
-        # self.trajectory = CassieIKTrajectory(traj_path)
         self.trajectory = CassieTrajectory(traj_path)
 
         self.P = np.array([100,  100,  88,  96,  50]) 
@@ -140,7 +128,6 @@ class CassieEnv:
         self.counter = 0
 
         qpos, qvel = self.get_ref_state(self.phase)
-        # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
@@ -403,3 +390,4 @@ class CassieEnv:
             self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/cassie.xml")
 
         return self.vis.draw(self.sim)
+

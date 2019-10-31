@@ -42,18 +42,13 @@ class ReplayBuffer():
 
   def sample_trajectory(self, max_len):
 
-    if True:
-      traj_idx = np.random.randint(0, self.trajectories-1)
-      start_idx = self.trajectory_idx[traj_idx]
-      end_idx = start_idx + 1
+    traj_idx = np.random.randint(0, self.trajectories-1)
+    start_idx = self.trajectory_idx[traj_idx]
+    end_idx = start_idx + 1
 
-      while self.not_done[end_idx] == 1 and end_idx - start_idx < max_len:
-        end_idx += 1
+    while self.not_done[end_idx] == 1 and end_idx - start_idx < max_len:
       end_idx += 1
-
-    else:
-      start_idx = np.random.randint(0, self.size-1)
-      end_idx = start_idx+1
+    end_idx += 1
 
     traj_states = self.state[start_idx:end_idx]
     next_states = self.next_state[start_idx:end_idx]
@@ -210,11 +205,11 @@ def run_experiment(args):
   act_space = env.action_space.shape[0]
 
   if args.recurrent:
-    actor = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
-    critic = LSTM_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
+    actor = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
+    critic = LSTM_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
   else:
-    actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
-    critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name)
+    actor = FF_Actor(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
+    critic = FF_Critic(obs_space, act_space, hidden_size=args.hidden_size, env_name=args.env_name, hidden_layers=args.layers)
 
   algo = DPG(actor, critic, args.a_lr, args.c_lr, discount=args.discount, tau=args.tau, center_reward=args.center_reward)
 
@@ -224,15 +219,16 @@ def run_experiment(args):
     print("Recurrent Deterministic Policy Gradients:")
   else:
     print("Deep Deterministic Policy Gradients:")
-  print("\tenv:          {}".format(args.env_name))
-  print("\tseed:         {}".format(args.seed))
-  print("\ttimesteps:    {:n}".format(args.timesteps))
-  print("\tactor_lr:     {}".format(args.a_lr))
-  print("\tcritic_lr:    {}".format(args.c_lr))
-  print("\tdiscount:     {}".format(args.discount))
-  print("\ttau:          {}".format(args.tau))
-  print("\tnorm reward:  {}".format(args.center_reward))
-  print("\tbatch_size:   {}".format(args.batch_size))
+  print("\tenv:            {}".format(args.env_name))
+  print("\tseed:           {}".format(args.seed))
+  print("\ttimesteps:      {:n}".format(args.timesteps))
+  print("\tactor_lr:       {}".format(args.a_lr))
+  print("\tcritic_lr:      {}".format(args.c_lr))
+  print("\tdiscount:       {}".format(args.discount))
+  print("\ttau:            {}".format(args.tau))
+  print("\tnorm reward:    {}".format(args.center_reward))
+  print("\tbatch_size:     {}".format(args.batch_size))
+  print("\twarmup period:  {:n}".format(args.start_timesteps))
   print()
 
   iter = 0
@@ -247,6 +243,7 @@ def run_experiment(args):
   episode_start = time()
   episode_loss = 0
   update_steps = 0
+  best_reward = None
 
   # Fill replay buffer, update policy until n timesteps have passed
   timesteps = 0
@@ -267,21 +264,15 @@ def run_experiment(args):
     if buffer_ready and done:
       update_steps = 0
       if not algo.recurrent:
-      #if True:
-        for _ in range(episode_timesteps * args.updates):
-          u_loss, u_steps = algo.update_policy(replay_buff, batch_size=args.batch_size)
-          episode_loss += u_loss / episode_timesteps
-          update_steps += u_steps
+        num_updates = episode_timesteps * args.updates
       else:
-        for _ in range(args.updates):
-          u_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=1000)
-          episode_loss += u_loss / args.updates
-          update_steps += u_steps
+        num_updates = args.updates
+      for _ in range(num_updates):
+        u_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=1000)
+        episode_loss += u_loss / num_updates
+        update_steps += u_steps
 
     if done:
-      torch.save(algo.behavioral_actor, args.save_actor)
-      torch.save(algo.behavioral_critic, args.save_critic)
-
       episode_elapsed = (time() - episode_start)
       episode_secs_per_sample = episode_elapsed / episode_timesteps
       logger.add_scalar(args.env_name + ' episode length', episode_timesteps, iter)
@@ -300,6 +291,11 @@ def run_experiment(args):
         logger.add_scalar(args.env_name + ' eval timestep', eval_reward, timesteps)
 
         print("evaluation after {:4d} episodes | return: {:7.3f} | timesteps {:9n}{:100s}".format(iter, eval_reward, timesteps, ''))
+
+        if best_reward is None or eval_reward > best_reward:
+          torch.save(algo.behavioral_actor, args.save_actor)
+          torch.save(algo.behavioral_critic, args.save_critic)
+          best_reward = eval_reward
 
     try:
       print("episode {:5d} | episode timestep {:5d}/{:5d} | return {:5.1f} | update timesteps: {:7n} | {:3.1f}s/1k samples | approx. {:3d}h {:02d}m remain\t\t\t\t".format(

@@ -39,11 +39,16 @@ def env_factory(path, **kwargs):
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    print("GOT PATH: ", path)
+
     if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
       from cassie.no_delta_env import CassieEnv_nodelta
-      env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
+
+      if path == 'Cassie-v0':
+        env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
+      elif path == 'CassieRandomDynamics-v0':
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+      #elif path == 
       return env_fn
 
     spec = gym.envs.registry.spec(path)
@@ -72,6 +77,8 @@ def create_logger(args):
     "You must provide a 'seed' key in your command line arguments"
   assert "logdir" in arg_dict, \
     "You must provide a 'logdir' key in your command line arguments."
+  assert "env_name" in arg_dict, \
+    "You must provide a 'env_name' key in your command line arguments."
 
   # sort the keys so the same hyperparameters will always have the same hash
   arg_dict = OrderedDict(sorted(arg_dict.items(), key=lambda t: t[0]))
@@ -80,9 +87,11 @@ def create_logger(args):
   # same for logging directory
   seed = str(arg_dict.pop("seed"))
   logdir = str(arg_dict.pop('logdir'))
+  env_name = str(arg_dict.pop('env_name'))
 
   # get a unique hash for the hyperparameter settings, truncated at 10 chars
-  arg_hash = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:10] + '-seed' + seed
+  arg_hash   = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:6] + '-seed' + seed
+  logdir     = os.path.join(logdir, env_name)
   output_dir = os.path.join(logdir, arg_hash)
 
   # create a directory with the hyperparm hash as its name, if it doesn't
@@ -111,13 +120,16 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
     done = False
     timesteps = 0
     eval_reward = 0
-    while not done and timesteps < 1000:
+    while not done and timesteps < max_traj_len:
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       if visualize:
         env.render()
       eval_reward += reward
       timesteps += 1
+
+      if hasattr(env, 'dt'):
+        print("HAS ATTR")
     print("Eval reward: ", eval_reward)
 
 if __name__ == "__main__":
@@ -147,12 +159,14 @@ if __name__ == "__main__":
     parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)               # max trajectory length for environment
     parser.add_argument("--algo",         "-a",   default='v1', type=str)               # whether to use ars v1 or v2
     parser.add_argument("--recurrent",    "-r",   action='store_true')                  # whether to use a recurrent policy
-    parser.add_argument("--logdir",       default="./logs/ars/experiments/", type=str)
+    parser.add_argument("--logdir",       default="./logs/ars/", type=str)
     parser.add_argument("--seed",     "-s",   default=0, type=int)
     parser.add_argument("--env_name", "-e",   default="Hopper-v3")
     parser.add_argument("--average_every", default=10, type=int)
-    parser.add_argument("--save_model",   "-m",   default="./trained_models/ars/ars.pt", type=str) # where to save the trained model to
+    parser.add_argument("--save_model",   "-m",   default=None, type=str) # where to save the trained model to
     args = parser.parse_args()
+    if args.save_model == None:
+      args.save_model = './trained_models/ars/' + args.env_name + '.pt'
 
     run_experiment(args)
 
@@ -185,17 +199,27 @@ if __name__ == "__main__":
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
     if not recurrent:
-      parser.add_argument("--save_actor",             default="./trained_models/ddpg/ddpg_actor.pt", type=str)
-      parser.add_argument("--save_critic",            default="./trained_models/ddpg/ddpg_critic.pt", type=str)
-      parser.add_argument("--logdir",                 default="./logs/ddpg/experiments/", type=str)
+      parser.add_argument("--save_actor",             default=None, type=str)
+      parser.add_argument("--save_critic",            default=None, type=str)
+      parser.add_argument("--logdir",                 default="./logs/ddpg/", type=str)
     else:
-      parser.add_argument("--save_actor",             default="./trained_models/rdpg/rdpg_actor.pt", type=str)
-      parser.add_argument("--save_critic",            default="./trained_models/rdpg/rdpg_critic.pt", type=str)
-      parser.add_argument("--logdir",                 default="./logs/rdpg/experiments/", type=str)
+      parser.add_argument("--save_actor",             default=None, type=str)
+      parser.add_argument("--save_critic",            default=None, type=str)
+      parser.add_argument("--logdir",                 default="./logs/rdpg/", type=str)
     parser.add_argument("--seed",     "-s",   default=0, type=int)
     parser.add_argument("--env_name", "-e",   default="Hopper-v3")
     args = parser.parse_args()
-    args.__dict__['recurrent'] = recurrent
+
+    args.recurrent = recurrent
+    if recurrent and args.save_actor == None:
+      args.save_actor = './trained_models/rdpg/' + args.env_name + '-actor.pt'
+    else:
+      args.save_actor = './trained_models/ddpg/' + args.env_name + '-actor.pt'
+
+    if recurrent and args.save_critic == None:
+      args.save_critic = './trained_models/rdpg/' + args.env_name + '-critic.pt'
+    else:
+      args.save_critic = './trained_models/ddpg/' + args.env_name + '-critic.pt'
 
     run_experiment(args)
   elif sys.argv[1] == 'td3_sync':
