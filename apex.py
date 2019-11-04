@@ -42,17 +42,14 @@ def env_factory(path, **kwargs):
 
     if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn
-      #from cassie.no_delta_env import
 
-      """
       if path == 'Cassie-v0':
         env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
-      #elif path == 
+      elif path == 'CassieRandomDynamics-v0':
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
 
-      """
-      env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
       return env_fn
 
     spec = gym.envs.registry.spec(path)
