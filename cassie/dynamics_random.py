@@ -72,8 +72,12 @@ class CassieEnv_rand_dyn:
 
         # Record default dynamics parameters
         self.default_damping = self.sim.get_dof_damping()
-        print(self.default_damping)
-        input()
+        self.default_mass = self.sim.get_body_mass()
+        self.default_ipos = self.sim.get_body_ipos()
+        #print(self.default_damping)
+        #print(self.default_mass)
+        #print(self.default_ipos)
+        #input()
     
 
     def step_simulation(self, action):
@@ -128,11 +132,19 @@ class CassieEnv_rand_dyn:
 
         return self.get_full_state(), reward, done, {}
 
-    def reset(self):
+    def reset(self, randomize=True):
 
         # Randomize dynamics:
-        #if True:
-            
+        if randomize:
+            damping = self.default_damping + np.random.randn(32)
+            self.sim.set_dof_damping(np.clip(damping, 0, None))
+
+            body_mass = self.default_mass + np.random.randn(32)
+            self.sim.set_body_mass(np.clip(body_mass, 0, None))
+
+            body_ipos = self.default_ipos + np.random.randn(32*3)
+            self.sim.set_body_ipos(np.clip(body_ipos, 0, None))
+
         self.phase = random.randint(0, self.phaselen)
         self.time = 0
         self.counter = 0
