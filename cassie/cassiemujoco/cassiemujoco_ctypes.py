@@ -428,6 +428,8 @@ cassie_set_state = _libraries['./libcassiemujoco.so'].cassie_set_state
 cassie_set_state.restype = None
 cassie_set_state.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(struct_cassie_state)]
 
+#cassie_sim_foot_positions.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_double * 6]
+
 cassie_sim_dof_damping = _libraries['./libcassiemujoco.so'].cassie_sim_dof_damping
 cassie_sim_dof_damping.restype = POINTER_T(ctypes.c_double)
 cassie_sim_dof_damping.argtypes = [POINTER_T(struct_cassie_sim)]
