@@ -26,7 +26,8 @@ class CassieEnv_rand_dyn:
             self.observation_space = np.zeros(80)
             if self.state_est:
                 self.observation_space = np.zeros(86)       # Size for use with state est
-        self.action_space      = np.zeros(10)
+
+        self.action_space = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
         if traj == "walking":
@@ -136,12 +137,25 @@ class CassieEnv_rand_dyn:
 
         # Randomize dynamics:
         if randomize:
+            for i, damp in enumerate(self.default_damping):
+              print("{}: {}".format(i, damp))
+
+            pelvis_damp_std   = [0.00, 0.00, 0.00, 0.00, 0.00, 0.00] # 0->5
+            hip_damp_std      = [1.00, 1.00, 1.00]                   # 6->8 and 19->21
+            achilles_damp_std = [0.01, 0.01, 0.01]                   # 9->11 and 22->24
+            exit(1)
+            damping_std = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            
             damping = self.default_damping + np.random.randn(32)
             self.sim.set_dof_damping(np.clip(damping, 0, None))
 
+            damping_std = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             body_mass = self.default_mass + np.random.randn(32)
             self.sim.set_body_mass(np.clip(body_mass, 0, None))
 
+            damping_std = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             body_ipos = self.default_ipos + np.random.randn(32*3)
             self.sim.set_body_ipos(np.clip(body_ipos, 0, None))
 
