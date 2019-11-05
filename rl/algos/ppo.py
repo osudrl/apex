@@ -194,7 +194,7 @@ class PPO:
 
     @ray.remote
     @torch.no_grad()
-    def sample(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
+    def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False):
         """
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
@@ -212,7 +212,8 @@ class PPO:
             traj_len = 0
 
             while not done and traj_len < max_traj_len:
-                value, action = policy.act(state, deterministic)
+                action = policy.act(state, deterministic)
+                value = critic.act(state)
 
                 next_state, reward, done, _ = env.step(action.numpy())
 
@@ -223,14 +224,14 @@ class PPO:
                 traj_len += 1
                 num_steps += 1
 
-            value, _ = policy.act(state)
+            value = critic.act(state)
             memory.finish_path(last_val=(not done) * value.numpy())
 
         return memory
 
-    def sample_parallel(self, env_fn, policy, min_steps, max_traj_len, deterministic=False):
+    def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False):
         worker = self.sample
-        args = (self, env_fn, policy, min_steps, max_traj_len, deterministic)
+        args = (self, env_fn, policy, critic, min_steps, max_traj_len, deterministic)
 
         # Don't don't bother launching another process for single thread
         if self.n_proc > 1:
@@ -259,13 +260,17 @@ class PPO:
 
     def train(self,
               env_fn,
-              policy, 
+              policy,
+              policy_copy,
+              critic,
               n_itr,
               logger=None):
 
-        old_policy = deepcopy(policy)
+        # old_policy = deepcopy(policy)
+        old_policy = policy_copy
 
         optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
+        critic_optimizer = optim.Adam(critic.parameters(), lr=self.lr, eps=self.eps)
 
         start_time = time.time()
 
@@ -273,7 +278,7 @@ class PPO:
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
-            batch = self.sample_parallel(env_fn, policy, self.num_steps, self.max_traj_len)
+            batch = self.sample_parallel(env_fn, policy, critic, self.num_steps, self.max_traj_len)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
             print("sample time elapsed: {:.2f} s".format(time.time() - sample_start))
@@ -309,11 +314,12 @@ class PPO:
                     return_batch = returns[indices]
                     advantage_batch = advantages[indices]
 
-                    values, pdf = policy.evaluate(obs_batch)
+                    values = critic.act(obs_batch)
+                    pdf = policy.evaluate(obs_batch)
 
                     # TODO, move this outside loop?
                     with torch.no_grad():
-                        _, old_pdf = old_policy.evaluate(obs_batch)
+                        old_pdf = old_policy.evaluate(obs_batch)
                         old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
                     
                     log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
@@ -331,12 +337,21 @@ class PPO:
                     # TODO: add ability to optimize critic and actor seperately, with different learning rates
 
                     optimizer.zero_grad()
-                    (actor_loss + critic_loss + entropy_penalty).backward()
+                    (actor_loss + entropy_penalty).backward()
 
                     # Clip the gradient norm to prevent "unlucky" minibatches from 
                     # causing pathalogical updates
                     torch.nn.utils.clip_grad_norm_(policy.parameters(), self.grad_clip)
                     optimizer.step()
+
+                    critic_optimizer.zero_grad()
+                    critic_loss.backward()
+
+                    # Clip the gradient norm to prevent "unlucky" minibatches from 
+                    # causing pathalogical updates
+                    torch.nn.utils.clip_grad_norm_(critic.parameters(), self.grad_clip)
+                    critic_optimizer.step()
+
 
                     losses.append([actor_loss.item(),
                                    pdf.entropy().mean().item(),
@@ -356,13 +371,13 @@ class PPO:
 
             if logger is not None:
                 evaluate_start = time.time()
-                test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, self.max_traj_len, deterministic=True)
+                test = self.sample_parallel(env_fn, policy, critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
                 avg_eval_reward = np.mean(test.ep_returns)
 
-                _, pdf     = policy.evaluate(observations)
-                _, old_pdf = old_policy.evaluate(observations)
+                pdf     = policy.evaluate(observations)
+                old_pdf = old_policy.evaluate(observations)
 
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()

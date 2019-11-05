@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from rl.distributions import DiagonalGaussian
+
 from torch import sqrt
 
 # The base class for an actor. Includes functions for normalizing state (optional)
@@ -59,6 +61,71 @@ class Linear_Actor(Actor):
 
   def get_action(self):
     return self.action
+
+# Actor network for gaussian mlp
+class GaussianMLP_Actor(Actor):
+  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=torch.tanh, init_std=1, learn_std=True, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
+    super(GaussianMLP_Actor, self).__init__()
+
+    self.actor_layers = nn.ModuleList()
+    self.actor_layers += [nn.Linear(state_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.actor_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.network_out = nn.Linear(hidden_size, action_dim)
+
+    self.dist = DiagonalGaussian(action_dim, init_std, learn_std)
+
+    self.action = None
+    self.action_dim = action_dim
+    self.env_name = env_name
+    self.nonlinearity = nonlinearity
+
+    self.obs_std = obs_std
+    self.obs_mean = obs_mean
+
+    # weight initialization scheme used in PPO paper experiments
+    self.normc_init = normc_init
+
+    self.bounded = bounded
+
+    self.init_parameters()
+    self.train()
+
+  def init_parameters(self):
+    if self.normc_init:
+        print("Doing norm column initialization.")
+        self.apply(normc_fn)
+
+        if self.dist.__class__.__name__ == "DiagGaussian":
+            self.network_out.weight.data.mul_(0.01)
+
+  def forward(self, inputs):
+    if self.training == False:
+        inputs = (inputs - self.obs_mean) / self.obs_std
+
+    x = inputs
+    for l in self.actor_layers:
+        x = self.nonlinearity(l(x))
+    x = self.network_out(x)
+
+    if self.bounded:
+        mean = torch.tanh(x) 
+    else:
+        mean = x
+
+    self.action = mean
+    return mean
+
+  def get_action(self):
+    return self.action
+
+  def act(self, inputs, deterministic=False):
+    action = self.dist.sample(self(inputs), deterministic=deterministic)
+    return action.detach()
+
+  def evaluate(self, inputs):
+    x = self(inputs)
+    return self.dist.evaluate(x)
 
 class FF_Actor(Actor):
   def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=F.relu):
@@ -175,3 +242,13 @@ class LSTM_Actor(Actor):
   def get_action(self):
     return self.action
 
+## Initialization scheme for gaussian mlp (from ppo paper)
+# NOTE: the fact that this has the same name as a parameter caused a NASTY bug
+# apparently "if <function_name>" evaluates to True in python...
+def normc_fn(m):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        m.weight.data.normal_(0, 1)
+        m.weight.data *= 1 / torch.sqrt(m.weight.data.pow(2).sum(1, keepdim=True))
+        if m.bias is not None:
+            m.bias.data.fill_(0)
