@@ -188,7 +188,7 @@ def run_experiment(args):
   from rl.policies.critic import FF_Critic, LSTM_Critic
   from rl.policies.actor import FF_Actor, LSTM_Actor
 
-  import locale
+  import locale, os
   locale.setlocale(locale.LC_ALL, '')
 
   # wrapper function for creating parallelized envs
@@ -238,6 +238,12 @@ def run_experiment(args):
   # create a tensorboard logging object
   logger = create_logger(args)
 
+  if args.save_actor is None:
+    args.save_actor = os.path.join(logger.dir, 'actor.pt')
+
+  if args.save_critic is None:
+    args.save_critic = os.path.join(logger.dir, 'critic.pt')
+
   # Keep track of some statistics for each episode
   training_start = time()
   episode_start = time()
@@ -253,6 +259,7 @@ def run_experiment(args):
     warmup = timesteps < args.start_timesteps
 
     state, r, done = collect_experience(algo.behavioral_actor, env, replay_buff, state, episode_timesteps,
+                                               max_len=args.traj_len,
                                                random_action=warmup,
                                                noise=args.expl_noise, 
                                                do_trajectory=algo.recurrent)
@@ -268,7 +275,7 @@ def run_experiment(args):
       else:
         num_updates = args.updates
       for _ in range(num_updates):
-        u_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=1000)
+        u_loss, u_steps = algo.update_policy(replay_buff, args.batch_size, traj_len=args.traj_len)
         episode_loss += u_loss / num_updates
         update_steps += u_steps
 
@@ -286,7 +293,7 @@ def run_experiment(args):
       min_remaining = int(secs_remaining - hrs_remaining*60*60)//60
 
       if iter % args.eval_every == 0 and iter != 0:
-        eval_reward = eval_policy(algo.behavioral_actor, eval_env)
+        eval_reward = eval_policy(algo.behavioral_actor, eval_env, max_traj_len=args.traj_len)
         logger.add_scalar(args.env_name + ' eval episode', eval_reward, iter)
         logger.add_scalar(args.env_name + ' eval timestep', eval_reward, timesteps)
 
@@ -296,6 +303,7 @@ def run_experiment(args):
           torch.save(algo.behavioral_actor, args.save_actor)
           torch.save(algo.behavioral_critic, args.save_critic)
           best_reward = eval_reward
+          print("\t(best policy so far! saving to {})".format(args.save_actor))
 
     try:
       print("episode {:5d} | episode timestep {:5d}/{:5d} | return {:5.1f} | update timesteps: {:7n} | {:3.1f}s/1k samples | approx. {:3d}h {:02d}m remain\t\t\t\t".format(
