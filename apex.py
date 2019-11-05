@@ -168,11 +168,12 @@ if __name__ == "__main__":
     parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)               # max trajectory length for environment
     parser.add_argument("--algo",         "-a",   default='v1', type=str)               # whether to use ars v1 or v2
     parser.add_argument("--recurrent",    "-r",   action='store_true')                  # whether to use a recurrent policy
-    parser.add_argument("--logdir",       default="./logs/ars/", type=str)
-    parser.add_argument("--seed",     "-s",   default=0, type=int)
-    parser.add_argument("--env_name", "-e",   default="Hopper-v3")
-    parser.add_argument("--average_every", default=10, type=int)
-    parser.add_argument("--save_model",   "-m",   default=None, type=str) # where to save the trained model to
+    parser.add_argument("--logdir",               default="./logs/ars/", type=str)
+    parser.add_argument("--seed",     "-s",       default=0, type=int)
+    parser.add_argument("--env_name", "-e",       default="Hopper-v3")
+    parser.add_argument("--average_every",        default=10, type=int)
+    parser.add_argument("--save_model",   "-m",   default=None, type=str)               # where to save the trained model to
+    parser.add_argument("--redis",                default=None)
     args = parser.parse_args()
     if args.save_model == None:
       args.save_model = './trained_models/ars/' + args.env_name + '.pt'
