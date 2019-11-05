@@ -4,6 +4,8 @@ import torch
 import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.distributions import kl_divergence
+from ..utils.logging import Logger
+from torch.utils.tensorboard import SummaryWriter
 
 import numpy as np
 from rl.algos import PPO
@@ -33,6 +35,7 @@ class MirrorPPO(PPO):
                     minibatch_size,
                     drop_last=True
                 )
+                print("sampler len: ", len(sampler))
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
 
@@ -86,7 +89,7 @@ class MirrorPPO(PPO):
                         _, mirror_actions = policy(mirror_observation(obs_batch))
                     mirror_actions = mirror_action(mirror_actions)
 
-                    mirror_loss = 4 * (deterministic_actions - mirror_actions).pow(2).mean()
+                    mirror_loss = 5 * (deterministic_actions - mirror_actions).pow(2).mean()
 
                     entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
 
@@ -165,15 +168,24 @@ class MirrorPPO(PPO):
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
-                logger.record('Return (test)', np.mean(test.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='test')
-                logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
-                logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
+                if type(logger) is Logger:
+                    logger.record('Return (test)', np.mean(test.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='test')
+                    logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
+                    logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
 
-                logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
-                logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
-                logger.record('Timesteps', self.total_steps, itr, 'Timesteps', x_var_name='Iterations', split_name=None)
+                    logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
+                    logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
+                    logger.record('Timesteps', self.total_steps, itr, 'Timesteps', x_var_name='Iterations', split_name=None)
+                    logger.dump()
+                elif type(logger) is SummaryWriter:
+                    logger.add_scalar("Data/Return (test)", np.mean(test.ep_returns))
+                    logger.add_scalar("Data/Return (batch)", np.mean(batch.ep_returns))
+                    logger.add_scalar("Data/Mean Eplen", np.mean(batch.ep_lens))
 
-                logger.dump()
+                    logger.add_scalar("Misc/Mean KL Div", np.mean(test.ep_returns))
+                    logger.add_scalar("Misc/Mean Entropy", np.mean(test.ep_returns))
+                else:
+                    print("No Logger")
 
             # TODO: add option for how often to save model
             if np.mean(test.ep_returns) > self.max_return:

@@ -5,6 +5,7 @@ import torch
 import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.distributions import kl_divergence
+from torch.utils.tensorboard import SummaryWriter
 
 import time
 
@@ -132,9 +133,14 @@ class PPO:
         self.highest_reward = -1
 
         if args['redis_address'] is not None:
+            print("redist address is not none")
             ray.init(redis_address=args['redis_address'])
         else:
+            print("redis address is none")
             ray.init()
+        print(ray.cluster_resources())
+        # print(ray.available_resources())
+        print("\n\n\n")
 
     @staticmethod
     def add_arguments(parser):
@@ -235,10 +241,21 @@ class PPO:
 
         # Don't don't bother launching another process for single thread
         if self.n_proc > 1:
-            result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
+            # result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
+            result_ids = [worker.remote(*args) for _ in range(self.n_proc)]
+            print(ray.available_resources())
+            print("\n\n\n")
+            result = ray.get(result_ids)
+            # result = []
+            # for i in range(self.n_proc):
+            #     result.append(worker.remote(*args))
+            #     print(ray.available_resources())
+            #     print("\n\n\n")
+            # result = [ray.get(proc_id) for proc_id in result]
         else:
             result = [worker._function(*args)]
-
+        
+        print("len ray result: ", len(result))
         # O(n)
         def merge(buffers):
             merged = PPOBuffer(self.gamma, self.lam)
@@ -285,6 +302,7 @@ class PPO:
             advantages = (advantages - advantages.mean()) / (advantages.std() + self.eps)
 
             minibatch_size = self.minibatch_size or advantages.numel()
+            print("minibatch size: ", minibatch_size)
 
             print("timesteps in batch: %i" % advantages.numel())
             self.total_steps += advantages.numel()
@@ -300,7 +318,7 @@ class PPO:
                     minibatch_size,
                     drop_last=True
                 )
-
+                print("sampler len: ", len(sampler))
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
 

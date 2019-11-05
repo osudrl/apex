@@ -1,6 +1,7 @@
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
 from .trajectory import CassieTrajectory
+from cassie.quaternion_function import *
 
 from math import floor
 
@@ -22,7 +23,7 @@ class CassieIKTrajectory:
     def __len__(self):
         return len(self.qpos)
 
-class CassieEnv_speed_no_delta_neutral_foot:
+class CassieEnv_speed_sidestep:
     def __init__(self, traj, simrate=60, clock_based=False, state_est=False):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -31,15 +32,15 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.state_est = state_est
 
         if clock_based:
-            self.observation_space = np.zeros(42 + 1)
+            self.observation_space = np.zeros(42 + 2)
             if self.state_est:
-                self.observation_space = np.zeros(48 + 1)       # Size for use with state est
-            self.ext_size = 3   # Size of ext_state input, used when constructing mirror obs vector
+                self.observation_space = np.zeros(48 + 2)       # Size for use with state est
+            self.ext_size = 4   # Size of ext_state input, used when constructing mirror obs vector
         else:
             self.observation_space = np.zeros(80)
             if self.state_est:
                 self.observation_space = np.zeros(86)       # Size for use with state est
-            self.ext_size = 1   # Size of ext_state input, used when constructing mirror obs vector
+            self.ext_size = 2   # Size of ext_state input, used when constructing mirror obs vector
         self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
@@ -80,21 +81,33 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
         self.speed = 1
+        self.side_speed = 0     # Positive is left direction, negative is right direction
+        self.max_force = 0
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.prev_action = ref_pos[self.pos_idx]
         self.phase_add = 1
-    
+        if self.state_est:
+            self.clock_inds = [46, 47]
+        else:
+            self.clock_inds = [40, 41] 
 
     def step_simulation(self, action):
-
-        real_action = action
+        
         offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
-        real_action = real_action + offset
+        # real_action = real_action + offset
+        target = action + offset
+
+        h = 0.005
+        Tf = 1.0 / 300.0
+        alpha = h / (Tf + h)
+        
+        real_action = (1-alpha)*self.prev_action + alpha*target
+        self.prev_action = real_action      # Save previous action
+
         # real_action[4] += -1.5968
         # real_action[9] += -1.5968
-        
-        # target = action + ref_pos[self.pos_idx]
-        
+                
         self.u = pd_in_t()
         for i in range(5):
             # TODO: move setting gains out of the loop?
@@ -115,6 +128,8 @@ class CassieEnv_speed_no_delta_neutral_foot:
             self.u.rightLeg.motorPd.dTarget[i] = 0
 
         self.cassie_state = self.sim.step_pd(self.u)
+        # foot_forces = self.sim.get_foot_forces()
+        # self.max_force = max(foot_forces[0], foot_forces[1])
 
     def step(self, action):
         for _ in range(self.simrate):
@@ -144,8 +159,12 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.phase = random.randint(0, self.phaselen)
         self.time = 0
         self.counter = 0
+        self.max_force = 0
 
+        orientation = random.randint(-10, 10) * np.pi / 25
+        quaternion = euler2quat(z=orientation, y=0, x=0)
         qpos, qvel = self.get_ref_state(self.phase)
+        qpos[3:7] = quaternion
         # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
@@ -154,8 +173,12 @@ class CassieEnv_speed_no_delta_neutral_foot:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = (random.randint(0, 10)) / 10
-        self.phase_add = 1#random.rand() * 2
+        
+        self.speed = (random.randint(-5, 10)) / 10
+        self.side_speed = 0.6*random.random() - 0.3
+        self.phase_add = 1# + random.random()
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.prev_action = ref_pos[self.pos_idx]
 
         return self.get_full_state()
 
@@ -165,7 +188,8 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.time = 0
         self.counter = 0
         self.speed = 1
-        self.phase_add = 2
+        self.side_speed = 0
+        self.max_force = 0
 
         qpos, qvel = self.get_ref_state(self.phase)
 
@@ -174,6 +198,9 @@ class CassieEnv_speed_no_delta_neutral_foot:
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
+        self.phase_add = 1
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.prev_action = ref_pos[self.pos_idx]
 
         return self.get_full_state()
     
@@ -215,51 +242,60 @@ class CassieEnv_speed_no_delta_neutral_foot:
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
-        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        # ref_pos_prev, ref_vel_prev = self.get_ref_state(int(np.floor(self.phase)))
+        # phase_diff = self.phase - np.floor(self.phase)
+        # if phase_diff != 0:
+        #     ref_pos_next, ref_vel_next = self.get_ref_state(int(np.ceil(self.phase)))
+        #     ref_pos_diff = ref_pos_next - ref_pos_prev
+        #     ref_vel_diff = ref_vel_next - ref_vel_prev
+        #     ref_pos = ref_pos_prev + phase_diff*ref_pos_diff
+        #     ref_vel = ref_vel_prev + phase_diff*ref_vel_diff
+        # else:
+        #     ref_pos = ref_pos_prev
+        #     ref_vel = ref_vel_prev
 
-        # TODO: should be variable; where do these come from?
-        # TODO: see magnitude of state variables to gauge contribution to reward
-        weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
+        # # TODO: should be variable; where do these come from?
+        # # TODO: see magnitude of state variables to gauge contribution to reward
+        # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
-        joint_error       = 0
-        com_error         = 0
-        orientation_error = 0
-        spring_error      = 0
+        # joint_error       = 0
+        # com_error         = 0
+        # orientation_error = 0
+        # spring_error      = 0
 
-        # each joint pos
-        for i, j in enumerate(self.pos_idx):
-            target = ref_pos[j]
-            actual = qpos[j]
+        # # each joint pos
+        # for i, j in enumerate(self.pos_idx):
+        #     target = ref_pos[j]
+        #     actual = qpos[j]
 
-            joint_error += 30 * weight[i] * (target - actual) ** 2
+        #     joint_error += 30 * weight[i] * (target - actual) ** 2
 
-        # center of mass: x, y, z
-        for j in [0, 1, 2]:
-            target = ref_pos[j]
-            actual = qpos[j]
+        # # center of mass: x, y, z
+        # for j in [0, 1, 2]:
+        #     target = ref_pos[j]
+        #     actual = qpos[j]
 
-            # NOTE: in Xie et al y target is 0
-
-            com_error += (target - actual) ** 2
+        #     # NOTE: in Xie et al y target is 0
+        #     com_error += (target - actual) ** 2
         
-        # COM orientation: qx, qy, qz
-        for j in [4, 5, 6]:
-            target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
-            actual = qpos[j]
+        # # COM orientation: qx, qy, qz
+        # for j in [4, 5, 6]:
+        #     target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
+        #     actual = qpos[j]
 
-            orientation_error += (target - actual) ** 2
+        #     orientation_error += (target - actual) ** 2
 
-        # left and right shin springs
-        for i in [15, 29]:
-            target = ref_pos[i] # NOTE: in Xie et al spring target is 0
-            actual = qpos[i]
+        # # left and right shin springs
+        # for i in [15, 29]:
+        #     target = ref_pos[i] # NOTE: in Xie et al spring target is 0
+        #     actual = qpos[i]
 
-            spring_error += 1000 * (target - actual) ** 2      
+        #     spring_error += 1000 * (target - actual) ** 2      
         
-        reward = 0.5 * np.exp(-joint_error) +       \
-                 0.3 * np.exp(-com_error) +         \
-                 0.1 * np.exp(-orientation_error) + \
-                 0.1 * np.exp(-spring_error)
+        # reward = 0.5 * np.exp(-joint_error) +       \
+        #         0.3 * np.exp(-com_error) +         \
+        #         0.1 * np.exp(-orientation_error) + \
+        #         0.1 * np.exp(-spring_error)
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
@@ -273,8 +309,43 @@ class CassieEnv_speed_no_delta_neutral_foot:
         #     )  
 
         # reward = np.sign(qvel[0])*qvel[0]**2
-        # diff = np.abs(qvel[0] - self.speed)
-        # reward = np.exp(-diff)
+        forward_diff = np.abs(qvel[0] - self.speed)
+        side_diff = np.abs(qvel[1] - self.side_speed)
+        # speed_rew = qvel[0]
+        orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+        # y_vel = np.abs(qvel[1])
+        if forward_diff < 0.05:
+            forward_diff = 0
+        if side_diff < 0.05:
+            side_diff = 0
+        # if y_vel < 0.03:
+        #   y_vel = 0
+        # straight_diff = np.abs(qpos[1])
+        # if straight_diff < 0.05:
+        #   straight_diff = 0
+        # Foot position penalty
+        foot_pos = np.zeros(6)
+        self.sim.foot_pos(foot_pos)
+        foot_dist = np.linalg.norm(foot_pos[0:2]-foot_pos[3:5])
+        foot_penalty = 0
+        if foot_dist < 0.12:
+            foot_penalty = 0.2
+        # Foot force penalty
+        foot_forces = self.sim.get_foot_forces()
+        lforce = max((foot_forces[0] - 700)/1000, 0)
+        rforce = max((foot_forces[1] - 700)/1000, 0)
+        # Hip yaw penalty (pigeon/duck toed)
+        # lhipyaw = qpos[8]
+        # rhipyaw = qpos[22]
+        # if lhipyaw < 0.05:
+        #     lhipyaw = 0
+        # if rhipyaw < 0.05:
+        #     rhipyaw = 0
+        # Foot orientation penalty
+        leuler = quaternion2euler(self.cassie_state.leftFoot.orientation)
+        reuler = quaternion2euler(self.cassie_state.rightFoot.orientation)
+        reward = .4*np.exp(-forward_diff) + .3*np.exp(-side_diff) + .1*np.exp(-orient_diff) + \
+                .1*np.exp(-leuler[1]) + .1*np.exp(-reuler[1]) - foot_penalty - lforce - rforce
         # desired_speed = 3.0
         # speed_diff = np.abs(qvel[0] - desired_speed)
         # if speed_diff > 1:
@@ -304,13 +375,18 @@ class CassieEnv_speed_no_delta_neutral_foot:
         pos[0] *= self.speed
         pos[0] += (self.trajectory.qpos[-1, 0]- self.trajectory.qpos[0, 0])* self.counter * self.speed
         ######                          ########
+        ###### Setting variable side speed  #########
+        pos[1] *= self.side_speed
+        pos[1] += (self.trajectory.qpos[-1, 1]- self.trajectory.qpos[0, 1])* self.counter * self.side_speed
+        ######                          ########
 
         # setting lateral distance target to 0?
         # regardless of reference trajectory?
-        pos[1] = 0
+        # pos[1] = 0
 
         vel = np.copy(self.trajectory.qvel[phase * self.simrate])
         vel[0] *= self.speed
+        vel[1] *= self.side_speed
 
         return pos, vel
 
@@ -378,7 +454,7 @@ class CassieEnv_speed_no_delta_neutral_foot:
         clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                     np.cos(2 * np.pi *  self.phase / self.phaselen)]
         
-        ext_state = np.concatenate((clock, [self.speed]))
+        ext_state = np.concatenate((clock, [self.speed, self.side_speed]))
 
         # Use state estimator
         robot_state = np.concatenate([
