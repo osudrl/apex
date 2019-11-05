@@ -188,7 +188,7 @@ def run_experiment(args):
   from rl.policies.critic import FF_Critic, LSTM_Critic
   from rl.policies.actor import FF_Actor, LSTM_Actor
 
-  import locale
+  import locale, os
   locale.setlocale(locale.LC_ALL, '')
 
   # wrapper function for creating parallelized envs
@@ -237,6 +237,12 @@ def run_experiment(args):
 
   # create a tensorboard logging object
   logger = create_logger(args)
+
+  if args.save_actor is None:
+    args.save_actor = os.path.join(logger.dir, 'actor.pt')
+
+  if args.save_critic is None:
+    args.save_critic = os.path.join(logger.dir, 'critic.pt')
 
   # Keep track of some statistics for each episode
   training_start = time()

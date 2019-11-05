@@ -108,9 +108,12 @@ def create_logger(args):
 
   logger = SummaryWriter(output_dir, flush_secs=0.1)
   print("Logging to " + color.BOLD + color.ORANGE + str(output_dir) + color.END)
+
+  logger.dir = output_dir
   return logger
 
 def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
+
   if env_name is None:
     env = env_factory(policy.env_name)()
   else:
@@ -208,30 +211,22 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size",             default=64,    type=int)      # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
+    parser.add_argument("--save_actor",             default=None, type=str)
+    parser.add_argument("--save_critic",            default=None, type=str)
+
     if not recurrent:
-      parser.add_argument("--save_actor",             default=None, type=str)
-      parser.add_argument("--save_critic",            default=None, type=str)
       parser.add_argument("--logdir",                 default="./logs/ddpg/", type=str)
     else:
-      parser.add_argument("--save_actor",             default=None, type=str)
-      parser.add_argument("--save_critic",            default=None, type=str)
       parser.add_argument("--logdir",                 default="./logs/rdpg/", type=str)
+
     parser.add_argument("--seed",     "-s",   default=0, type=int)
     parser.add_argument("--env_name", "-e",   default="Hopper-v3")
     args = parser.parse_args()
 
     args.recurrent = recurrent
-    if recurrent and args.save_actor == None:
-      args.save_actor = './trained_models/rdpg/' + args.env_name + '-actor.pt'
-    else:
-      args.save_actor = './trained_models/ddpg/' + args.env_name + '-actor.pt'
-
-    if recurrent and args.save_critic == None:
-      args.save_critic = './trained_models/rdpg/' + args.env_name + '-critic.pt'
-    else:
-      args.save_critic = './trained_models/ddpg/' + args.env_name + '-critic.pt'
 
     run_experiment(args)
+
   elif sys.argv[1] == 'td3_sync':
     sys.argv.remove(sys.argv[1])
     """
