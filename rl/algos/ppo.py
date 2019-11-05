@@ -107,7 +107,7 @@ class PPO:
                  minibatch_size=None,
                  num_steps=None):
 
-        self.env_name = args['env']
+        self.env_name = args['env_name']
 
         self.gamma         = args['gamma']
         self.lam           = args['lam']

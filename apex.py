@@ -26,7 +26,7 @@ def print_logo(subtitle="", option=2):
   print(subtitle)
   print("\n")
 
-def env_factory(path, **kwargs):
+def env_factory(path, state_est=True, mirror=False, **kwargs):
     from functools import partial
 
     """
@@ -40,11 +40,29 @@ def env_factory(path, **kwargs):
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
     print("GOT PATH: ", path)
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
-      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
-      from cassie.no_delta_env import CassieEnv_nodelta
-      env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
-      return env_fn
+    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]:
+        from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
+        from cassie.no_delta_env import CassieEnv_nodelta
+        from cassie.speed_env import CassieEnv_speed
+        from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+        from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+    #   env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieIKEnv, clock_based=True, state_est=state_est)
+
+        if mirror:
+            from rl.envs.wrappers import SymmetricEnv
+            if state_est:
+                # with state estimator
+                env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+            else:
+                # without state estimator
+                env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+                                                18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+                                                -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+                                                mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+
+        return env_fn
+
 
     spec = gym.envs.registry.spec(path)
     _kwargs = spec._kwargs.copy()
@@ -256,10 +274,11 @@ if __name__ == "__main__":
     # For tensorboard logger
     parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")       # Where to log diagnostics to
     parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
-    parser.add_argument("--previous", type=str, default=None)                  # address of redis server (for cluster setups)
+    parser.add_argument("--previous", type=str, default=None)                  # path to directory of previous policies for resuming training
     parser.add_argument("--seed", default=0, type=int)                                 # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--policy_name", type=str, default="PPO")
-    parser.add_argument("--env", type=str, default="Cassie-mimic-v0")
+    parser.add_argument("--env_name", "-e",   default="Cassie-mimic-v0")
+    # parser.add_argument("--env", type=str, default="Cassie-mimic-v0")
     parser.add_argument("--state_est", type=bool, default=True)
     # mirror actions or not
     parser.add_argument("--mirror", default=False, action='store_true')

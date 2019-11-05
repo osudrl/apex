@@ -201,44 +201,49 @@ class MirrorPPO(PPO):
 def run_experiment(args):
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
 
-    from apex import create_logger
+    from apex import env_factory, create_logger
 
-    # Environment
-    if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
-        # NOTE: importing cassie for some reason breaks openai gym, BUG ?
-        from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
-        from cassie.no_delta_env import CassieEnv_nodelta
-        from cassie.speed_env import CassieEnv_speed
-        from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
-        from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
-        # set up cassie environment
-        # import gym_cassie
-        # env_fn = gym_factory(args.env_name)
-        #env_fn = make_env_fn(state_est=args.state_est)
-        #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
-        print(env_fn().clock_inds)
-        obs_dim = env_fn().observation_space.shape[0]
-        action_dim = env_fn().action_space.shape[0]
+    # # Environment
+    # if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
+    #     # NOTE: importing cassie for some reason breaks openai gym, BUG ?
+    #     from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
+    #     from cassie.no_delta_env import CassieEnv_nodelta
+    #     from cassie.speed_env import CassieEnv_speed
+    #     from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+    #     from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+    #     # set up cassie environment
+    #     # import gym_cassie
+    #     # env_fn = gym_factory(args.env_name)
+    #     #env_fn = make_env_fn(state_est=args.state_est)
+    #     #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+    #     env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+    #     print(env_fn().clock_inds)
+    #     obs_dim = env_fn().observation_space.shape[0]
+    #     action_dim = env_fn().action_space.shape[0]
 
-        # Mirror Loss
-        if args.mirror:
-            if args.state_est:
-                # with state estimator
-                env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-            else:
-                # without state estimator
-                env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-                                                18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-                                                -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-                                                mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-    else:
-        import gym
-        env_fn = gym_factory(args.env_name)
-        #max_episode_steps = env_fn()._max_episode_steps
-        obs_dim = env_fn().observation_space.shape[0]
-        action_dim = env_fn().action_space.shape[0]
-        max_episode_steps = 1000
+    #     # Mirror Loss
+    #     if args.mirror:
+    #         if args.state_est:
+    #             # with state estimator
+    #             env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+    #         else:
+    #             # without state estimator
+    #             env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+    #                                             18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+    #                                             -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+    #                                             mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+    # else:
+    #     import gym
+    #     env_fn = gym_factory(args.env_name)
+    #     #max_episode_steps = env_fn()._max_episode_steps
+    #     obs_dim = env_fn().observation_space.shape[0]
+    #     action_dim = env_fn().action_space.shape[0]
+    #     max_episode_steps = 1000
+
+    # wrapper function for creating parallelized envs
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
+    obs_dim = env_fn().observation_space.shape[0]
+    action_dim = env_fn().action_space.shape[0]
 
     # Set seeds
     torch.manual_seed(args.seed)
@@ -249,7 +254,8 @@ def run_experiment(args):
         print("loaded model from {}".format(args.previous))
     else:
         policy = GaussianMLP_Actor(
-            obs_dim, action_dim, 
+            obs_dim, action_dim,
+            env_name=args.env_name,
             nonlinearity=torch.nn.functional.relu, 
             bounded=True, 
             init_std=np.exp(-2), 
@@ -258,6 +264,7 @@ def run_experiment(args):
         )
         policy_copy = GaussianMLP_Actor(
             obs_dim, action_dim, 
+            env_name=args.env_name,
             nonlinearity=torch.nn.functional.relu, 
             bounded=True, 
             init_std=np.exp(-2), 
@@ -266,6 +273,7 @@ def run_experiment(args):
         )
         critic = GaussianMLP_Critic(
             obs_dim, 
+            env_name=args.env_name,
             nonlinearity=torch.nn.functional.relu, 
             bounded=True, 
             init_std=np.exp(-2), 
@@ -295,7 +303,7 @@ def run_experiment(args):
 
 
     print("Synchronous Distributed Proximal Policy Optimization:")
-    print("\tenv:            {}".format(args.env))
+    print("\tenv:            {}".format(args.env_name))
     print("\tseed:           {}".format(args.seed))
     print("\tmirror:         {}".format(args.mirror))
     print("\tnum procs:      {}".format(args.num_procs))
