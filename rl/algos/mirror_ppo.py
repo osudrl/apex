@@ -7,7 +7,8 @@ from torch.distributions import kl_divergence
 
 import numpy as np
 from rl.algos import PPO
-from rl.policies import GaussianMLP
+from rl.policies.actor import GaussianMLP_Actor
+from rl.policies.critic import GaussianMLP_Critic
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
 import functools
@@ -19,6 +20,7 @@ import functools
 
 class MirrorPPO(PPO):
     def update(self, policy, old_policy, optimizer,
+               critic, critic_optimizer,
                observations, actions, returns, advantages,
                env_fn
     ):
@@ -94,15 +96,21 @@ class MirrorPPO(PPO):
 
                     entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
 
-                    # TODO: add ability to optimize critic and actor seperately, with different learning rates
-
                     optimizer.zero_grad()
-                    (actor_loss + critic_loss + mirror_loss + entropy_penalty).backward()
+                    (actor_loss + mirror_loss + entropy_penalty).backward()
 
                     # Clip the gradient norm to prevent "unlucky" minibatches from 
                     # causing pathalogical updates
                     torch.nn.utils.clip_grad_norm_(policy.parameters(), self.grad_clip)
                     optimizer.step()
+
+                    critic_optimizer.zero_grad()
+                    critic_loss.backward()
+
+                    # Clip the gradient norm to prevent "unlucky" minibatches from 
+                    # causing pathalogical updates
+                    torch.nn.utils.clip_grad_norm_(critic.parameters(), self.grad_clip)
+                    critic_optimizer.step()
 
                     losses.append([actor_loss.item(),
                                    pdf.entropy().mean().item(),
@@ -120,13 +128,17 @@ class MirrorPPO(PPO):
 
     def train(self,
               env_fn,
-              policy, 
+              policy,
+              policy_copy,
+              critic,
               n_itr,
               logger=None):
 
-        old_policy = deepcopy(policy)
+        # old_policy = deepcopy(policy)
+        old_policy = policy_copy
 
         optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
+        critic_optimizer = optim.Adam(critic.parameters(), lr=self.lr, eps=self.eps)
 
         start_time = time.time()
 
@@ -134,7 +146,7 @@ class MirrorPPO(PPO):
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
-            batch = self.sample_parallel(env_fn, policy, self.num_steps, self.max_traj_len)
+            batch = self.sample_parallel(env_fn, policy, critic, self.num_steps, self.max_traj_len)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
             print("sample time elapsed: {:.2f} s".format(time.time() - sample_start))
@@ -153,18 +165,18 @@ class MirrorPPO(PPO):
 
             optimizer_start = time.time()
 
-            self.update(policy, old_policy, optimizer, observations, actions, returns, advantages, env_fn) 
+            self.update(policy, old_policy, optimizer, critic, critic_optimizer, observations, actions, returns, advantages, env_fn) 
            
             print("optimizer time elapsed: {:.2f} s".format(time.time() - optimizer_start))        
 
 
             if logger is not None:
                 evaluate_start = time.time()
-                test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, self.max_traj_len, deterministic=True)
+                test = self.sample_parallel(env_fn, policy, critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
-                _, pdf     = policy.evaluate(observations)
-                _, old_pdf = old_policy.evaluate(observations)
+                pdf     = policy.evaluate(observations)
+                old_pdf = old_policy.evaluate(observations)
 
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
@@ -189,44 +201,49 @@ class MirrorPPO(PPO):
 def run_experiment(args):
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
 
-    from apex import create_logger
+    from apex import env_factory, create_logger
 
-    # Environment
-    if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
-        # NOTE: importing cassie for some reason breaks openai gym, BUG ?
-        from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
-        from cassie.no_delta_env import CassieEnv_nodelta
-        from cassie.speed_env import CassieEnv_speed
-        from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
-        from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
-        # set up cassie environment
-        # import gym_cassie
-        # env_fn = gym_factory(args.env_name)
-        #env_fn = make_env_fn(state_est=args.state_est)
-        #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est, speed=args.speed)
-        print(env_fn().clock_inds)
-        obs_dim = env_fn().observation_space.shape[0]
-        action_dim = env_fn().action_space.shape[0]
+    # # Environment
+    # if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
+    #     # NOTE: importing cassie for some reason breaks openai gym, BUG ?
+    #     from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
+    #     from cassie.no_delta_env import CassieEnv_nodelta
+    #     from cassie.speed_env import CassieEnv_speed
+    #     from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
+    #     from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+    #     # set up cassie environment
+    #     # import gym_cassie
+    #     # env_fn = gym_factory(args.env_name)
+    #     #env_fn = make_env_fn(state_est=args.state_est)
+    #     #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
+    #     env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+    #     print(env_fn().clock_inds)
+    #     obs_dim = env_fn().observation_space.shape[0]
+    #     action_dim = env_fn().action_space.shape[0]
 
-        # Mirror Loss
-        if args.mirror:
-            if args.state_est:
-                # with state estimator
-                env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
-            else:
-                # without state estimator
-                env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-                                                18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-                                                -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-                                                mirrored_act = [0,1,2,3,4,5,6,7,8,9])
-    else:
-        import gym
-        env_fn = gym_factory(args.env_name)
-        #max_episode_steps = env_fn()._max_episode_steps
-        obs_dim = env_fn().observation_space.shape[0]
-        action_dim = env_fn().action_space.shape[0]
-        max_episode_steps = 1000
+    #     # Mirror Loss
+    #     if args.mirror:
+    #         if args.state_est:
+    #             # with state estimator
+    #             env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+    #         else:
+    #             # without state estimator
+    #             env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+    #                                             18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+    #                                             -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+    #                                             mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+    # else:
+    #     import gym
+    #     env_fn = gym_factory(args.env_name)
+    #     #max_episode_steps = env_fn()._max_episode_steps
+    #     obs_dim = env_fn().observation_space.shape[0]
+    #     action_dim = env_fn().action_space.shape[0]
+    #     max_episode_steps = 1000
+
+    # wrapper function for creating parallelized envs
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
+    obs_dim = env_fn().observation_space.shape[0]
+    action_dim = env_fn().action_space.shape[0]
 
     # Set seeds
     torch.manual_seed(args.seed)
@@ -236,9 +253,28 @@ def run_experiment(args):
         policy = torch.load(args.previous)
         print("loaded model from {}".format(args.previous))
     else:
-        policy = GaussianMLP(
+        policy = GaussianMLP_Actor(
+            obs_dim, action_dim,
+            env_name=args.env_name,
+            nonlinearity=torch.nn.functional.relu, 
+            bounded=True, 
+            init_std=np.exp(-2), 
+            learn_std=False,
+            normc_init=False
+        )
+        policy_copy = GaussianMLP_Actor(
             obs_dim, action_dim, 
-            nonlinearity="relu", 
+            env_name=args.env_name,
+            nonlinearity=torch.nn.functional.relu, 
+            bounded=True, 
+            init_std=np.exp(-2), 
+            learn_std=False,
+            normc_init=False
+        )
+        critic = GaussianMLP_Critic(
+            obs_dim, 
+            env_name=args.env_name,
+            nonlinearity=torch.nn.functional.relu, 
             bounded=True, 
             init_std=np.exp(-2), 
             learn_std=False,
@@ -246,7 +282,14 @@ def run_experiment(args):
         )
 
         policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+        critic.obs_mean = policy.obs_mean
+        policy_copy.obs_mean = policy.obs_mean
+        critic.obs_std = policy.obs_std
+        policy_copy.obs_std = policy.obs_std
+
     policy.train(0)
+    policy_copy.train(0)
+    critic.train(0)
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
 
@@ -260,7 +303,7 @@ def run_experiment(args):
 
 
     print("Synchronous Distributed Proximal Policy Optimization:")
-    print("\tenv:            {}".format(args.env))
+    print("\tenv:            {}".format(args.env_name))
     print("\tseed:           {}".format(args.seed))
     print("\tmirror:         {}".format(args.mirror))
     print("\tnum procs:      {}".format(args.num_procs))
@@ -278,4 +321,4 @@ def run_experiment(args):
     print("\tmax traj len:   {}".format(args.max_traj_len))
     print()
 
-    algo.train(env_fn, policy, args.n_itr, logger=logger)
+    algo.train(env_fn, policy, policy_copy, critic, args.n_itr, logger=logger)

@@ -45,6 +45,48 @@ class Critic(nn.Module):
       self.welford_state_n += 1
     return (state - self.welford_state_mean) / torch.sqrt(self.welford_state_mean_diff / self.welford_state_n)
 
+class GaussianMLP_Critic(Critic):
+  def __init__(self, state_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=torch.tanh, init_std=1, learn_std=True, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
+    super(GaussianMLP_Critic, self).__init__()
+
+    self.critic_layers = nn.ModuleList()
+    self.critic_layers += [nn.Linear(state_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.critic_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.network_out = nn.Linear(hidden_size, 1)
+
+    self.env_name = env_name
+    self.nonlinearity = nonlinearity
+    
+    self.obs_std = obs_std
+    self.obs_mean = obs_mean
+
+    # weight initialization scheme used in PPO paper experiments
+    self.normc_init = normc_init
+    
+    self.init_parameters()
+    self.train()
+
+  def init_parameters(self):
+    if self.normc_init:
+        print("Doing norm column initialization.")
+        self.apply(normc_fn)
+
+  def forward(self, inputs):
+    if self.training == False:
+        inputs = (inputs - self.obs_mean) / self.obs_std
+
+    x = inputs
+    for l in self.critic_layers:
+        x = self.nonlinearity(l(x))
+    value = self.network_out(x)
+
+    return value
+
+  def act(self, inputs):
+    value = self(inputs)
+    return value
+
 
 class FF_Critic(Critic):
   def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET'):
@@ -151,3 +193,14 @@ class LSTM_Critic(Critic):
       print("Invalid input dimensions.")
       exit(1)
     return x
+
+## Initialization scheme for gaussian mlp (from ppo paper)
+# NOTE: the fact that this has the same name as a parameter caused a NASTY bug
+# apparently "if <function_name>" evaluates to True in python...
+def normc_fn(m):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        m.weight.data.normal_(0, 1)
+        m.weight.data *= 1 / torch.sqrt(m.weight.data.pow(2).sum(1, keepdim=True))
+        if m.bias is not None:
+            m.bias.data.fill_(0)
