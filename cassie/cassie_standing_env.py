@@ -20,7 +20,7 @@ class CassieStandingEnv(gym.Env):
     def __init__(self, simrate=60):
 
         # Using CassieSim
-        self.sim = CassieSim('/home/drl/srikar/apex/cassie/cassiemujoco/cassie.xml')
+        self.sim = CassieSim('./cassie/cassiemujoco/cassie.xml')
         self.vis = None
 
         # Observation and Action Spaces
@@ -28,7 +28,7 @@ class CassieStandingEnv(gym.Env):
         self.action_space      = spaces.Box(low=-np.inf, high=np.inf, shape=(10,))
 
         # Initial Standing States
-        self.trajectory = CassieTrajectory('/home/drl/srikar/apex/cassie/trajectory/stepdata.bin')
+        self.trajectory = CassieTrajectory('./cassie/trajectory/stepdata.bin')
         
         self.init_qpos = np.copy(self.sim.qpos())
         self.init_qvel = np.copy(self.sim.qvel())
@@ -158,7 +158,7 @@ class CassieStandingEnv(gym.Env):
         orient_diff = np.exp(-orient_diff)
 
         # Loss and Reward
-        reward = 0.33 * height_diff + 0.33 * vel_diff + 0.34 * orient_diff
+        reward = 0.05 * height_diff + 0.9 * vel_diff + 0.05 * orient_diff
 
         return reward
 

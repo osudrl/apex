@@ -62,7 +62,7 @@ parser.add_argument("--seed", type=int, default=1,help="RNG seed")
 # For tensorboard logger
 parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")       # Where to log diagnostics to
 
-parser.add_argument("--name", type=str, default="model")
+parser.add_argument("--name", type=str, default="cassie_stand")
 parser.add_argument("--env", type=str, default="Cassie-mimic-walking-v0")
 parser.add_argument("--state_est", type=bool, default=True)
 # mirror actions or not
@@ -150,6 +150,8 @@ if __name__ == "__main__":
         learn_std=False,
         normc_init=False
     )
+
+    # policy = torch.load("/home/drl/srikar/apex/trained_models/cassie_standing_init_states.pt")
 
     policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
     policy.train(0)
