@@ -82,12 +82,12 @@ parser.add_argument("--max_grad_norm", type=float, default=0.5, help="Value to c
 parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
 
 args = parser.parse_args()
-args.mirror = False
-args.num_steps = 5000 // args.num_procs
+args.mirror = True
+args.num_steps = 12000 // args.num_procs
 args.minibatch_size = 128
 args.lr = 1e-4
 args.epochs = 3
-args.num_procs = 2
+args.num_procs = 60
 args.max_traj_len = 300
 args.seed = int(time.time())
 args.max_grad_norm = 0.05
@@ -152,19 +152,19 @@ if __name__ == "__main__":
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
-    # policy = GaussianMLP(
-    #     obs_dim, action_dim, 
-    #     nonlinearity="relu", 
-    #     bounded=True, 
-    #     init_std=np.exp(-2), 
-    #     learn_std=False,
-    #     normc_init=False
-    # )
-    # policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+    policy = GaussianMLP(
+        obs_dim, action_dim, 
+        nonlinearity="relu", 
+        bounded=False, 
+        init_std=np.exp(-2), 
+        learn_std=False,
+        normc_init=False
+    )
+    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
 
     # Load previous policy
-    policy = torch.load("./trained_models/sidestep/sidestep_StateEst_speed-05-2_freq1-2.pt")
-    policy.bounded = False
+    #policy = torch.load("./trained_models/sidestep/sidestep_StateEst_speed-05-2_freq1-2.pt")
+    #policy.bounded = False
     
     policy.train(0)
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))

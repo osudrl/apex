@@ -117,6 +117,8 @@ venv.bak/
 # ray files
 /ray_tmp
 ray_timeline.json
+*.e*
+*.o*
 
 # trained models
 /trained_models/*.pt
