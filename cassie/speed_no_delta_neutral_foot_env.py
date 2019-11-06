@@ -154,7 +154,7 @@ class CassieEnv_speed_no_delta_neutral_foot:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = (random.randint(0, 10)) / 10
+        self.speed = (random.randint(-5, 10)) / 10
         self.phase_add = 1#random.rand() * 2
 
         return self.get_full_state()
