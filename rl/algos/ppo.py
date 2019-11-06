@@ -5,6 +5,7 @@ import torch
 import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.distributions import kl_divergence
+from ..utils.logging import Logger
 from torch.utils.tensorboard import SummaryWriter
 
 import time
@@ -133,14 +134,9 @@ class PPO:
         self.highest_reward = -1
 
         if args['redis_address'] is not None:
-            print("redist address is not none")
             ray.init(redis_address=args['redis_address'])
         else:
-            print("redis address is none")
             ray.init()
-        print(ray.cluster_resources())
-        # print(ray.available_resources())
-        print("\n\n\n")
 
     @staticmethod
     def add_arguments(parser):
@@ -243,8 +239,6 @@ class PPO:
         if self.n_proc > 1:
             # result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
             result_ids = [worker.remote(*args) for _ in range(self.n_proc)]
-            print(ray.available_resources())
-            print("\n\n\n")
             result = ray.get(result_ids)
             # result = []
             # for i in range(self.n_proc):
@@ -255,7 +249,6 @@ class PPO:
         else:
             result = [worker._function(*args)]
         
-        print("len ray result: ", len(result))
         # O(n)
         def merge(buffers):
             merged = PPOBuffer(self.gamma, self.lam)
@@ -285,6 +278,10 @@ class PPO:
 
         optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
 
+        opt_time = np.zeros(n_itr)
+        samp_time = np.zeros(n_itr)
+        eval_time = np.zeros(n_itr)
+
         start_time = time.time()
 
         for itr in range(n_itr):
@@ -294,7 +291,8 @@ class PPO:
             batch = self.sample_parallel(env_fn, policy, self.num_steps, self.max_traj_len)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
-            print("sample time elapsed: {:.2f} s".format(time.time() - sample_start))
+            samp_time[itr] = time.time() - sample_start
+            print("sample time elapsed: {:.2f} s".format(samp_time[itr]))
 
             observations, actions, returns, values = map(torch.Tensor, batch.get())
 
@@ -318,7 +316,6 @@ class PPO:
                     minibatch_size,
                     drop_last=True
                 )
-                print("sampler len: ", len(sampler))
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
 
@@ -370,13 +367,14 @@ class PPO:
                     print("Max kl reached, stopping optimization early.")
                     break
 
-            print("optimizer time elapsed: {:.2f} s".format(time.time() - optimizer_start))        
-
+            opt_time[itr] = time.time() - optimizer_start
+            print("optimizer time elapsed: {:.2f} s".format(opt_time[itr]))        
 
             if logger is not None:
                 evaluate_start = time.time()
                 test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, self.max_traj_len, deterministic=True)
-                print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
+                eval_time[itr] = time.time() - evaluate_start
+                print("evaluate time elapsed: {:.2f} s".format(eval_time[itr]))
 
                 avg_eval_reward = np.mean(test.ep_returns)
 
@@ -386,12 +384,29 @@ class PPO:
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
-                logger.add_scalar("Test/Return", avg_eval_reward, itr)
-                logger.add_scalar("Train/Return", np.mean(batch.ep_returns), itr)
-                logger.add_scalar("Train/Mean Eplen", np.mean(batch.ep_lens), itr)
-                logger.add_scalar("Train/Mean KL Div", kl, itr)
-                logger.add_scalar("Train/Mean Entropy", entropy, itr)
-                logger.add_scalar("Misc/Timesteps", self.total_steps, itr)
+                if type(logger) is Logger:
+                    logger.record('Return (test)', np.mean(test.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='test')
+                    logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
+                    logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
+
+                    logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
+                    logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
+                    logger.dump()
+                elif type(logger) is SummaryWriter:
+                    logger.add_scalar("Data/Return (test)", avg_eval_reward, itr)
+                    logger.add_scalar("Data/Return (batch)", np.mean(batch.ep_returns), itr)
+                    logger.add_scalar("Data/Mean Eplen", np.mean(batch.ep_lens), itr)
+
+                    logger.add_scalar("Misc/Mean KL Div", kl, itr)
+                    logger.add_scalar("Misc/Mean Entropy", entropy, itr)
+                    logger.add_scalar("Misc/Critic Loss", critic_loss, itr)
+                    logger.add_scalar("Misc/Actor Loss", actor_loss, itr)
+
+                    logger.add_histogram("Misc/Sample Times", samp_time[0:itr+1], itr)
+                    logger.add_histogram("Misc/Optimize Times", opt_time[0:itr+1], itr)
+                    logger.add_histogram("Misc/Evaluation Times", eval_time[0:itr+1], itr)
+                else:
+                    print("No logger")
 
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:

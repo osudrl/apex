@@ -35,7 +35,6 @@ class MirrorPPO(PPO):
                     minibatch_size,
                     drop_last=True
                 )
-                print("sampler len: ", len(sampler))
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
 
@@ -116,6 +115,7 @@ class MirrorPPO(PPO):
                 if kl_divergence(pdf, old_pdf).mean() > 0.02:
                     print("Max kl reached, stopping optimization early.")
                     break
+        return np.mean(losses, axis=0)
 
     def train(self,
               env_fn,
@@ -127,6 +127,10 @@ class MirrorPPO(PPO):
 
         optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
 
+        opt_time = np.zeros(n_itr)
+        samp_time = np.zeros(n_itr)
+        eval_time = np.zeros(n_itr)
+
         start_time = time.time()
 
         for itr in range(n_itr):
@@ -136,7 +140,8 @@ class MirrorPPO(PPO):
             batch = self.sample_parallel(env_fn, policy, self.num_steps, self.max_traj_len)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
-            print("sample time elapsed: {:.2f} s".format(time.time() - sample_start))
+            samp_time[itr] = time.time() - sample_start
+            print("sample time elapsed: {:.2f} s".format(samp_time[itr]))
 
             observations, actions, returns, values = map(torch.Tensor, batch.get())
 
@@ -152,16 +157,19 @@ class MirrorPPO(PPO):
 
             optimizer_start = time.time()
 
-            self.update(policy, old_policy, optimizer, observations, actions, returns, advantages, env_fn) 
+            losses = self.update(policy, old_policy, optimizer, observations, actions, returns, advantages, env_fn) 
            
-            print("optimizer time elapsed: {:.2f} s".format(time.time() - optimizer_start))        
+            opt_time[itr] = time.time() - optimizer_start
+            print("optimizer time elapsed: {:.2f} s".format(opt_time[itr]))        
 
 
             if logger is not None:
                 evaluate_start = time.time()
                 test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, self.max_traj_len, deterministic=True)
-                print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
+                eval_time[itr] = time.time() - evaluate_start
+                print("evaluate time elapsed: {:.2f} s".format(eval_time[itr]))
 
+                avg_eval_reward = np.mean(test.ep_returns)
                 _, pdf     = policy.evaluate(observations)
                 _, old_pdf = old_policy.evaluate(observations)
 
@@ -175,21 +183,27 @@ class MirrorPPO(PPO):
 
                     logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
                     logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
-                    logger.record('Timesteps', self.total_steps, itr, 'Timesteps', x_var_name='Iterations', split_name=None)
                     logger.dump()
                 elif type(logger) is SummaryWriter:
-                    logger.add_scalar("Data/Return (test)", np.mean(test.ep_returns))
-                    logger.add_scalar("Data/Return (batch)", np.mean(batch.ep_returns))
-                    logger.add_scalar("Data/Mean Eplen", np.mean(batch.ep_lens))
+                    logger.add_scalar("Data/Return (test)", avg_eval_reward, itr)
+                    logger.add_scalar("Data/Return (batch)", np.mean(batch.ep_returns), itr)
+                    logger.add_scalar("Data/Mean Eplen", np.mean(batch.ep_lens), itr)
 
-                    logger.add_scalar("Misc/Mean KL Div", np.mean(test.ep_returns))
-                    logger.add_scalar("Misc/Mean Entropy", np.mean(test.ep_returns))
+                    logger.add_scalar("Misc/Mean KL Div", kl, itr)
+                    logger.add_scalar("Misc/Mean Entropy", entropy, itr)
+                    logger.add_scalar("Misc/Critic Loss", losses[2], itr)
+                    logger.add_scalar("Misc/Actor Loss", losses[0], itr)
+                    logger.add_scalar("Misc/Mirror Loss", losses[4], itr)
+
+                    logger.add_histogram("Misc/Sample Times", samp_time[0:itr+1], itr)
+                    logger.add_histogram("Misc/Optimize Times", opt_time[0:itr+1], itr)
+                    logger.add_histogram("Misc/Evaluation Times", eval_time[0:itr+1], itr)
                 else:
                     print("No Logger")
 
             # TODO: add option for how often to save model
-            if np.mean(test.ep_returns) > self.max_return:
-                self.max_return = np.mean(test.ep_returns)
+            if avg_eval_reward > self.highest_reward:
+                self.highest_reward = avg_eval_reward
                 self.save(policy)
 
             print("Total time: {:.2f} s".format(time.time() - start_time))

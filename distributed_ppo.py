@@ -83,16 +83,28 @@ parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode h
 
 args = parser.parse_args()
 args.mirror = True
+args.state_est = True
 args.num_steps = 12000 // args.num_procs
+args.input_norm_steps = 100
 args.minibatch_size = 128
 args.lr = 1e-4
-args.epochs = 3
-args.num_procs = 60
+args.epochs = 5
+args.num_procs =  112
 args.max_traj_len = 300
 args.seed = int(time.time())
 args.max_grad_norm = 0.05
 args.use_gae = False
 args.name = "apex_test"
+args.logdir = "./logs/sidestep/"
+# Check if policy name already exists. If it does, increment filename
+index = ''
+while os.path.isfile(os.path.join("./trained_models/", args.name + index + ".pt")):
+    if index:
+        index = '_(' + str(int(index[2:-1]) + 1) + ')'
+    else:
+        index = '_(1)'
+args.name += index
+
 
 if __name__ == "__main__":
     torch.set_num_threads(1) # see: https://github.com/pytorch/pytorch/issues/13757
@@ -104,11 +116,13 @@ if __name__ == "__main__":
     # Tensorboard logging
     now = datetime.now()
     # NOTE: separate by trial name first and time of run after
-    log_path = args.logdir + now.strftime("%Y%m%d-%H%M%S")+"/"
+    # log_path = args.logdir + now.strftime("%Y%m%d-%H%M%S")+"/"
+    log_path = args.logdir + args.name + "/"
     logger = SummaryWriter(log_path, flush_secs=0.1)
     print(Fore.GREEN + Style.BRIGHT + "Logging data using TensorBoard to {}".format(log_path + Style.RESET_ALL))
 
     # Environment
+    print("Policy name: ", args.name)
     if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
         # NOTE: importing cassie for some reason breaks openai gym, BUG ?
         from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
@@ -139,7 +153,7 @@ if __name__ == "__main__":
                             8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36,
                             37, 38, 39, -26, -27, 28, 29, 30, 31, 32]
             
-            mirror_obs += [i for i in range(obs_dim - env_fn().ext_size, obs_dim)]    
+            mirror_obs += [i for i in range(obs_dim - env_fn().ext_size, obs_dim)]
             env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=mirror_obs, mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
     else:
         import gym
