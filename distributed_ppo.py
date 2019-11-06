@@ -84,17 +84,17 @@ parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode h
 args = parser.parse_args()
 args.mirror = True
 args.state_est = True
+args.num_procs = 112
 args.num_steps = 12000 // args.num_procs
-args.input_norm_steps = 100
-args.minibatch_size = 128
+args.input_norm_steps = 10000
+args.minibatch_size = 2048
 args.lr = 1e-4
 args.epochs = 5
-args.num_procs =  112
 args.max_traj_len = 300
 args.seed = int(time.time())
 args.max_grad_norm = 0.05
 args.use_gae = False
-args.name = "apex_test"
+args.name = "fwrd_walk_StateEst_trajmatch"
 args.logdir = "./logs/sidestep/"
 # Check if policy name already exists. If it does, increment filename
 index = ''
@@ -135,8 +135,8 @@ if __name__ == "__main__":
         from cassie.speed_sidestep_env import CassieEnv_speed_sidestep
 
         # set up cassie environment
-        # env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
-        env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
+        #env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", clock_based=True, state_est=args.state_est)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
 

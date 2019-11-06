@@ -144,12 +144,11 @@ class MirrorPPO(PPO):
             print("sample time elapsed: {:.2f} s".format(samp_time[itr]))
 
             observations, actions, returns, values = map(torch.Tensor, batch.get())
-
             advantages = returns - values
             advantages = (advantages - advantages.mean()) / (advantages.std() + self.eps)
 
             minibatch_size = self.minibatch_size or advantages.numel()
-
+            print("minibatch size: ", minibatch_size)
             print("timesteps in batch: %i" % advantages.numel())
             self.total_steps += advantages.numel()
 
@@ -195,9 +194,9 @@ class MirrorPPO(PPO):
                     logger.add_scalar("Misc/Actor Loss", losses[0], itr)
                     logger.add_scalar("Misc/Mirror Loss", losses[4], itr)
 
-                    logger.add_histogram("Misc/Sample Times", samp_time[0:itr+1], itr)
-                    logger.add_histogram("Misc/Optimize Times", opt_time[0:itr+1], itr)
-                    logger.add_histogram("Misc/Evaluation Times", eval_time[0:itr+1], itr)
+                    logger.add_scalar("Misc/Sample Times", samp_time[itr], itr)
+                    logger.add_scalar("Misc/Optimize Times", opt_time[itr], itr)
+                    logger.add_scalar("Misc/Evaluation Times", eval_time[itr], itr)
                 else:
                     print("No Logger")
 
