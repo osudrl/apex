@@ -141,8 +141,6 @@ class ARS:
 
     r_std = np.std(r_pos + r_neg)
 
-    #print("{:5.1f}".format(r_std), end=" | ")
-
     # if use top performing directions
     if self.top_n < self.num_deltas:
       sorted_indices = np.argsort(np.maximum(r_pos, r_neg))

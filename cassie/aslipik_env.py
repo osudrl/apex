@@ -16,13 +16,14 @@ class CassieIKTrajectory:
             trajectory = pickle.load(f)
 
         self.qpos = np.copy(trajectory["qpos"])
+        self.length = self.qpos.shape[0]
         self.qvel = np.copy(trajectory["qvel"])
-    
-    def __len__(self):
-        return len(self.qpos)
+        self.rfoot = np.copy(trajectory["rfoot"])
+        self.lfoot = np.copy(trajectory["lfoot"])
 
+# simrate used to be 60
 class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, filename="30hz_aslip_trajs.pkl"):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, speed=0.0):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -42,7 +43,8 @@ class CassieIKEnv:
         self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", filename)
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajs/walkCycle_{}.pkl".format(speed))
+        # print("loaded trajectory file: " + "aslipTrajs/walkCycle_{}.pkl".format(speed))
 
         self.trajectory = CassieIKTrajectory(traj_path)
 
@@ -63,15 +65,15 @@ class CassieIKEnv:
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(len(self.trajectory) / self.simrate) - 1
+        self.phaselen = floor(self.trajectory.length / self.simrate) - 1
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
         # params for changing the trajectory
-        self.speed = 2 # how fast (m/s) do we go
-        self.gait = [1,0,0,0]   # one-hot vector of gaits:
+        # self.speed = 2 # how fast (m/s) do we go
+        # self.gait = [1,0,0,0]   # one-hot vector of gaits:
                                 # [1, 0, 0, 0] -> walking/running (left single stance, right single stance)
                                 # [0, 1, 0, 0] -> hopping (double stance, flight phase)
                                 # [0, 0, 1, 0] -> skipping (double stance, right single stance, flight phase, right single stance)
@@ -81,10 +83,13 @@ class CassieIKEnv:
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.prev_action = ref_pos[self.pos_idx]
-        self.phase_add = 1 + 1 + len(self.gait)
+        self.phase_add = 1
 
         # Output of Cassie's state estimation code
         self.cassie_state = state_out_t()
+
+        # for print statements
+        self.debug = False
 
     def step_simulation(self, action):
 
@@ -149,13 +154,14 @@ class CassieIKEnv:
         reward = self.compute_reward()
 
         # TODO: make 0.3 a variable/more transparent
-        if reward < 0.3:
+        if reward < 0.5:
             done = True
 
         return self.get_full_state(), reward, done, {}
 
     def reset(self):
         self.phase = random.randint(0, self.phaselen)
+        # self.phase = 0
         self.time = 0
         self.counter = 0
 
@@ -163,7 +169,8 @@ class CassieIKEnv:
         # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel)
+        self.sim.set_qvel(qvel * 0.333)
+        # self.sim.set_qvel(np.zeros(qvel.shape))
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -210,17 +217,35 @@ class CassieIKEnv:
 
         #weight = [.1] * 10
 
+        footpos_error     = 0
         joint_error       = 0
         com_error         = 0
         orientation_error = 0
         spring_error      = 0
 
-        # each joint pos
+        # enforce distance between feet and com
+        ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase)
+
+        # left foot
+        lfoot = self.cassie_state.leftFoot.position[:]
+        rfoot = self.cassie_state.rightFoot.position[:]
+        for j in [0, 1, 2]:
+            footpos_error += np.linalg.norm(lfoot[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot[j] - ref_rfoot[j])
+        
+        if self.debug:
+            print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
+            print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
+            print(footpos_error)
+
+        # each joint pos, skipping feet
         for i, j in enumerate(self.pos_idx):
             target = ref_pos[j]
             actual = qpos[j]
 
-            joint_error += 30 * weight[i] * (target - actual) ** 2
+            if j == 20 or j == 34:
+                joint_error += 0
+            else:
+                joint_error += (target - actual) ** 2
 
         # center of mass: x, y, z
         for j in [0, 1, 2]:
@@ -243,26 +268,27 @@ class CassieIKEnv:
             target = ref_pos[i] # NOTE: in Xie et al spring target is 0
             actual = qpos[i]
 
-            spring_error += 1000 * (target - actual) ** 2      
+            spring_error += (target - actual) ** 2      
         
-        reward = 0.5 * np.exp(-joint_error) +       \
+        reward = 0.1 * np.exp(-footpos_error) +       \
+                 0.5 * np.exp(-joint_error) +       \
                  0.3 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
-                 0.1 * np.exp(-spring_error)
-
+                 0.0 * np.exp(-spring_error)
         #reward = np.exp(-joint_error)
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
-        # print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-        #             0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-        #             0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-        #             0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-        #             0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
-        #             reward
-        #         )
-        #     )  
-
+        if self.debug:
+            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\njoint:\t{2:.2f}, % = {3:.2f}\ncom:\t{4:.2f}, % = {5:.2f}\norient:\t{6:.2f}, % = {7:.2f}\nspring:\t{8:.2f}, % = {9:.2f}\n\n".format(
+            0.3 * np.exp(-footpos_error),     0.3 * np.exp(-footpos_error) / reward * 100,
+            0.3 * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
+            0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
+            0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
+            0.0 * np.exp(-spring_error),      0.0 * np.exp(-spring_error) / reward * 100,
+            reward
+            )
+            )
         return reward
 
     # get the corresponding state from the reference trajectory for the current phase
@@ -290,6 +316,19 @@ class CassieIKEnv:
         vel = np.copy(self.trajectory.qvel[phase * self.simrate])
 
         return pos, vel
+
+    # get the corresponding state from the reference trajectory for the current phase
+    def get_ref_footdist(self, phase=None):
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
+        lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
+
+        return rfoot, lfoot
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())

@@ -55,6 +55,11 @@ def gym_factory(path, **kwargs):
 
 # Arguments
 parser = argparse.ArgumentParser()
+
+# For ASLIP ENV
+parser.add_argument("--ref_speed", type=float, default=3.0, help="speed of reference trajectory")
+parser.add_argument("--previous", type=str, default=None, help="previous policy to learn from")
+
 #PPO.add_arguments(parser)
 parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
 parser.add_argument("--seed", type=int, default=1,help="RNG seed")
@@ -83,7 +88,7 @@ parser.add_argument("--epochs", type=int, default=3, help="Number of optimizatio
 parser.add_argument("--num_steps", type=int, default=5096, help="Number of sampled timesteps per gradient estimate")
 parser.add_argument("--use_gae", type=bool, default=True,help="Whether or not to calculate returns using Generalized Advantage Estimation")
 parser.add_argument("--num_procs", type=int, default=30, help="Number of threads to train on")
-parser.add_argument("--max_grad_norm", type=float, default=0.5, help="Value to clip gradients at.")
+parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
 parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
 args = parser.parse_args()
 args.num_steps = 3000 // args.num_procs
@@ -115,7 +120,7 @@ if __name__ == "__main__":
         # env_fn = gym_factory(args.env_name)
         #env_fn = make_env_fn(state_est=args.state_est)
         #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est, speed=args.ref_speed)
         print(env_fn().clock_inds)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
@@ -142,16 +147,23 @@ if __name__ == "__main__":
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
-    policy = GaussianMLP(
-        obs_dim, action_dim, 
-        nonlinearity="relu", 
-        bounded=True, 
-        init_std=np.exp(-2), 
-        learn_std=False,
-        normc_init=False
-    )
+    if args.previous is not None:
+        policy = torch.load(args.previous)
+        print("loaded model from {}".format(args.previous))
+    else:
+        policy = GaussianMLP(
+            obs_dim, action_dim, 
+            nonlinearity="relu", 
+            bounded=True, 
+            init_std=np.exp(-2), 
+            learn_std=False,
+            normc_init=False
+        )
 
-    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+        policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+
+
+
     policy.train(0)
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
