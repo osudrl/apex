@@ -125,7 +125,7 @@ class CassieSim:
 
     def get_body_ipos(self):
         nbody = self.nbody * 3
-        ptr = cassie_sim_body_mass(self.c)
+        ptr = cassie_sim_body_ipos(self.c)
         ret = np.zeros(nbody)
         for i in range(nbody):
           ret[i] = ptr[i]
