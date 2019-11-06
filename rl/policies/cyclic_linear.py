@@ -35,16 +35,12 @@ class CyclicLinear(FFPolicy):
         self.nPolicies = nPolicies
         self.phase_idx = phase_idx
         self.action_dim = action_dim
-        self.actorPolicies = []
-        self.criticPolicies = []
 
         # create actor network
-        for idx in range(nPolicies):
-            self.actorPolicies.append(nn.Linear(num_inputs-1, action_dim))
+        self.actorPolicies = nn.Linear( (num_inputs-1), action_dim*nPolicies)
 
         # create critic network
-        for idx in range(nPolicies):
-            self.criticPolicies.append(nn.Linear(num_inputs-1, 1))
+        self.criticPolicies = nn.Linear( (num_inputs-1), nPolicies)
 
         self.dist = DiagonalGaussian(action_dim, init_std, learn_std)
 
@@ -67,34 +63,67 @@ class CyclicLinear(FFPolicy):
 
     def forward(self, inputs):
         # print(inputs.shape)
+        n_inputs = inputs.size(0)
         x = torch.cat( (inputs[:,:self.phase_idx],inputs[:,(self.phase_idx+1):]),1 )
-        # print(inputs[:,:self.phase_idx])
-        # print(inputs[:,(self.phase_idx+1):])
-        # print(x.shape)
         phase = inputs[:,self.phase_idx]
+        a_all = self.actorPolicies(x)
+        v_all = self.criticPolicies(x)
+
+        N = torch.zeros(n_inputs, self.nPolicies*self.action_dim)
+        W = torch.cat( [torch.eye(self.action_dim)]*self.nPolicies )
+
+        Nc = torch.zeros(n_inputs, self.nPolicies)
+        Wc = torch.ones(self.nPolicies,1)
+
         pi_1 = torch.fmod(torch.floor(phase*self.nPolicies),self.nPolicies)
         pi_2 = torch.fmod(torch.ceil(phase*self.nPolicies),self.nPolicies)
-        w_1 = pi_2 - phase*self.nPolicies
-        w_2 = phase*self.nPolicies - pi_1
+        w_1 = pi_2 - torch.fmod(phase*self.nPolicies,self.nPolicies)
+        w_2 = torch.fmod(phase*self.nPolicies,self.nPolicies) - pi_1
+
+        for i in range(n_inputs):
+            N[i, (pi_1[i].int()*self.action_dim):((pi_1[i].int()+1)*self.action_dim) ] = w_1[i]
+            N[i, (pi_2[i].int()*self.action_dim):((pi_2[i].int()+1)*self.action_dim) ] = w_2[i]
+            Nc[i, pi_1[i].int()] = w_1[i]
+            Nc[i, pi_2[i].int()] = w_2[i]
 
         # print("Phase, pi1, pi2")
         # print(phase)
         # print(pi_1.shape)
         # print(pi_2.shape)
+        # print("w_1; w_2")
         # print(w_1.shape)
         # print(w_2.shape)
+        # print("a_all")
+        # print(a_all.shape)
+        # print(a_all)
+        # print("N")
+        # print(N.shape)
+        # print(N)
+        # print("W")
+        # print(W.shape)
+        # print(W)
 
-        value = torch.zeros(pi_1.size(0), 1)
-        mean = torch.zeros(pi_1.size(0), self.action_dim)
+        temp = torch.mul(N, a_all)
+        mean = torch.mm( temp, W)
 
-        if pi_1.size(0) > 1:
-            for idx in range(pi_1.size(0)):
-                value[idx,:] = w_1[idx]*self.criticPolicies[pi_1[idx].int()](x[idx,:]) + w_2[idx]*self.criticPolicies[pi_2[idx].int()](x[idx,:]) 
-                mean[idx, :] = w_1[idx]*self.actorPolicies[pi_1[idx].int()](x[idx,:])  + w_2[idx]*self.actorPolicies[pi_2[idx].int()](x[idx,:]) 
-        else:
-            value = w_1*self.criticPolicies[pi_1.int()](x) + w_2*self.criticPolicies[pi_2.int()](x) 
-            mean = w_1*self.actorPolicies[pi_1.int()](x)  + w_2*self.actorPolicies[pi_2.int()](x)
-        # if self.training == False:
-        #     inputs = (inputs - self.obs_mean) / self.obs_std
+
+
+        # print("v_all")
+        # print(v_all.shape)
+        # print(v_all)
+        # print('Nc')
+        # print(Nc.shape)
+        # print(Nc)
+        # print('Wc')
+        # print(Wc.shape)
+        # print(Wc)
+
+        temp2 = torch.mul(Nc, v_all)
+        # print('temp2')
+        # print(temp2.shape)
+        # print(temp2)
+        value = torch.mm(temp2, Wc)
+
+
 
         return value, mean

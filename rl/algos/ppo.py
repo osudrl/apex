@@ -337,8 +337,8 @@ class PPO:
                     optimizer.zero_grad()
                     (actor_loss + critic_loss + entropy_penalty).backward()
 
-                    for p in policy.parameters():
-                        print(p.grad)
+                    # for p in policy.parameters():
+                        # print(p.grad)
                         
 
                     # Clip the gradient norm to prevent "unlucky" minibatches from 
