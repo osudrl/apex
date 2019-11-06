@@ -260,7 +260,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=0, type=int)                                 # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--policy_name", type=str, default="PPO")
     parser.add_argument("--env", type=str, default="Cassie-mimic-v0")
-    parser.add_argument("--state_est", type=bool, default=True)
+    parser.add_argument("--state_est", type=bool, default=False)
     # mirror actions or not
     parser.add_argument("--mirror", default=False, action='store_true')
     # visdom server port

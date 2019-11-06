@@ -8,6 +8,7 @@ from torch.distributions import kl_divergence
 import numpy as np
 from rl.algos import PPO
 from rl.policies import GaussianMLP
+from rl.policies import CyclicLinear
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
 import functools
@@ -204,8 +205,8 @@ def run_experiment(args):
         # env_fn = gym_factory(args.env_name)
         #env_fn = make_env_fn(state_est=args.state_est)
         #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est, speed=args.speed)
-        print(env_fn().clock_inds)
+        env_fn = functools.partial(CassieEnv,"walking", clock_based=True, state_est=args.state_est)
+        # print(env_fn().clock_inds)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
 
@@ -236,10 +237,16 @@ def run_experiment(args):
         policy = torch.load(args.previous)
         print("loaded model from {}".format(args.previous))
     else:
-        policy = GaussianMLP(
-            obs_dim, action_dim, 
-            nonlinearity="relu", 
-            bounded=True, 
+        # policy = GaussianMLP(
+        #     obs_dim, action_dim, 
+        #     nonlinearity="relu", 
+        #     bounded=True, 
+        #     init_std=np.exp(-2), 
+        #     learn_std=False,
+        #     normc_init=False
+        # )
+        policy = CyclicLinear(
+            obs_dim, action_dim, env_fn().phase_idx,
             init_std=np.exp(-2), 
             learn_std=False,
             normc_init=False

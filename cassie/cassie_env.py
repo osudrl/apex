@@ -31,7 +31,8 @@ class CassieEnv:
         self.state_est = state_est
 
         if clock_based:
-            self.observation_space = np.zeros(42)
+            self.observation_space = np.zeros(41)
+            self.phase_idx = 40
             if self.state_est:
                 self.observation_space = np.zeros(48)       # Size for use with state est
         else:
@@ -404,8 +405,7 @@ class CassieEnv:
             #qpos[self.pos_idx] -= ref_pos[self.pos_idx]
             #qvel[self.vel_idx] -= ref_vel[self.vel_idx]
 
-            clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
-                     np.cos(2 * np.pi *  self.phase / self.phaselen)]
+            clock = [self.phase / self.phaselen]
             
             ext_state = clock
 

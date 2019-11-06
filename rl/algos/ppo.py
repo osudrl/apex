@@ -280,6 +280,10 @@ class PPO:
 
             observations, actions, returns, values = map(torch.Tensor, batch.get())
 
+            print(observations.shape)
+            print(actions.shape)
+            print(returns.shape)
+
             advantages = returns - values
             advantages = (advantages - advantages.mean()) / (advantages.std() + self.eps)
 
@@ -332,6 +336,10 @@ class PPO:
 
                     optimizer.zero_grad()
                     (actor_loss + critic_loss + entropy_penalty).backward()
+
+                    for p in policy.parameters():
+                        print(p.grad)
+                        
 
                     # Clip the gradient norm to prevent "unlucky" minibatches from 
                     # causing pathalogical updates
