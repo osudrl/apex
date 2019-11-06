@@ -33,34 +33,6 @@ def get_normalization_params(iter, policy, env_fn, noise_std):
 
     return np.mean(states, axis=0), np.sqrt(np.var(states, axis=0) + 1e-8)
 
-def get_normalization_params_orig(iter, policy, env_fn, noise_std):
-    print("Gathering input normalization data using {0} steps, noise = {1}...".format(iter, noise_std))
-
-    env = Normalize(env_fn(), online=False)
-
-    states = np.zeros((iter, env._observation_space.shape[0]))
-
-    state = env.reset()
-    for t in range(iter):
-        states[t, :] = state
-
-        state = torch.Tensor(state)
-
-        _, action = policy.act(state, deterministic=True)
-
-        # add gaussian noise to deterministic action
-        action = action + torch.randn(action.size()) * noise_std
-
-        state, _, done, _ = env.step(action.data.numpy())
-
-        if done:
-            state = env.reset()
-
-    print("Done gathering input normalization data.")
-
-    return env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1e-8)
-
-
 # returns a function that creates a normalized environment, then pre-normalizes it 
 # using states sampled from a deterministic policy with some added noise
 def PreNormalizer(iter, noise_std, policy, *args, **kwargs):

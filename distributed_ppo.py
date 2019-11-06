@@ -8,6 +8,7 @@ from rl.utils import run_experiment
 from rl.policies import GaussianMLP, BetaMLP
 from rl.algos import PPO, MirrorPPO
 
+from rl.envs import Vectorize
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
 import functools
@@ -82,7 +83,7 @@ parser.add_argument("--max_grad_norm", type=float, default=0.5, help="Value to c
 parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
 
 args = parser.parse_args()
-args.mirror = True
+args.mirror = False
 args.state_est = True
 args.num_procs = 112
 args.num_steps = 12000 // args.num_procs
@@ -95,7 +96,7 @@ args.seed = int(time.time())
 args.max_grad_norm = 0.05
 args.use_gae = False
 args.name = "fwrd_walk_StateEst_trajmatch"
-args.logdir = "./logs/sidestep/"
+args.logdir = "./logs/5k/"
 # Check if policy name already exists. If it does, increment filename
 index = ''
 while os.path.isfile(os.path.join("./trained_models/", args.name + index + ".pt")):
@@ -174,7 +175,12 @@ if __name__ == "__main__":
         learn_std=False,
         normc_init=False
     )
-    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params_orig(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
+    # policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
+    normalizer = PreNormalizer(iter=args.input_norm_steps, noise_std=2, policy=policy, online=False)
+    env = normalizer(Vectorize([env_fn]))
+    mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
+    policy.obs_mean = torch.Tensor(mean)
+    policy.obs_std = torch.Tensor(std)
 
     # Load previous policy
     #policy = torch.load("./trained_models/sidestep/sidestep_StateEst_speed-05-2_freq1-2.pt")
