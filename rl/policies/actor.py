@@ -160,7 +160,7 @@ class LSTM_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      x = self.nonlinearity(self.network_out(x))
+      x = self.nonlinearity(self.network_out(x))[0]
       self.action = x
 
     else:
