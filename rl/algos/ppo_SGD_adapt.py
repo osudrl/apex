@@ -56,14 +56,15 @@ class PPO_SGD_adapt(PPO):
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
 
-            sample_t = time.time()
+            sample_start = time.time()
             if self.n_proc > 1:
                 print("doing multi samp")
                 batch = self.sample_parallel(env_fn, policy, self.num_steps, 300)
             else:
                 batch = self._sample(env_fn, policy, self.num_steps, 300) #TODO: fix this
 
-            print("sample time: {:.2f} s".format(time.time() - sample_t))
+            samp_time = time.time() - sample_start
+            print("sample time: {:.2f} s".format(samp_time))
 
             observations, actions, returns, values = map(torch.Tensor, batch.get())
 
@@ -75,6 +76,8 @@ class PPO_SGD_adapt(PPO):
             print("timesteps in batch: %i" % advantages.numel())
 
             old_policy.load_state_dict(policy.state_dict())  # WAY faster than deepcopy
+
+            optimizer_start = time.time()
 
             for _ in range(self.epochs):
                 losses = []
@@ -141,8 +144,18 @@ class PPO_SGD_adapt(PPO):
                 # TODO: add verbosity arguments to suppress this
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
+            opt_time = time.time() - optimizer_start
+
             if logger is not None:
-                test = self.sample(env, policy, 800 // self.n_proc, 400, deterministic=True)
+                eval_start = time.time()
+                eval_proc = min(self.n_proc, 24)
+                test = self.sample(env, policy, 800 // eval_proc, 400, deterministic=True)
+                eval_time = time.time() - eval_start
+                print("evaluate time elapsed: {:.2f} s".format(eval_time))
+
+                avg_eval_reward = np.mean(test.ep_returns)
+                avg_batch_reward = np.mean(batch.ep_returns)
+                avg_ep_len = np.mean(batch.ep_lens)
                 _, pdf     = policy.evaluate(observations)
                 _, old_pdf = old_policy.evaluate(observations)
 
@@ -150,20 +163,36 @@ class PPO_SGD_adapt(PPO):
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
                 if type(logger) is Logger:
-                    logger.record("Return (test)", np.mean(test.ep_returns))
-                    logger.record("Return (batch)", np.mean(batch.ep_returns))
-                    logger.record("Mean Eplen",  np.mean(batch.ep_lens))
+                    logger.record("Return (test)", avg_eval_reward)
+                    logger.record("Return (batch)", avg_batch_reward)
+                    logger.record("Mean Eplen",  avg_ep_len)
             
                     logger.record("Mean KL Div", kl)
                     logger.record("Mean Entropy", entropy)
                     logger.dump()
                 elif type(logger) is SummaryWriter:
-                    logger.add_scalar("Data/Return (test)", np.mean(test.ep_returns))
-                    logger.add_scalar("Data/Return (batch)", np.mean(batch.ep_returns))
-                    logger.add_scalar("Data/Mean Eplen", np.mean(batch.ep_lens))
 
-                    logger.add_scalar("Misc/Mean KL Div", np.mean(test.ep_returns))
-                    logger.add_scalar("Misc/Mean Entropy", np.mean(test.ep_returns))
+                    sys.stdout.write("-" * 37 + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Return (test)', avg_eval_reward) + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Return (batch)', avg_batch_reward) + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Mean Eplen', avg_ep_len) + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Mean KL Div', "%8.3g" % kl) + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Mean Entropy', "%8.3g" % entropy) + "\n")
+                    sys.stdout.write("-" * 37 + "\n")
+                    sys.stdout.flush()
+
+                    logger.add_scalar("Data/Return (test)", avg_eval_reward)
+                    logger.add_scalar("Data/Return (batch)", avg_batch_reward)
+                    logger.add_scalar("Data/Mean Eplen", avg_ep_len)
+
+                    logger.add_scalar("Misc/Mean KL Div", kl)
+                    logger.add_scalar("Misc/Mean Entropy", entropy)
+                    logger.add_scalar("Misc/Critic Loss", critic_loss, itr)
+                    logger.add_scalar("Misc/Actor Loss", actor_loss, itr)
+
+                    logger.add_histogram("Misc/Sample Times", samp_time, itr)
+                    logger.add_histogram("Misc/Optimize Times", opt_time, itr)
+                    logger.add_histogram("Misc/Evaluation Times", eval_time, itr)
                 else:
                     print("No Logger")
 

@@ -174,7 +174,7 @@ if __name__ == "__main__":
         learn_std=False,
         normc_init=False
     )
-    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
+    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params_orig(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
 
     # Load previous policy
     #policy = torch.load("./trained_models/sidestep/sidestep_StateEst_speed-05-2_freq1-2.pt")

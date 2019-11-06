@@ -372,12 +372,14 @@ class PPO:
 
             if logger is not None:
                 evaluate_start = time.time()
-                test = self.sample_parallel(env_fn, policy, 800 // self.n_proc, self.max_traj_len, deterministic=True)
+                eval_proc = min(self.n_proc, 24)
+                test = self.sample_parallel(env_fn, policy, 800 // eval_proc, self.max_traj_len, deterministic=True)
                 eval_time[itr] = time.time() - evaluate_start
                 print("evaluate time elapsed: {:.2f} s".format(eval_time[itr]))
 
                 avg_eval_reward = np.mean(test.ep_returns)
-
+                avg_batch_reward = np.mean(batch.ep_returns)
+                avg_ep_len = np.mean(batch.ep_lens)
                 _, pdf     = policy.evaluate(observations)
                 _, old_pdf = old_policy.evaluate(observations)
 
@@ -385,17 +387,27 @@ class PPO:
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
                 if type(logger) is Logger:
-                    logger.record('Return (test)', np.mean(test.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='test')
-                    logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
-                    logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
+                    logger.record('Return (test)', avg_eval_reward, itr, 'Return', x_var_name='Iterations', split_name='test')
+                    logger.record('Return (batch)', avg_batch_reward, itr, 'Return', x_var_name='Iterations', split_name='batch')
+                    logger.record('Mean Eplen', avg_ep_len, itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
 
                     logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
                     logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
                     logger.dump()
                 elif type(logger) is SummaryWriter:
+
+                    sys.stdout.write("-" * 37 + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Return (test)', avg_eval_reward) + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Return (batch)', avg_batch_reward) + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Mean Eplen', avg_ep_len) + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Mean KL Div', "%8.3g" % kl) + "\n")
+                    sys.stdout.write("| %15s | %15s |" % ('Mean Entropy', "%8.3g" % entropy) + "\n")
+                    sys.stdout.write("-" * 37 + "\n")
+                    sys.stdout.flush()
+
                     logger.add_scalar("Data/Return (test)", avg_eval_reward, itr)
-                    logger.add_scalar("Data/Return (batch)", np.mean(batch.ep_returns), itr)
-                    logger.add_scalar("Data/Mean Eplen", np.mean(batch.ep_lens), itr)
+                    logger.add_scalar("Data/Return (batch)", avg_batch_reward, itr)
+                    logger.add_scalar("Data/Mean Eplen", avg_ep_len, itr)
 
                     logger.add_scalar("Misc/Mean KL Div", kl, itr)
                     logger.add_scalar("Misc/Mean Entropy", entropy, itr)
