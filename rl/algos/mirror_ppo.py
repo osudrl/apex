@@ -27,7 +27,10 @@ class MirrorPPO(PPO):
             mirror_observation = env.mirror_clock_observation
         mirror_action = env.mirror_action
 
-        minibatch_size = self.minibatch_size or advantages.numel()
+        # minibatch_size = self.minibatch_size or advantages.numel()
+        # Use only half of minibatch_size since mirror states will double the minibatch size
+        minibatch_size = int(self.minibatch_size / 2) or advantages.numel()  
+        print("minibatch_size / 2: ", minibatch_size)
 
         for _ in range(self.epochs):
                 losses = []
@@ -39,7 +42,8 @@ class MirrorPPO(PPO):
                 for indices in sampler:
                     indices = torch.LongTensor(indices)
 
-                    obs_batch = observations[indices]
+                    # obs_batch = observations[indices]
+                    orig_obs = observations[indices]
                     # obs_batch = torch.cat(
                     #     [obs_batch,
                     #      obs_batch @ torch.Tensor(env.obs_symmetry_matrix)]
@@ -62,6 +66,16 @@ class MirrorPPO(PPO):
                     #     [advantage_batch,
                     #      advantage_batch]
                     # ).detach()
+
+                    if env.clock_based:
+                        mir_obs = mirror_observation(orig_obs, env.clock_inds)
+                    else:
+                        mir_obs = mirror_observation(orig_obs)
+                    mir_actions = mirror_action(action_batch)
+                    obs_batch = torch.cat([orig_obs, mir_obs])
+                    action_batch = torch.cat([action_batch, mir_actions])
+                    return_batch = torch.cat([return_batch, return_batch])
+                    advantage_batch = torch.cat([advantage_batch, advantage_batch])
 
                     values, pdf = policy.evaluate(obs_batch)
 

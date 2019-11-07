@@ -83,6 +83,10 @@ class CassieEnv_speed_no_delta_neutral_foot:
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.phase_add = 1
+        if self.state_est:
+            self.clock_inds = [46, 47]
+        else:
+            self.clock_inds = [40, 41]
     
 
     def step_simulation(self, action):

@@ -132,6 +132,7 @@ class PPO:
 
         self.total_steps = 0
         self.highest_reward = -1
+        self.limit_cores = 0
 
         if args['redis_address'] is not None:
             ray.init(redis_address=args['redis_address'])
@@ -237,8 +238,11 @@ class PPO:
 
         # Don't don't bother launching another process for single thread
         if self.n_proc > 1:
+            real_proc = self.n_proc
+            if limit_cores:
+                real_proc = 24
             # result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
-            result_ids = [worker.remote(*args) for _ in range(self.n_proc)]
+            result_ids = [worker.remote(*args) for _ in range(real_proc)]
             result = ray.get(result_ids)
             # result = []
             # for i in range(self.n_proc):
@@ -264,7 +268,10 @@ class PPO:
 
             return merged
 
-        return merge(result)
+        total_buf = merge(result)
+        if len(total_buf) > min_steps * 1.5:
+            self.limit_cores = 1
+        return total_buf
 
     def train(self,
               env_fn,
