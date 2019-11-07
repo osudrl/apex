@@ -355,7 +355,7 @@ class PPO:
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
                 # Early stopping 
-                if kl_divergence(pdf, old_pdf).mean() > 0.02:
+                if kl_divergence(pdf, old_pdf).mean() > 0.08:
                     print("Max kl reached, stopping optimization early.")
                     break
 
