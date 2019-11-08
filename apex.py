@@ -39,30 +39,29 @@ def env_factory(path, state_est=True, mirror=False, **kwargs):
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    print("GOT PATH: ", path)
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]:
-        from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
-        from cassie.no_delta_env import CassieEnv_nodelta
-        from cassie.speed_env import CassieEnv_speed
-        from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
-        from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
-    #   env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
-        env_fn = partial(CassieIKEnv, clock_based=True, state_est=state_est)
+    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
+      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
-        if mirror:
-            from rl.envs.wrappers import SymmetricEnv
-            if state_est:
-                # with state estimator
-                env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-            else:
-                # without state estimator
-                env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-                                                18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-                                                -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-                                                mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+      if path == 'Cassie-v0':
+        env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
+      elif path == 'CassieRandomDynamics-v0':
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+      elif path == 'CassieRandomDynamics-v0':
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
 
-        return env_fn
+      if mirror:
+          from rl.envs.wrappers import SymmetricEnv
+          if state_est:
+              # with state estimator
+              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+          else:
+              # without state estimator
+              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
+                                              18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
+                                              -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
+                                              mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
 
+      return env_fn
 
     spec = gym.envs.registry.spec(path)
     _kwargs = spec._kwargs.copy()
@@ -90,6 +89,8 @@ def create_logger(args):
     "You must provide a 'seed' key in your command line arguments"
   assert "logdir" in arg_dict, \
     "You must provide a 'logdir' key in your command line arguments."
+  assert "env_name" in arg_dict, \
+    "You must provide a 'env_name' key in your command line arguments."
 
   # sort the keys so the same hyperparameters will always have the same hash
   arg_dict = OrderedDict(sorted(arg_dict.items(), key=lambda t: t[0]))
@@ -98,9 +99,11 @@ def create_logger(args):
   # same for logging directory
   seed = str(arg_dict.pop("seed"))
   logdir = str(arg_dict.pop('logdir'))
+  env_name = str(arg_dict.pop('env_name'))
 
   # get a unique hash for the hyperparameter settings, truncated at 10 chars
-  arg_hash = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:10] + '-seed' + seed
+  arg_hash   = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:6] + '-seed' + seed
+  logdir     = os.path.join(logdir, env_name)
   output_dir = os.path.join(logdir, arg_hash)
 
   # create a directory with the hyperparm hash as its name, if it doesn't
@@ -116,9 +119,12 @@ def create_logger(args):
 
   logger = SummaryWriter(output_dir, flush_secs=0.1)
   print("Logging to " + color.BOLD + color.ORANGE + str(output_dir) + color.END)
+
+  logger.dir = output_dir
   return logger
 
 def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
+
   if env_name is None:
     env = env_factory(policy.env_name)()
   else:
@@ -129,17 +135,28 @@ def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
     done = False
     timesteps = 0
     eval_reward = 0
-    while not done and timesteps < 1000:
+    while not done and timesteps < max_traj_len:
+
+      if hasattr(env, 'simrate'):
+        start = time.time()
+      
       action = policy.forward(torch.Tensor(state)).detach().numpy()
       state, reward, done, _ = env.step(action)
       if visualize:
         env.render()
       eval_reward += reward
       timesteps += 1
+
+      if hasattr(env, 'simrate'):
+        # assume 30hz (hack)
+        end = time.time()
+        delaytime = max(0, 1000 / 30000 - (end-start))
+        time.sleep(delaytime)
+
     print("Eval reward: ", eval_reward)
 
 if __name__ == "__main__":
-  import sys, argparse
+  import sys, argparse, time
   parser = argparse.ArgumentParser()
 
   print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
@@ -165,12 +182,15 @@ if __name__ == "__main__":
     parser.add_argument("--traj_len",     "-tl",  default=1000, type=int)               # max trajectory length for environment
     parser.add_argument("--algo",         "-a",   default='v1', type=str)               # whether to use ars v1 or v2
     parser.add_argument("--recurrent",    "-r",   action='store_true')                  # whether to use a recurrent policy
-    parser.add_argument("--logdir",       default="./logs/ars/experiments/", type=str)
-    parser.add_argument("--seed",     "-s",   default=0, type=int)
-    parser.add_argument("--env_name", "-e",   default="Hopper-v3")
-    parser.add_argument("--average_every", default=10, type=int)
-    parser.add_argument("--save_model",   "-m",   default="./trained_models/ars/ars.pt", type=str) # where to save the trained model to
+    parser.add_argument("--logdir",               default="./logs/ars/", type=str)
+    parser.add_argument("--seed",     "-s",       default=0, type=int)
+    parser.add_argument("--env_name", "-e",       default="Hopper-v3")
+    parser.add_argument("--average_every",        default=10, type=int)
+    parser.add_argument("--save_model",   "-m",   default=None, type=str)               # where to save the trained model to
+    parser.add_argument("--redis",                default=None)
     args = parser.parse_args()
+    if args.save_model == None:
+      args.save_model = './trained_models/ars/' + args.env_name + '.pt'
 
     run_experiment(args)
 
@@ -202,20 +222,22 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size",             default=64,    type=int)      # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
+    parser.add_argument("--save_actor",             default=None, type=str)
+    parser.add_argument("--save_critic",            default=None, type=str)
+
     if not recurrent:
-      parser.add_argument("--save_actor",             default="./trained_models/ddpg/ddpg_actor.pt", type=str)
-      parser.add_argument("--save_critic",            default="./trained_models/ddpg/ddpg_critic.pt", type=str)
-      parser.add_argument("--logdir",                 default="./logs/ddpg/experiments/", type=str)
+      parser.add_argument("--logdir",                 default="./logs/ddpg/", type=str)
     else:
-      parser.add_argument("--save_actor",             default="./trained_models/rdpg/rdpg_actor.pt", type=str)
-      parser.add_argument("--save_critic",            default="./trained_models/rdpg/rdpg_critic.pt", type=str)
-      parser.add_argument("--logdir",                 default="./logs/rdpg/experiments/", type=str)
+      parser.add_argument("--logdir",                 default="./logs/rdpg/", type=str)
+
     parser.add_argument("--seed",     "-s",   default=0, type=int)
     parser.add_argument("--env_name", "-e",   default="Hopper-v3")
     args = parser.parse_args()
-    args.__dict__['recurrent'] = recurrent
+
+    args.recurrent = recurrent
 
     run_experiment(args)
+
   elif sys.argv[1] == 'td3_sync':
     sys.argv.remove(sys.argv[1])
     """

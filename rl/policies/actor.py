@@ -144,13 +144,10 @@ class FF_Actor(Actor):
 
   def forward(self, state):
     x = state
-    #print(x.size())
     for idx, layer in enumerate(self.actor_layers):
       x = self.nonlinearity(layer(x))
 
     self.action = torch.tanh(self.network_out(x))
-    #print(self.action)
-    #exit(1)
     return self.action
 
   def get_action(self):
@@ -262,7 +259,7 @@ class LSTM_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      x = self.nonlinearity(self.network_out(x))
+      x = self.nonlinearity(self.network_out(x))[0]
       self.action = x
 
     else:
