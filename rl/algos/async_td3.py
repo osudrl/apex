@@ -43,10 +43,10 @@ def run_experiment(args):
 
     # Create remote learner (learner will create the evaluators) and replay buffer
     memory_id = ReplayBuffer_remote.remote(args.replay_size, args.name, args)
-    learner_id = Learner.remote(env_fn, memory_id, args.max_timesteps, obs_dim, action_dim, args.a_lr, args.c_lr, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size)
+    learner_id = Learner.remote(env_fn, memory_id, args.max_timesteps, obs_dim, action_dim, args.a_lr, args.c_lr, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size, env_name=args.env_name)
 
     # Create remote actors
-    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_procs, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size, viz_actor=args.viz_actors) for i in range(args.num_procs)]
+    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_procs, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size, viz_actor=args.viz_actors, env_name=args.env_name) for i in range(args.num_procs)]
 
     print()
     print("Asynchronous Twin-Delayed Deep Deterministic policy gradients:")
@@ -194,7 +194,7 @@ class ActorBuffer(object):
 
 @ray.remote
 class Actor():
-    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256, viz_actor=True):
+    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256, viz_actor=True, env_name='NOT_SET'):
 
         self.device = torch.device('cpu')
 
@@ -217,7 +217,7 @@ class Actor():
         # Initialize param noise (or set to none)
         self.noise_scale = noise_scale
         self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
-        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
+        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
 
         # Termination condition: max episode length
         self.max_traj_len = 400
@@ -356,7 +356,7 @@ class Actor():
 class Learner():
     def __init__(self, env_fn, memory_server, max_timesteps, state_space, action_space, a_lr, c_lr,
                  batch_size=500, discount=0.99, tau=0.005, update_freq=10,
-                 target_update_freq=2000, evaluate_freq=1000, render_policy=True, hidden_size=256):
+                 target_update_freq=2000, evaluate_freq=1000, render_policy=True, hidden_size=256, env_name='NOT_SET'):
 
         self.device = torch.device('cpu')
 
@@ -402,13 +402,13 @@ class Learner():
         self.max_traj_len = 400
 
         # models and optimizers
-        self.actor = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
-        self.actor_target = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
+        self.actor = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
+        self.actor_target = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
-        self.critic = Critic(self.state_dim, self.action_dim,hidden_size, hidden_size).to(self.device)
-        self.critic_target = Critic(self.state_dim, self.action_dim, hidden_size, hidden_size).to(self.device)
+        self.critic = Critic(self.state_dim, self.action_dim, hidden_size=hidden_size, env_name=env_name).to(self.device)
+        self.critic_target = Critic(self.state_dim, self.action_dim, hidden_size=hidden_size, env_name=env_name).to(self.device)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=c_lr)
 
@@ -535,8 +535,6 @@ class Learner():
         for t in range(trials):
             # get result from a worker
             ready_ids, _ = ray.wait(evaluators, num_returns=1)
-
-            print("got result from worker")
 
             # update total rewards
             rewards, eplens = ray.get(ready_ids[0])
