@@ -7,7 +7,7 @@ import numpy as np
 
 device = torch.device("cpu")
 
-def select_action(Policy, state, device):
+def select_greedy_action(Policy, state, device):
     state = torch.FloatTensor(state.reshape(1, -1)).to(device)
 
     Policy.eval()
@@ -31,7 +31,7 @@ def evaluator(env, policy, max_traj_len, render_policy=False):
             env.render()
 
         # use model's greedy policy to predict action
-        action = select_action(policy, np.array(state), device)
+        action = select_greedy_action(policy, np.array(state), device)
 
         # take a step in the simulation
         next_state, reward, done, _ = env.step(action)
@@ -56,7 +56,7 @@ def evaluate_policy(env, policy, max_episode_steps, eval_episodes=1):
         while not done_bool:
             env.render()
             t += 1
-            action = select_action(policy, np.array(obs), device)
+            action = select_greedy_action(policy, np.array(obs), device)
             obs, reward, done, _ = env.step(action)
             done_bool = 1.0 if t + 1 == max_episode_steps else float(done)
             avg_reward += reward

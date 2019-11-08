@@ -181,13 +181,12 @@ class MirrorPPO(PPO):
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
-                logger.record('Return (test)', np.mean(test.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='test')
-                logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
-                logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
-
-                logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
-                logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
-                logger.record('Timesteps', self.total_steps, itr, 'Timesteps', x_var_name='Iterations', split_name=None)
+                logger.add_scalar("Test/Return", avg_eval_reward, itr)
+                logger.add_scalar("Train/Return", np.mean(batch.ep_returns), itr)
+                logger.add_scalar("Train/Mean Eplen", np.mean(batch.ep_lens), itr)
+                logger.add_scalar("Train/Mean KL Div", kl, itr)
+                logger.add_scalar("Train/Mean Entropy", entropy, itr)
+                logger.add_scalar("Misc/Timesteps", self.total_steps, itr)
 
                 logger.dump()
 
@@ -301,9 +300,10 @@ def run_experiment(args):
     # create a tensorboard logging object
     logger = create_logger(args)
 
-
+    print()
     print("Synchronous Distributed Proximal Policy Optimization:")
     print("\tenv:            {}".format(args.env_name))
+    print("\tmax traj len:   {}".format(args.max_traj_len))
     print("\tseed:           {}".format(args.seed))
     print("\tmirror:         {}".format(args.mirror))
     print("\tnum procs:      {}".format(args.num_procs))

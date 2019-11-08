@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 from colorama import Fore, Style
 
 # Plot results
-from rl.utils import Logger
+from apex import create_logger
 
 # Code based on:
 # https://github.com/openai/baselines/blob/master/baselines/deepq/replay_buffer.py
@@ -29,17 +29,7 @@ class ReplayBuffer_remote(object):
         self.max_size = size
         self.ptr = 0
 
-        self.using_tensorboard = True
-
-        #self.using_tensorboard = True if args.logger_name is "tensorboard" else False
-        if self.using_tensorboard:
-            now = datetime.now()
-            # NOTE: separate by trial name first and time of run after
-            log_path = args.logdir + now.strftime("%Y%m%d-%H%M%S")+"/"
-            self.logger = SummaryWriter(log_path, flush_secs=0.1)
-            print(Fore.GREEN + Style.BRIGHT + "Logging data using TensorBoard to {}".format(log_path + Style.RESET_ALL))
-        else:
-            self.logger = Logger(args, env_name=experiment_name, viz=True)
+        self.logger = create_logger(args)
 
         print("Created replay buffer with size {}".format(self.max_size))
     
@@ -83,44 +73,27 @@ class ReplayBuffer_remote(object):
         return np.array(x), np.array(u)
 
     def plot_actor_results(self, actor_id, actor_timesteps, episode_reward):
-        if not self.using_tensorboard:
-            self.logger.plot('Return', 'Actor Timesteps',split_name='actor {}'.format(actor_id),title_name='Actor Episode Return', x=actor_timesteps, y=episode_reward)
-        else:
-            #self.logger.add_scalar('Data/Return Batch', episode_reward, actor_timesteps)
-            pass
+        self.logger.add_scalar('Train/Return', episode_reward, actor_timesteps)
 
     def plot_eval_results(self, step_count, avg_reward, avg_eplen, update_count):
-        if not self.using_tensorboard:
-            self.logger.record('Update Count', update_count, step_count, title_name='Total Updates', x_var_name='Global Timesteps', split_name='eval')
-            self.logger.record('Eval Return', avg_reward, step_count, title_name='Eval Return', x_var_name='Global Timesteps', split_name='eval')
-            self.logger.record('Eval Eplen', avg_eplen, step_count, title_name='Eval Eplen', x_var_name='Global Timesteps', split_name='eval')
-            self.logger.record('Replay Size', len(self.storage), step_count, title_name='Replay Size', x_var_name='Global Timesteps', split_name='eval')
-            self.logger.dump()
-        else:
-            self.logger.add_scalar("Eval/Return Test", avg_reward, update_count)
-            self.logger.add_scalar("Eval/Mean Eplen", avg_eplen, update_count)
-            self.logger.add_scalar("Total/Total Timesteps", step_count, update_count)
-            self.logger.add_scalar("Total/Replay Size", len(self.storage), update_count)
+        self.logger.add_scalar("Test/Return", avg_reward, update_count)
+        self.logger.add_scalar("Test/Eplen", avg_eplen, update_count)
+        self.logger.add_scalar("Misc/Total Timesteps", step_count, update_count)
+        self.logger.add_scalar("Misc/Replay Size", len(self.storage), update_count)
+        print("Total T: {}\tEval Return: {}\t Eval Eplen: {}".format(step_count, avg_reward, avg_eplen))
 
     def plot_actor_loss(self, update_count, actor_loss):
-        if not self.using_tensorboard:
-            self.logger.plot('Actor Loss', 'Update Count',split_name='train',title_name='Actor Network Loss', x=update_count, y=actor_loss)
-        else:
-            self.logger.add_scalar("Train/actor_network_loss", actor_loss, update_count)
+        self.logger.add_scalar("Train/pi_loss", actor_loss, update_count)
 
     def plot_critic_loss(self, update_count, critic_loss, Q1_mean, Q2_mean):
-        if not self.using_tensorboard:
-            self.logger.plot('Critic Loss', 'Update Count',split_name='train',title_name='Critic Network Loss', x=update_count, y=critic_loss)
-        else:
-            self.logger.add_scalar("Train/critic_network_loss", critic_loss, update_count)
-            self.logger.add_scalar("Train/critic_Q1_mean", Q1_mean, update_count)
-            self.logger.add_scalar("Train/critic_Q2_mean", Q2_mean, update_count)
-            self.logger.add_scalar("Train/critic_Qs_mean", (Q1_mean + Q2_mean) / 2, update_count)
+        self.logger.add_scalar("Train/q_loss", critic_loss, update_count)
+        self.logger.add_scalar("Train/avg_q1", Q1_mean, update_count)
+        self.logger.add_scalar("Train/avg_q2", Q2_mean, update_count)
+        # self.logger.add_scalar("Train/critic_Qs_mean", (Q1_mean + Q2_mean) / 2, update_count) # I don't think this is important enough to log
 
     def plot_policy_hist(self, policy, update_count):
-        if self.using_tensorboard:
-            for name, param in policy.named_parameters():
-                self.logger.add_histogram("Model Params/"+name, param.data, update_count)
+        for name, param in policy.named_parameters():
+            self.logger.add_histogram("Model Params/"+name, param.data, update_count)
             # once using distributional critic, plot that distribution
 
     # # Used to verify that updates are not being bottlenecked (should keep going up straight)

@@ -1,5 +1,7 @@
-from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_parameters, evaluator
-from rl.policies.td3_actor_critic import Original_Actor as O_Actor, TD3Critic as Critic
+from rl.utils import ReplayBuffer_remote
+from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_parameters
+from rl.policies.actor import Scaled_FF_Actor as O_Actor
+from rl.policies.critic import Dual_Q_Critic as Critic
 
 from apex import print_logo
 
@@ -19,6 +21,76 @@ import ray
 device = torch.device('cpu')
 
 
+
+def run_experiment(args):
+    torch.set_num_threads(1);
+    from apex import env_factory, create_logger
+
+    # Start ray
+    ray.init(num_gpus=0, include_webui=True, redis_address=args.redis_address)
+
+    # Set seeds
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
+    # wrapper function for creating parallelized envs
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
+    max_traj_len = args.max_traj_len
+
+    obs_dim = env_fn().observation_space.shape[0]
+    action_dim = env_fn().action_space.shape[0]
+    max_action = 1.0
+
+    # Create remote learner (learner will create the evaluators) and replay buffer
+    memory_id = ReplayBuffer_remote.remote(args.replay_size, args.name, args)
+    learner_id = Learner.remote(env_fn, memory_id, args.max_timesteps, obs_dim, action_dim, args.a_lr, args.c_lr, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size)
+
+    # Create remote actors
+    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_procs, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size, viz_actor=args.viz_actors) for i in range(args.num_procs)]
+
+    print()
+    print("Asynchronous Twin-Delayed Deep Deterministic policy gradients:")
+    print("\tenv:            {}".format(args.env_name))
+    print("\tmax traj len:   {}".format(args.max_traj_len))
+    print("\tseed:           {}".format(args.seed))
+    print("\tmirror:         {}".format(args.mirror))
+    print("\tnum procs:      {}".format(args.num_procs))
+    print("\ta_lr:           {}".format(args.a_lr))
+    print("\tc_lr:           {}".format(args.c_lr))
+    print("\ttau:            {}".format(args.tau))
+    print("\tgamma:          {}".format(args.discount))
+    print("\tact noise:      {}".format(args.act_noise))
+    print("\tparam noise:    {}".format(args.param_noise))
+    if(args.param_noise):
+        print("\tnoise scale:    {}".format(args.noise_scale))
+    print("\tbatch size:     {}".format(args.batch_size))
+    
+    # print("\tpolicy noise:   {}".format(args.policy_noise))
+    # print("\tnoise clip:     {}".format(args.noise_clip))
+    # print("\tpolicy freq:    {}".format(args.policy_freq))
+
+    print("\tload freq:      {}".format(args.initial_load_freq))
+    print("\ttaper load freq:{}".format(args.taper_load_freq))
+    print()
+
+    start = time.time()
+
+    # start collection loop for each actor
+    futures = [actor_id.collect_experience.remote() for actor_id in actors_ids]
+
+    # start training loop for learner
+    while True:
+        learner_id.update_model.remote()
+
+    # TODO: make evaluator its own ray object with separate loop
+    # futures.append(evaluator_id...)
+
+    # wait for training to complete (THIS DOESN'T WORK AND I DON'T KNOW WHY)
+    ray.wait(futures, num_returns=len(futures))
+
+    print("Training over. Total Time Elapsed = {}".format(start - end))
+
+
 def select_action(perturbed_policy, unperturbed_policy, state, device, param_noise=None):
     state = torch.FloatTensor(state.reshape(1, -1)).to(device)
 
@@ -28,6 +100,45 @@ def select_action(perturbed_policy, unperturbed_policy, state, device, param_noi
         return perturbed_policy(state).cpu().data.numpy().flatten()
     else:
         return unperturbed_policy(state).cpu().data.numpy().flatten()
+
+def select_greedy_action(Policy, state, device):
+    state = torch.FloatTensor(state.reshape(1, -1)).to(device)
+
+    Policy.eval()
+
+    return Policy(state).cpu().data.numpy().flatten()
+
+@ray.remote
+def evaluator(env, policy, max_traj_len, render_policy=False):
+
+    env = env()
+
+    state = env.reset()
+    total_reward = 0
+    total_steps = 0
+    steps = 0
+    done = False
+
+    # evaluate performance of the passed model for one episode
+    while steps < max_traj_len and not done:
+        if render_policy:
+            env.render()
+
+        # use model's greedy policy to predict action
+        action = select_greedy_action(policy, np.array(state), device)
+
+        # take a step in the simulation
+        next_state, reward, done, _ = env.step(action)
+
+        # update state
+        state = next_state
+
+        # increment total_reward and step count
+        total_reward += reward
+        steps += 1
+        total_steps += 1
+
+    return total_reward, total_steps
 
 class ActorBuffer(object):
     def __init__(self, size):
@@ -80,7 +191,10 @@ class ActorBuffer(object):
 
 @ray.remote
 class Actor():
-    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256, viz_actor=False):
+    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256, viz_actor=True):
+
+        self.device = torch.device('cpu')
+
         self.env = env_fn()
         self.cassieEnv = True
 
@@ -100,7 +214,7 @@ class Actor():
         # Initialize param noise (or set to none)
         self.noise_scale = noise_scale
         self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
-        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(device)
+        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size, hidden_size).to(self.device)
 
         # Termination condition: max episode length
         self.max_traj_len = 400
@@ -123,6 +237,8 @@ class Actor():
         self.policy, self.training_done = ray.get(self.learner_id.get_global_policy.remote())
 
     def collect_experience(self):
+
+        print("Actor {} starting collection".format(self.id))
 
         while not self.training_done:
 
@@ -151,7 +267,7 @@ class Actor():
                     #print("loaded global model and adapted parameter noise")
                 else:
                     # print("loaded global model.  Load duration = {}".format(duration))
-                    #print("loaded global model.")
+                    # print("loaded global model.")
                     pass
 
             obs = self.env.reset()
@@ -317,7 +433,7 @@ class Learner():
         foo = ray.get(self.memory.storage_size.remote())
 
         if foo < self.batch_size:
-            # print("not enough experience yet: {}".format(foo))
+            print("not enough experience yet: {}".format(foo))
             return
 
         start_time = time.time()
@@ -362,8 +478,8 @@ class Learner():
         # Delayed policy updates
         if self.update_counter % policy_freq == 0:
 
-            # print("optimizing at timestep {} | time = {} | replay size = {} | episode count = {} | update count = {} ".format(
-            #     self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.episode_count, self.update_counter))
+            print("optimizing at timestep {} | time = {} | replay size = {} | update count = {} ".format(
+                self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.update_counter))
 
             # Compute actor loss
             actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
@@ -428,8 +544,6 @@ class Learner():
         avg_reward = total_rewards / trials
         avg_eplen = total_eplen / trials
         self.memory.plot_eval_results.remote(self.step_count, avg_reward, avg_eplen, self.update_counter)
-
-        print("eval time: {}".format(time.time()-start_time))
 
         # tell replay to plot hist of actor policy weights
         self.memory.plot_policy_hist.remote(self.actor, self.update_counter)

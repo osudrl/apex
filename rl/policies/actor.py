@@ -156,6 +156,38 @@ class FF_Actor(Actor):
   def get_action(self):
     return self.action
 
+# identical to FF_Actor but allows output to scale to max_action
+class Scaled_FF_Actor(Actor):
+  def __init__(self, state_dim, action_dim, max_action, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=F.relu):
+    super(Scaled_FF_Actor, self).__init__()
+
+    self.max_action = max_action
+
+    self.actor_layers = nn.ModuleList()
+    self.actor_layers += [nn.Linear(state_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.actor_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.network_out = nn.Linear(hidden_size, action_dim)
+
+    self.action = None
+    self.action_dim = action_dim
+    self.env_name = env_name
+    self.nonlinearity = nonlinearity
+
+  def forward(self, state):
+    x = state
+    #print(x.size())
+    for idx, layer in enumerate(self.actor_layers):
+      x = self.nonlinearity(layer(x))
+
+    self.action = self.max_action * torch.tanh(self.network_out(x))
+    #print(self.action)
+    #exit(1)
+    return self.action
+
+  def get_action(self):
+    return self.action
+
 class LSTM_Actor(Actor):
   def __init__(self, input_dim, action_dim, hidden_size=64, hidden_layers=1, env_name='NOT SET', nonlinearity=torch.tanh):
     super(LSTM_Actor, self).__init__()

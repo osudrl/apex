@@ -223,17 +223,21 @@ if __name__ == "__main__":
 
     """
     from rl.algos.sync_td3 import run_experiment
+
+    # general args
     parser.add_argument("--logdir",       default="./logs/syncTD3/experiments/", type=str)
     parser.add_argument("--policy_name", default="TD3")					            # Policy name
-    parser.add_argument("--num_procs", type=int, default=4)                         # neurons in hidden layer
-    parser.add_argument("--min_steps", type=int, default=1000)                      # number of steps of experience each process should collect
-    parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
     parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
-    parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
     parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
     parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
     parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
     parser.add_argument("--seed", default=0, type=int)                              # Sets Gym, PyTorch and Numpy seeds
+
+    # DDPG args
+    parser.add_argument("--num_procs", type=int, default=4)                         # neurons in hidden layer
+    parser.add_argument("--min_steps", type=int, default=1000)                      # number of steps of experience each process should collect
+    parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
+    parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
     parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
     parser.add_argument("--eval_freq", default=5e3, type=float)                     # How often (time steps) we evaluate
     parser.add_argument("--max_timesteps", default=1e7, type=float)                 # Max time steps to run environment for
@@ -246,6 +250,7 @@ if __name__ == "__main__":
     parser.add_argument("--tau", default=0.001, type=float)                         # Target network update rate
     parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
     parser.add_argument("--c_lr", type=float, default=1e-3)                         # Critic: Adam learning rate
+
     # TD3 Specific
     parser.add_argument("--policy_noise", default=0.2, type=float)                  # Noise added to target policy during critic update
     parser.add_argument("--noise_clip", default=0.5, type=float)                    # Range to clip target policy noise
@@ -259,7 +264,53 @@ if __name__ == "__main__":
       Utility for running Twin-Delayed Deep Deterministic policy gradients (asynchronous).
 
     """
-    raise NotImplementedError
+    from rl.algos.async_td3 import run_experiment
+
+    # args common for actors and learners
+    parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
+    parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
+    parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
+    parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
+
+    # learner specific args
+    parser.add_argument("--replay_size", default=1e8, type=int)                     # Max size of replay buffer
+    parser.add_argument("--max_timesteps", default=1e8, type=float)                 # Max time steps to run environment for 1e8 == 100,000,000
+    parser.add_argument("--batch_size", default=100, type=int)                      # Batch size for both actor and critic
+    parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
+    parser.add_argument("--tau", default=0.001, type=float)                         # target update rate (tau)
+    parser.add_argument("--update_freq", default=2, type=int)                      # how often to update learner
+    parser.add_argument("--evaluate_freq", default=500, type=int)                    # how often to evaluate learner
+    parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
+    parser.add_argument("--c_lr", type=float, default=1e-3)                         # Critic: Adam learning rate
+
+    # actor specific args
+    parser.add_argument("--num_procs", default=30, type=int)                        # Number of actors
+    parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
+    parser.add_argument("--policy_name", default="TD3")                             # Policy name
+    parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
+    parser.add_argument("--initial_load_freq", default=1, type=int)                # initial amount of time between loading global model
+    parser.add_argument("--act_noise", default=0.1, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
+    parser.add_argument('--param_noise', type=bool, default=False)                   # param noise
+    parser.add_argument('--noise_scale', type=float, default=0.3)                   # noise scale for param noise
+    parser.add_argument("--taper_load_freq", type=bool, default=False)               # initial amount of time between loading global model
+    parser.add_argument("--viz_actors", default=False, action='store_true')         # Visualize actors in visdom or not
+
+    # evaluator args
+    parser.add_argument("--num_trials", default=10, type=int)                       # Number of evaluators
+    parser.add_argument("--num_evaluators", default=10, type=int)                   # Number of evaluators
+    parser.add_argument("--viz_port", default=8097)                                 # visdom server port
+    parser.add_argument("--render_policy", type=bool, default=False)                # render during eval
+
+    # misc args
+    parser.add_argument("--name", type=str, default="model")
+    parser.add_argument("--seed", type=int, default=1, help="RNG seed")
+    parser.add_argument("--logger_name", type=str, default="tensorboard")           # logger to use (tensorboard or visdom)
+    parser.add_argument("--logdir", type=str, default="./logs/asynctd3/experiments/", help="Where to log diagnostics to")
+    parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
+
+    args = parser.parse_args()
+
+    run_experiment(args)
   elif sys.argv[1] == 'ppo':
     sys.argv.remove(sys.argv[1])
     """
@@ -268,22 +319,17 @@ if __name__ == "__main__":
     """
     from rl.algos.mirror_ppo import run_experiment
 
-    # Arguments
-    parser = argparse.ArgumentParser()
-
-    # For tensorboard logger
-    parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")       # Where to log diagnostics to
-    parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
-    parser.add_argument("--previous", type=str, default=None)                  # path to directory of previous policies for resuming training
-    parser.add_argument("--seed", default=0, type=int)                                 # Sets Gym, PyTorch and Numpy seeds
+    # general args
     parser.add_argument("--policy_name", type=str, default="PPO")
     parser.add_argument("--env_name", "-e",   default="Cassie-mimic-v0")
-    # parser.add_argument("--env", type=str, default="Cassie-mimic-v0")
-    parser.add_argument("--state_est", type=bool, default=True)
-    # mirror actions or not
-    parser.add_argument("--mirror", default=False, action='store_true')
-    # visdom server port
-    parser.add_argument("--viz_port", default=8097)
+    parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")        # Where to log diagnostics to
+    parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
+    parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
+    parser.add_argument("--state_est", type=bool, default=True)                         # use state estimator or not
+    parser.add_argument("--mirror", default=False, action='store_true')                 # mirror actions or not   
+    parser.add_argument("--redis_address", type=str, default=None)                      # address of redis server (for cluster setups)
+    parser.add_argument("--viz_port", default=8097)                                     # (deprecated) visdom server port
+
     # PPO algo args
     parser.add_argument("--input_norm_steps", type=int, default=10000)
     parser.add_argument("--n_itr", type=int, default=10000, help="Number of iterations of the learning algorithm")
@@ -301,6 +347,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
     parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
 
+    # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
 
     args = parser.parse_args()

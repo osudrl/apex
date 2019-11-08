@@ -6,7 +6,8 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 
 from rl.utils.remote_replay import ReplayBuffer
-from rl.policies.td3_actor_critic import Original_Actor as O_Actor, TD3Critic as Critic
+from rl.policies.actor import Scaled_FF_Actor as O_Actor
+from rl.policies.critic import Dual_Q_Critic as Critic
 
 import functools
 
@@ -50,7 +51,7 @@ def parallel_collect_experience(policy, env_fn, act_noise, min_steps, max_traj_l
 
     merged_transitions = np.concatenate(all_transitions)
 
-    print(merged_transitions.shape)
+    # print(merged_transitions.shape)
     return merged_transitions, len(merged_transitions)
 
 # sample experience for one episode and send to replay buffer
@@ -140,9 +141,9 @@ def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
 
 class TD3():
     def __init__(self, state_dim, action_dim, max_action, a_lr, c_lr):
-        self.actor = O_Actor(state_dim, action_dim, max_action, 256, 256).to(device)
-        self.actor_target = O_Actor(state_dim, action_dim, max_action, 256, 256).to(device)
-        self.actor_perturbed = O_Actor(state_dim, action_dim, max_action, 256, 256).to(device)
+        self.actor = O_Actor(state_dim, action_dim, max_action).to(device)
+        self.actor_target = O_Actor(state_dim, action_dim, max_action).to(device)
+        self.actor_perturbed = O_Actor(state_dim, action_dim, max_action).to(device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
@@ -175,7 +176,7 @@ class TD3():
 
     def train(self, replay_buffer, iterations, batch_size=100, discount=0.99, tau=0.005, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
 
-        avg_q1, avg_q2, avg_targ_q, q_loss, pi_loss, avg_noise, avg_action = (0,0,0,0,0,0,0)
+        avg_q1, avg_q2, q_loss, pi_loss, avg_noise, avg_action = (0,0,0,0,0,0)
 
         for it in range(iterations):
 
@@ -205,7 +206,6 @@ class TD3():
             # Keep track of Q estimates for logging
             avg_q1 += current_Q1
             avg_q2 += current_Q2
-            avg_targ_q += target_Q
             avg_action += next_action
 
             # Compute critic loss
@@ -246,12 +246,11 @@ class TD3():
         # prep info for logging
         avg_q1 /= iterations
         avg_q2 /= iterations
-        avg_targ_q /= iterations
         q_loss /= iterations
         pi_loss /= iterations
         avg_action /= iterations
 
-        return torch.mean(avg_q1), torch.mean(avg_q1), torch.mean(avg_targ_q), q_loss, pi_loss, avg_action
+        return torch.mean(avg_q1), torch.mean(avg_q1), q_loss, pi_loss, avg_action
 
     def save(self):
         if not os.path.exists('trained_models/syncTD3/'):
@@ -277,39 +276,14 @@ class TD3():
             self.critic.eval()
 
 def run_experiment(args):
-    from apex import create_logger
+    from apex import env_factory, create_logger
 
-    # NOTE: importing cassie for some reason breaks openai gym, BUG ?
-    from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
-    from cassie.no_delta_env import CassieEnv_nodelta
-    from cassie.speed_env import CassieEnv_speed
-    from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
-    from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
-
-    env_fn = functools.partial(CassieEnv, "walking", clock_based=True, state_est=args.state_est)
-    # env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-    # env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
-    # print(env_fn().clock_inds)
-
-    obs_dim = env_fn().observation_space.shape[0]
-    action_dim = env_fn().action_space.shape[0]
-
-    # Mirror Loss
-    if args.mirror:
-        if args.state_est:
-            # with state estimator
-            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[0,1,2,3,4,5,6,7,8,9])
-        else:
-            # without state estimator
-            env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-                                            18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-                                            -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-                                            mirrored_act = [0,1,2,3,4,5,6,7,8,9])
+    # wrapper function for creating parallelized envs
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
     max_traj_len = args.max_traj_len
 
     # Start ray
-    # ray.init(num_gpus=0, include_webui=True, temp_dir="./ray_tmp", redis_address=args.redis_address)
-    ray.init()
+    ray.init(num_gpus=0, include_webui=True, redis_address=args.redis_address)
 
     # Set seeds
     torch.manual_seed(args.seed)
@@ -320,10 +294,28 @@ def run_experiment(args):
     max_action = 1.0
     #max_action = float(env.action_space.high[0])
 
-    print("state_dim: {}".format(state_dim))
-    print("action_dim: {}".format(action_dim))
-    print("max_action dim: {}".format(max_action))
-    print("max_episode_steps: {}".format(max_traj_len))
+    print()
+    print("Synchronous Twin-Delayed Deep Deterministic policy gradients:")
+    print("\tenv:            {}".format(args.env_name))
+    print("\tmax traj len:   {}".format(args.max_traj_len))
+    print("\tseed:           {}".format(args.seed))
+    print("\tmirror:         {}".format(args.mirror))
+    print("\tnum procs:      {}".format(args.num_procs))
+    print("\tmin steps:      {}".format(args.min_steps))
+    print("\ta_lr:           {}".format(args.a_lr))
+    print("\tc_lr:           {}".format(args.c_lr))
+    print("\ttau:            {}".format(args.tau))
+    print("\tgamma:          {}".format(args.discount))
+    print("\tact noise:      {}".format(args.act_noise))
+    print("\tparam noise:    {}".format(args.param_noise))
+    if(args.param_noise):
+        print("\tnoise scale:    {}".format(args.noise_scale))
+    print("\tbatch size:     {}".format(args.batch_size))
+    
+    print("\tpolicy noise:   {}".format(args.policy_noise))
+    print("\tnoise clip:     {}".format(args.noise_clip))
+    print("\tpolicy freq:    {}".format(args.policy_freq))
+    print()
 
     # Initialize policy, replay buffer
     policy = TD3(state_dim, action_dim, max_action, a_lr=args.a_lr, c_lr=args.c_lr)
@@ -341,10 +333,10 @@ def run_experiment(args):
     timesteps_since_eval = 0
     episode_num = 0
     
-    # Evaluate untrained policy
+    # Evaluate untrained policy once
     ret, eplen = evaluate_policy(env_fn(), policy)
-    logger.add_scalar("Eval/Return", ret, total_updates)
-    logger.add_scalar("Eval/Eplen", eplen, total_updates)
+    logger.add_scalar("Test/Return", ret, total_updates)
+    logger.add_scalar("Test/Eplen", eplen, total_updates)
 
     while total_timesteps < args.max_timesteps:
 
@@ -356,16 +348,15 @@ def run_experiment(args):
         episode_num += args.num_procs
 
         # Logging rollouts
-        print("Total T: {} Episode Num: {} Episode T: {}".format(total_timesteps, episode_num, episode_timesteps))
+        print("Total T: {} Episode Num: {} Episode T: {} Foo: {}".format(total_timesteps, episode_num, episode_timesteps, timesteps_since_eval))
 
         # update the policy
-        avg_q1, avg_q2, avg_targ_q, q_loss, pi_loss, avg_action = policy.train(replay_buffer, episode_timesteps, args.batch_size, args.discount, args.tau, args.policy_noise, args.noise_clip, args.policy_freq)
+        avg_q1, avg_q2, q_loss, pi_loss, avg_action = policy.train(replay_buffer, episode_timesteps, args.batch_size, args.discount, args.tau, args.policy_noise, args.noise_clip, args.policy_freq)
         total_updates += episode_timesteps      # this is how many iterations we did updates for
 
         # Logging training
         logger.add_scalar("Train/avg_q1", avg_q1, total_updates)
         logger.add_scalar("Train/avg_q2", avg_q2, total_updates)
-        logger.add_scalar("Train/avg_targ_q", avg_targ_q, total_updates)
         logger.add_scalar("Train/q_loss", q_loss, total_updates)
         logger.add_scalar("Train/pi_loss", pi_loss, total_updates)
         logger.add_histogram("Train/avg_action", avg_action, total_updates)
@@ -376,21 +367,23 @@ def run_experiment(args):
             ret, eplen = evaluate_policy(env_fn(), policy)
 
             # Logging Eval
-            logger.add_scalar("Eval/Return", ret, total_updates)
-            logger.add_scalar("Eval/Eplen", eplen, total_updates)
-            logger.add_histogram("Eval/avg_action", avg_action, total_updates)
+            logger.add_scalar("Test/Return", ret, total_updates)
+            logger.add_scalar("Test/Eplen", eplen, total_updates)
+            logger.add_histogram("Test/avg_action", avg_action, total_updates)
 
             # Logging Totals
-            logger.add_scalar("Total/Timesteps", total_timesteps, total_updates)
-            logger.add_scalar("Total/ReplaySize", replay_buffer.ptr, total_updates)
+            logger.add_scalar("Misc/Timesteps", total_timesteps, total_updates)
+            logger.add_scalar("Misc/ReplaySize", replay_buffer.ptr, total_updates)
+
+            print("Total T: {}\tEval Return: {}\t Eval Eplen: {}".format(total_timesteps, ret, eplen))
 
             if args.save_models:
                 policy.save()
 
     # Final evaluation
     ret, eplen = evaluate_policy(env_fn(), policy)
-    logger.add_scalar("Eval/Return", ret, total_updates)
-    logger.add_scalar("Eval/Eplen", eplen, total_updates)
+    logger.add_scalar("Test/Return", ret, total_updates)
+    logger.add_scalar("Test/Eplen", eplen, total_updates)
 
     # Final Policy Save
     if args.save_models:
