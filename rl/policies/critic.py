@@ -116,6 +116,66 @@ class FF_Critic(Critic):
 
     return self.network_out(x)
 
+class Dual_Q_Critic(Critic):
+  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET'):
+    super(Dual_Q_Critic, self).__init__()
+
+    # Q1 architecture
+    self.q1_layers = nn.ModuleList()
+    self.q1_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.q1_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.q1_out = nn.Linear(hidden_size, action_dim)
+
+    # Q2 architecture
+    self.q2_layers = nn.ModuleList()
+    self.q2_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.q2_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.q2_out = nn.Linear(hidden_size, action_dim)
+
+    self.env_name = env_name
+
+  def forward(self, state, action):
+
+    # print(state.size(), state)
+    #print(action.size(), action)
+    if len(state.size()) > 2:
+      x1 = torch.cat([state, action], 2)
+    elif len(state.size()) > 1:
+      x1 = torch.cat([state, action], 1)
+    else:
+      x1 = torch.cat([state, action])
+
+    x2 = x1
+
+    # Q1 forward
+    for idx, layer in enumerate(self.q1_layers):
+      x1 = F.relu(layer(x1))
+
+    # Q2 forward
+    for idx, layer in enumerate(self.q2_layers):
+      x2 = F.relu(layer(x2))
+
+    return self.q1_out(x1), self.q2_out(x2)
+
+  def Q1(self, state, action):
+    #print(state.size(), state)
+    #print(action.size(), action)
+    if len(state.size()) > 2:
+      x1 = torch.cat([state, action], 2)
+    elif len(state.size()) > 1:
+      x1 = torch.cat([state, action], 1)
+    else:
+      x1 = torch.cat([state, action])
+    
+    # Q1 forward
+    for idx, layer in enumerate(self.q1_layers):
+      x1 = F.relu(layer(x1))
+
+    return self.q1_out(x1)
+
+
 class LSTM_Critic(Critic):
   def __init__(self, input_dim, action_dim, hidden_size=64, hidden_layers=1, env_name='NOT SET'):
     super(LSTM_Critic, self).__init__()

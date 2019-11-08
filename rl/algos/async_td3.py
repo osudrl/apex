@@ -79,16 +79,14 @@ def run_experiment(args):
     futures = [actor_id.collect_experience.remote() for actor_id in actors_ids]
 
     # start training loop for learner
-    while True:
-        learner_id.update_model.remote()
+    # while True:
+    #     learner_id.update_model.remote()
 
     # TODO: make evaluator its own ray object with separate loop
     # futures.append(evaluator_id...)
 
     # wait for training to complete (THIS DOESN'T WORK AND I DON'T KNOW WHY)
     ray.wait(futures, num_returns=len(futures))
-
-    print("Training over. Total Time Elapsed = {}".format(start - end))
 
 
 def select_action(perturbed_policy, unperturbed_policy, state, device, param_noise=None):
@@ -187,6 +185,11 @@ class ActorBuffer(object):
     def clear(self):
         self.storage = []
         self.ptr = 0
+
+    def send_to_global_replay(self, remote_replay_id):
+        ray.wait([remote_replay_id.add_bulk.remote(self.storage)])
+        # print("send experience over")
+        self.clear()
 
 
 @ray.remote
@@ -305,10 +308,10 @@ class Actor():
                     1 == self.max_traj_len else float(done)
                 episode_reward += reward
 
-                # Store data in replay buffer
+                # Store data in local replay buffer
                 transition = (obs, new_obs, action, reward, done_bool)
                 self.local_buffer.add(transition)
-                self.memory_id.add.remote(transition)
+                # self.memory_id.add.remote(transition)
 
                 # # call update from model server
                 # self.learner_id.update_model.remote(iterations=1)
@@ -328,8 +331,11 @@ class Actor():
             # episode is over, increment episode count and plot episode info
             self.episode_num += 1
 
-            # # call update from model server
-            # self.learner_id.update_model.remote(iterations=episode_timesteps)
+            # dump transitions from local buffer into global replay buffer (blocking call)
+            self.local_buffer.send_to_global_replay(self.memory_id)
+
+            # tell learner to update
+            self.learner_id.update_model.remote()
 
             # pass episode details to visdom logger on memory server
             if(self.viz_actor):
@@ -433,7 +439,7 @@ class Learner():
         foo = ray.get(self.memory.storage_size.remote())
 
         if foo < self.batch_size:
-            print("not enough experience yet: {}".format(foo))
+            # print("not enough experience yet: {}".format(foo))
             return
 
         start_time = time.time()
@@ -478,8 +484,7 @@ class Learner():
         # Delayed policy updates
         if self.update_counter % policy_freq == 0:
 
-            print("optimizing at timestep {} | time = {} | replay size = {} | update count = {} ".format(
-                self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.update_counter))
+            # print("optimizing at timestep {} | time = {} | replay size = {} | update count = {} ".format(self.step_count, time.time()-start_time, ray.get(self.memory.storage_size.remote()), self.update_counter))
 
             # Compute actor loss
             actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
@@ -516,6 +521,8 @@ class Learner():
     # TODO: make evaluator another remote actor to speed this up (currently bottleneck)
     def evaluate(self, trials=30, render_policy=True):
 
+        print("starting evaluation")
+
         start_time = time.time()
 
         # initialize evaluators
@@ -528,6 +535,8 @@ class Learner():
         for t in range(trials):
             # get result from a worker
             ready_ids, _ = ray.wait(evaluators, num_returns=1)
+
+            print("got result from worker")
 
             # update total rewards
             rewards, eplens = ray.get(ready_ids[0])

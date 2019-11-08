@@ -249,7 +249,7 @@ if __name__ == "__main__":
     # general args
     parser.add_argument("--logdir",       default="./logs/syncTD3/experiments/", type=str)
     parser.add_argument("--policy_name", default="TD3")					            # Policy name
-    parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
+    parser.add_argument("--env_name", default="Cassie-v0")                    # environment name
     parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
     parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
     parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
@@ -289,7 +289,7 @@ if __name__ == "__main__":
     from rl.algos.async_td3 import run_experiment
 
     # args common for actors and learners
-    parser.add_argument("--env_name", default="Cassie-mimic-v0")                    # environment name
+    parser.add_argument("--env_name", default="Cassie-v0")                    # environment name
     parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
     parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
     parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
@@ -310,11 +310,11 @@ if __name__ == "__main__":
     parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
     parser.add_argument("--policy_name", default="TD3")                             # Policy name
     parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
-    parser.add_argument("--initial_load_freq", default=1, type=int)                # initial amount of time between loading global model
+    parser.add_argument("--initial_load_freq", default=10, type=int)                # initial amount of time between loading global model
     parser.add_argument("--act_noise", default=0.1, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
     parser.add_argument('--param_noise', type=bool, default=False)                   # param noise
     parser.add_argument('--noise_scale', type=float, default=0.3)                   # noise scale for param noise
-    parser.add_argument("--taper_load_freq", type=bool, default=False)               # initial amount of time between loading global model
+    parser.add_argument("--taper_load_freq", type=bool, default=True)               # taper the load frequency over the course of training or not
     parser.add_argument("--viz_actors", default=False, action='store_true')         # Visualize actors in visdom or not
 
     # evaluator args
@@ -343,7 +343,7 @@ if __name__ == "__main__":
 
     # general args
     parser.add_argument("--policy_name", type=str, default="PPO")
-    parser.add_argument("--env_name", "-e",   default="Cassie-mimic-v0")
+    parser.add_argument("--env_name", "-e",   default="Cassie-v0")
     parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")        # Where to log diagnostics to
     parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
     parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds

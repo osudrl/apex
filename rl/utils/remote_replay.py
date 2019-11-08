@@ -46,6 +46,14 @@ class ReplayBuffer_remote(object):
         self.ptr = (self.ptr + 1) % self.max_size
         #print("Added experience to replay buffer.")
 
+    def add_bulk(self, data):
+        for i in range(len(data)):
+            self.add(data[i])
+
+    def print_size(self):
+        print("size = {}".format(len(self.storage)))
+
+
     def sample(self, batch_size):
         ind = np.random.randint(0, len(self.storage), size=batch_size)
         x, y, u, r, d = [], [], [], [], []
@@ -58,7 +66,7 @@ class ReplayBuffer_remote(object):
             r.append(np.array(R, copy=False))
             d.append(np.array(D, copy=False))
 
-        #print("Sampled experience from replay buffer.")
+        # print("Sampled experience from replay buffer.")
         return np.array(x), np.array(y), np.array(u), np.array(r).reshape(-1, 1), np.array(d).reshape(-1, 1)
 
     def get_transitions_from_range(self, start):
