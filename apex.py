@@ -26,7 +26,7 @@ def print_logo(subtitle="", option=2):
   print(subtitle)
   print("\n")
 
-def env_factory(path, state_est=True, mirror=False, **kwargs):
+def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
     from functools import partial
 
     """
@@ -261,10 +261,10 @@ if __name__ == "__main__":
     parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
     parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
     parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
-    parser.add_argument("--eval_freq", default=5e3, type=float)                     # How often (time steps) we evaluate
+    parser.add_argument("--eval_freq", default=5e4, type=float)                     # How often (time steps) we evaluate
     parser.add_argument("--max_timesteps", default=1e7, type=float)                 # Max time steps to run environment for
     parser.add_argument("--save_models", default=True, action="store_true")         # Whether or not models are saved
-    parser.add_argument("--act_noise", default=0.3, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
+    parser.add_argument("--act_noise", default=0.1, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
     parser.add_argument('--param_noise', type=bool, default=False)                  # param noise
     parser.add_argument('--noise_scale', type=float, default=0.3, metavar='G')      # initial scale of noise for param noise
     parser.add_argument("--batch_size", default=100, type=int)                      # Batch size for both actor and critic

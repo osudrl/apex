@@ -51,7 +51,6 @@ def parallel_collect_experience(policy, env_fn, act_noise, min_steps, max_traj_l
 
     merged_transitions = np.concatenate(all_transitions)
 
-    # print(merged_transitions.shape)
     return merged_transitions, len(merged_transitions)
 
 # sample experience for one episode and send to replay buffer
@@ -95,60 +94,17 @@ def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
     # episode is over, return all transitions from this episode (list of tuples)
     return local_buffer.get_all_transitions()
 
-# @ray.remote
-# @torch.no_grad()
-# def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
-
-#     env = env_fn()
-
-#     local_buffer = ReplayBuffer(max_size=min_steps)
-
-#     num_steps = 0
-#     # nested collection loop - collect experience until episode is over
-#     while num_steps < min_steps:
-        
-#         # reset environment
-#         obs = env.reset()
-#         done = False
-#         episode_reward = 0
-#         episode_timesteps = 0
-
-#         while not done and episode_timesteps < max_traj_len:
-
-#             # select action from policy
-#             action = policy.select_action(obs)
-#             if act_noise != 0:
-#                 action = (action + np.random.normal(0, act_noise, size=1)).clip(-1, 1)
-
-#             # Perform action
-#             new_obs, reward, done, _ = env.step(action)
-#             done_bool = 1.0 if episode_timesteps + 1 == max_traj_len else float(done)
-#             episode_reward += reward
-
-#             # Store data in replay buffer
-#             transition = (obs, new_obs, action, reward, done_bool)
-#             local_buffer.add(transition)
-
-#             # update state
-#             obs = new_obs
-
-#             # increment counters
-#             num_steps += 1
-#             episode_timesteps += 1
-
-#     # episode is over, return all transitions from this episode (list of tuples)
-#     return local_buffer.get_all_transitions()
 
 class TD3():
-    def __init__(self, state_dim, action_dim, max_action, a_lr, c_lr):
-        self.actor = O_Actor(state_dim, action_dim, max_action).to(device)
-        self.actor_target = O_Actor(state_dim, action_dim, max_action).to(device)
-        self.actor_perturbed = O_Actor(state_dim, action_dim, max_action).to(device)
+    def __init__(self, state_dim, action_dim, max_action, a_lr, c_lr, env_name='NOT_SET'):
+        self.actor = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
+        self.actor_target = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
+        self.actor_perturbed = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
-        self.critic = Critic(state_dim, action_dim, 256, 256).to(device)
-        self.critic_target = Critic(state_dim, action_dim, 256, 256).to(device)
+        self.critic = Critic(state_dim, action_dim, hidden_size=256, env_name=env_name).to(device)
+        self.critic_target = Critic(state_dim, action_dim, hidden_size=256, env_name=env_name).to(device)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=c_lr)
 
@@ -259,9 +215,9 @@ class TD3():
         print("Saving model")
 
         filetype = ".pt"  # pytorch model
-        torch.save(self.actor.state_dict(), os.path.join(
+        torch.save(self.actor, os.path.join(
             "./trained_models/syncTD3", "actor_model" + filetype))
-        torch.save(self.critic.state_dict(), os.path.join(
+        torch.save(self.critic, os.path.join(
             "./trained_models/syncTD3", "critic_model" + filetype))
 
     def load(self, model_path):
@@ -269,10 +225,10 @@ class TD3():
         critic_path = os.path.join(model_path, "critic_model.pt")
         print('Loading models from {} and {}'.format(actor_path, critic_path))
         if actor_path is not None:
-            self.actor.load_state_dict(torch.load(actor_path))
+            self.actor = torch.load(actor_path)
             self.actor.eval()
         if critic_path is not None:
-            self.critic.load_state_dict(torch.load(critic_path))
+            self.critic = torch.load(critic_path)
             self.critic.eval()
 
 def run_experiment(args):
@@ -318,7 +274,7 @@ def run_experiment(args):
     print()
 
     # Initialize policy, replay buffer
-    policy = TD3(state_dim, action_dim, max_action, a_lr=args.a_lr, c_lr=args.c_lr)
+    policy = TD3(state_dim, action_dim, max_action, a_lr=args.a_lr, c_lr=args.c_lr, env_name=args.env_name)
 
     replay_buffer = ReplayBuffer()
 
@@ -338,6 +294,8 @@ def run_experiment(args):
     logger.add_scalar("Test/Return", ret, total_updates)
     logger.add_scalar("Test/Eplen", eplen, total_updates)
 
+    policy.save()
+
     while total_timesteps < args.max_timesteps:
 
         # collect parallel experience and add to replay buffer
@@ -348,7 +306,7 @@ def run_experiment(args):
         episode_num += args.num_procs
 
         # Logging rollouts
-        print("Total T: {} Episode Num: {} Episode T: {} Foo: {}".format(total_timesteps, episode_num, episode_timesteps, timesteps_since_eval))
+        print("Total T: {} Episode Num: {} Episode T: {}".format(total_timesteps, episode_num, episode_timesteps))
 
         # update the policy
         avg_q1, avg_q2, q_loss, pi_loss, avg_action = policy.train(replay_buffer, episode_timesteps, args.batch_size, args.discount, args.tau, args.policy_noise, args.noise_clip, args.policy_freq)

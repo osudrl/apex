@@ -577,9 +577,9 @@ class Learner():
         print("Saving model")
 
         filetype = ".pt"  # pytorch model
-        torch.save(self.actor.state_dict(), os.path.join(
+        torch.save(self.actor, os.path.join(
             "./trained_models/asyncTD3", "actor_model" + filetype))
-        torch.save(self.critic.state_dict(), os.path.join(
+        torch.save(self.critic, os.path.join(
             "./trained_models/asyncTD3", "critic_model" + filetype))
 
     def load(self, model_path):
@@ -587,8 +587,8 @@ class Learner():
         critic_path = os.path.join(model_path, "critic_model.pt")
         print('Loading models from {} and {}'.format(actor_path, critic_path))
         if actor_path is not None:
-            self.actor.load_state_dict(torch.load(actor_path))
+            self.actor = torch.load(actor_path)
             self.actor.eval()
         if critic_path is not None:
-            self.critic.load_state_dict(torch.load(critic_path))
+            self.critic = torch.load(critic_path)
             self.critic.eval()
