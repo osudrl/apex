@@ -302,8 +302,8 @@ if __name__ == "__main__":
     parser.add_argument("--tau", default=0.005, type=float)                         # target update rate (tau)
     parser.add_argument("--update_freq", default=2, type=int)                      # how often to update learner
     parser.add_argument("--evaluate_freq", default=500, type=int)                    # how often to evaluate learner
-    parser.add_argument("--a_lr", type=float, default=1e-4)                         # Actor: Adam learning rate
-    parser.add_argument("--c_lr", type=float, default=1e-4)                         # Critic: Adam learning rate
+    parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
+    parser.add_argument("--c_lr", type=float, default=1e-3)                         # Critic: Adam learning rate
 
     # actor specific args
     parser.add_argument("--num_procs", default=30, type=int)                        # Number of actors
@@ -380,10 +380,12 @@ if __name__ == "__main__":
     sys.argv.remove(sys.argv[1])
 
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
+    parser.add_argument("--env_name", default=None, type=str)
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
 
-    eval_policy(policy)
+    eval_policy(policy, args.env_name)
+    
   else:
     print("Invalid algorithm '{}'".format(sys.argv[1]))
