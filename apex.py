@@ -189,8 +189,6 @@ if __name__ == "__main__":
     parser.add_argument("--save_model",   "-m",   default=None, type=str)               # where to save the trained model to
     parser.add_argument("--redis",                default=None)
     args = parser.parse_args()
-    if args.save_model == None:
-      args.save_model = './trained_models/ars/' + args.env_name + '.pt'
 
     run_experiment(args)
 

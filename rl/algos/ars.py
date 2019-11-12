@@ -229,6 +229,9 @@ def run_experiment(args):
 
   logger = create_logger(args)
 
+  if args.save_model is None:
+    args.save_model = os.path.join(logger.dir, 'actor.pt')
+
   env = env_thunk()
   while timesteps < args.timesteps:
     if not i % args.average_every:
