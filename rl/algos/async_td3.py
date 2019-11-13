@@ -43,11 +43,11 @@ def run_experiment(args):
     max_action = 1.0
 
     # Create replay buffer and remote logger
-    memory_id = ReplayBuffer_remote.remote(args.replay_size, args.name, args)
+    memory_id = ReplayBuffer_remote.remote(args.replay_size, args.policy_name, args)
     logger_id = TD3_logger.remote(args)
 
     # Create remote learner (learner will create the evaluators) and replay buffer
-    learner_id = Learner.remote(env_fn, memory_id, logger_id, args.max_timesteps, obs_dim, action_dim, args.a_lr, args.c_lr, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size, env_name=args.env_name)
+    learner_id = Learner.remote(env_fn, memory_id, logger_id, args.max_timesteps, obs_dim, action_dim, args.a_lr, args.c_lr, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size, env_name=args.env_name, policy_name=args.policy_name)
 
     # Create remote actors
     num_actors = args.num_procs - 3 # subtract replay buffer actor, learner actor, logger actor from
@@ -278,6 +278,9 @@ class Actor():
                 episode_timesteps += 1
                 self.actor_timesteps += 1
 
+                # tell learner to update
+                self.learner_id.update_model.remote()
+
                 # TODO: Is this inefficient because of how many actors there are?
                 # increment global step count
                 self.learner_id.increment_step_count.remote()
@@ -289,8 +292,8 @@ class Actor():
             ray.get(self.memory_id.add_bulk.remote(self.storage))
             self.storage.clear()
 
-            # tell learner to update
-            self.learner_id.update_model.remote()
+            # # tell learner to update
+            # self.learner_id.update_model.remote()
 
             # pass episode details to visdom logger on memory server
             if(self.viz_actor):
@@ -311,7 +314,7 @@ class Actor():
 class Learner():
     def __init__(self, env_fn, memory_server, logger_id, max_timesteps, state_space, action_space, a_lr, c_lr,
                  batch_size=500, discount=0.99, tau=0.005, update_freq=10,
-                 target_update_freq=2000, evaluate_freq=1000, render_policy=True, hidden_size=256, env_name='NOT_SET'):
+                 target_update_freq=2000, evaluate_freq=1000, render_policy=True, hidden_size=256, env_name='NOT_SET', policy_name='model'):
 
         self.device = torch.device('cpu')
 
@@ -373,6 +376,9 @@ class Learner():
         # render policy? This doesn't do anything atm
         self.render_policy = render_policy
 
+        # name for saving policy
+        self.policy_name = policy_name
+
         # start time for logging duration later
         self.start_time = time.time()
 
@@ -394,11 +400,11 @@ class Learner():
 
     def update_model(self, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
 
-        # foo = ray.get(self.memory.storage_size.remote())
+        foo = ray.get(self.memory.storage_size.remote())
 
-        # if foo < self.batch_size:
-        #     # print("not enough experience yet: {}".format(foo))
-        #     return
+        if foo < self.batch_size:
+            # print("not enough experience yet: {}".format(foo))
+            return
 
         start_time = time.time()
 
@@ -511,7 +517,7 @@ class Learner():
         self.logger.plot_eval_results.remote(self.step_count, avg_reward, avg_eplen, self.update_counter)
 
         # tell replay to plot hist of actor policy weights
-        self.logger.plot_policy_hist.remote(self.actor, self.update_counter)
+        # self.logger.plot_policy_hist.remote(self.actor, self.update_counter)
 
         return avg_reward
 
@@ -536,21 +542,9 @@ class Learner():
 
         filetype = ".pt"  # pytorch model
         torch.save(self.actor, os.path.join(
-            "./trained_models/asyncTD3", "actor_model" + filetype))
+            "./trained_models/asyncTD3", "actor_" + self.policy_name + filetype))
         torch.save(self.critic, os.path.join(
-            "./trained_models/asyncTD3", "critic_model" + filetype))
-
-    def load(self, model_path):
-        actor_path = os.path.join(model_path, "actor_model.pt")
-        critic_path = os.path.join(model_path, "critic_model.pt")
-        print('Loading models from {} and {}'.format(actor_path, critic_path))
-        if actor_path is not None:
-            self.actor = torch.load(actor_path)
-            self.actor.eval()
-        if critic_path is not None:
-            self.critic = torch.load(critic_path)
-            self.critic.eval()
-
+            "./trained_models/asyncTD3", "critic_" + self.policy_name + filetype))
 
 @ray.remote
 class TD3_logger(object):
@@ -566,7 +560,7 @@ class TD3_logger(object):
         self.logger.add_scalar("Test/Eplen", avg_eplen, update_count)
         self.logger.add_scalar("Misc/Total Timesteps", step_count, update_count)
         # self.logger.add_scalar("Misc/Replay Size", len(self.storage), update_count)
-        print("Total T: {}\tEval Return: {}\t Eval Eplen: {}".format(step_count, avg_reward, avg_eplen))
+        print("Total T: {}\t Update Count: {}\tEval Eplen: {}\tEval Return: {}".format(step_count, update_count, avg_reward, avg_eplen))
 
     def plot_actor_loss(self, update_count, actor_loss):
         self.logger.add_scalar("Train/pi_loss", actor_loss, update_count)
