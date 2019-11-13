@@ -10,6 +10,8 @@ from rl.algos import PPO
 from rl.policies import GaussianMLP
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
+from rl.envs.wrappers import SymmetricEnv
+
 import functools
 
 # TODO:
@@ -194,7 +196,7 @@ def run_experiment(args):
     # Environment
     if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
         # NOTE: importing cassie for some reason breaks openai gym, BUG ?
-        from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
+        from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, UnifiedCassieIKEnv
         from cassie.no_delta_env import CassieEnv_nodelta
         from cassie.speed_env import CassieEnv_speed
         from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
@@ -204,7 +206,8 @@ def run_experiment(args):
         # env_fn = gym_factory(args.env_name)
         #env_fn = make_env_fn(state_est=args.state_est)
         #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-        env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est, speed=args.speed)
+        # env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est, speed=args.speed)
+        env_fn = functools.partial(UnifiedCassieIKEnv, clock_based=True, state_est=args.state_est)
         print(env_fn().clock_inds)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
