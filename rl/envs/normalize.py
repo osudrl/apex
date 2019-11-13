@@ -21,8 +21,6 @@ def get_normalization_params(iter, policy, env_fn, noise_std):
 
         action = policy.act(state, deterministic=True)
 
-        print(action.shape)
-
         # add gaussian noise to deterministic action
         action = action + torch.randn(action.size()) * noise_std
 

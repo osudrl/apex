@@ -1,59 +1,66 @@
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-class FFPolicy(nn.Module):
-    def __init__(self):
-        super(FFPolicy, self).__init__()
-        self.env = None # Gym environment name string
+from torch import sqrt
 
-    def forward(self, x):
-        raise NotImplementedError
+def normc_fn(m):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        m.weight.data.normal_(0, 1)
+        m.weight.data *= 1 / torch.sqrt(m.weight.data.pow(2).sum(1, keepdim=True))
+        if m.bias is not None:
+            m.bias.data.fill_(0)
 
-    def act(self, inputs, deterministic=False):
-        value, x = self(inputs)
-        action = self.dist.sample(x, deterministic=deterministic)
-        return value, action.detach()
+# The base class for an actor. Includes functions for normalizing state (optional)
+class Net(nn.Module):
+  def __init__(self):
+    super(Net, self).__init__()
+    self.is_recurrent = False
 
-    def evaluate(self, inputs):
-        value, x = self(inputs)
-        return value, self.dist.evaluate(x)
+    self.welford_state_mean = torch.zeros(1)
+    self.welford_state_mean_diff = torch.ones(1)
+    self.welford_state_n = 1
 
-"""
-class RecurrentPolicy(nn.module):
-    def __init__(self):
-        super(Recurrent, self).__init__()
-        self.env = None # Gym environment name string
+    self.env_name = None
 
-class Actor(nn.Module):
-    def __init__(self):
-        super(Actor, self).__init__()
-        self.env = None # Gym environment name string
+  def forward(self):
+    raise NotImplementedError
 
-    def forward(self, x):
-        raise NotImplementedError
+  def normalize_state(self, state, update=True):
+    state = torch.Tensor(state)
 
-    def act(self, inputs, deterministic=False):
-        value, x = self(inputs)
-        action = self.dist.sample(x, deterministic=deterministic)
-        return value, action.detach()
+    if self.welford_state_n == 1:
+      self.welford_state_mean = torch.zeros(state.size(-1))
+      self.welford_state_mean_diff = torch.ones(state.size(-1))
 
-    def evaluate(self, inputs):
-        value, x = self(inputs)
-        return value, self.dist.evaluate(x)
+    if update:
+      if len(state.size()) == 1: # If we get a single state vector 
+        state_old = self.welford_state_mean
+        self.welford_state_mean += (state - state_old) / self.welford_state_n
+        self.welford_state_mean_diff += (state - state_old) * (state - state_old)
+        self.welford_state_n += 1
+      elif len(state.size()) == 2: # If we get a batch
+        print("NORMALIZING 2D TENSOR (this should not be happening)")
+        for r_n in r:
+          state_old = self.welford_state_mean
+          self.welford_state_mean += (state_n - state_old) / self.welford_state_n
+          self.welford_state_mean_diff += (state_n - state_old) * (state_n - state_old)
+          self.welford_state_n += 1
+      elif len(state.size()) == 3: # If we get a batch of sequences
+        print("NORMALIZING 3D TENSOR (this really should not be happening)")
+        for r_t in r:
+          for r_n in r_t:
+            state_old = self.welford_state_mean
+            self.welford_state_mean += (state_n - state_old) / self.welford_state_n
+            self.welford_state_mean_diff += (state_n - state_old) * (state_n - state_old)
+            self.welford_state_n += 1
+    return (state - self.welford_state_mean) / sqrt(self.welford_state_mean_diff / self.welford_state_n)
 
-class ActorCritic(nn.Module):
-    def __init__(self):
-        super(ActorCritic, self).__init__()
-        self.env = None # Gym environment name string
-
-    def forward(self, x):
-        raise NotImplementedError
-
-    def act(self, inputs, deterministic=False):
-        value, x = self(inputs)
-        action = self.dist.sample(x, deterministic=deterministic)
-        return value, action.detach()
-
-    def evaluate(self, inputs):
-        value, x = self(inputs)
-        return value, self.dist.evaluate(x)
-"""
+  def copy_normalizer_stats(self, net):
+    self.welford_state_mean = net.self_state_mean
+    self.welford_state_mean_diff = net.welford_state_mean_diff
+    self.welford_state_n = net.welford_state_n
+  
+  def initialize_parameters(self):
+    self.apply(normc_fn)

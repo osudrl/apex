@@ -189,8 +189,6 @@ if __name__ == "__main__":
     parser.add_argument("--save_model",   "-m",   default=None, type=str)               # where to save the trained model to
     parser.add_argument("--redis",                default=None)
     args = parser.parse_args()
-    if args.save_model == None:
-      args.save_model = './trained_models/ars/' + args.env_name + '.pt'
 
     run_experiment(args)
 
@@ -219,6 +217,7 @@ if __name__ == "__main__":
     parser.add_argument("--c_lr",           "-clr", default=1e-4,  type=float)    # adam learning rate for actor
     parser.add_argument("--traj_len",       "-tl",  default=1000,  type=int)      # max trajectory length for environment
     parser.add_argument("--center_reward",  "-r",   action='store_true')          # normalize rewards to a normal distribution
+    parser.add_argument("--normalize",              action='store_true')          # normalize states using welford's algorithm
     parser.add_argument("--batch_size",             default=64,    type=int)      # batch size for policy update
     parser.add_argument("--updates",                default=1,    type=int)       # (if recurrent) number of times to update policy per episode
     parser.add_argument("--eval_every",             default=100,   type=int)      # how often to evaluate the trained policy
@@ -381,11 +380,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
     parser.add_argument("--env_name", default=None, type=str)
+    parser.add_argument("--traj_len", default=400, type=str)
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
 
-    eval_policy(policy, env_name=args.env_name)
+
+    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len)
+
     
   else:
     print("Invalid algorithm '{}'".format(sys.argv[1]))
