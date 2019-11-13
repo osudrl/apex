@@ -385,7 +385,7 @@ if __name__ == "__main__":
 
     policy = torch.load(args.policy)
 
-    eval_policy(policy, args.env_name)
+    eval_policy(policy, env_name=args.env_name)
     
   else:
     print("Invalid algorithm '{}'".format(sys.argv[1]))
