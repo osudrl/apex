@@ -3,10 +3,13 @@ from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_para
 from rl.policies.actor import Scaled_FF_Actor as O_Actor
 from rl.policies.critic import Dual_Q_Critic as Critic
 
-from apex import print_logo
+# Plot results
+from apex import create_logger
 
 import time
 import os
+
+from collections import deque
 
 import numpy as np
 import torch
@@ -19,8 +22,6 @@ import gym
 import ray
 
 device = torch.device('cpu')
-
-
 
 def run_experiment(args):
     torch.set_num_threads(1);
@@ -41,12 +42,16 @@ def run_experiment(args):
     action_dim = env_fn().action_space.shape[0]
     max_action = 1.0
 
-    # Create remote learner (learner will create the evaluators) and replay buffer
+    # Create replay buffer and remote logger
     memory_id = ReplayBuffer_remote.remote(args.replay_size, args.name, args)
-    learner_id = Learner.remote(env_fn, memory_id, args.max_timesteps, obs_dim, action_dim, args.a_lr, args.c_lr, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size, env_name=args.env_name)
+    logger_id = TD3_logger.remote(args)
+
+    # Create remote learner (learner will create the evaluators) and replay buffer
+    learner_id = Learner.remote(env_fn, memory_id, logger_id, args.max_timesteps, obs_dim, action_dim, args.a_lr, args.c_lr, batch_size=args.batch_size, discount=args.discount, update_freq=args.update_freq, evaluate_freq=args.evaluate_freq, render_policy=args.render_policy, hidden_size=args.hidden_size, env_name=args.env_name)
 
     # Create remote actors
-    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, action_dim, args.start_timesteps // args.num_procs, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size, viz_actor=args.viz_actors, env_name=args.env_name) for i in range(args.num_procs)]
+    num_actors = args.num_procs - 3 # subtract replay buffer actor, learner actor, logger actor from
+    actors_ids = [Actor.remote(env_fn, learner_id, memory_id, logger_id, action_dim, args.start_timesteps // num_actors, args.initial_load_freq, args.taper_load_freq, args.act_noise, args.noise_scale, args.param_noise, i, hidden_size=args.hidden_size, viz_actor=args.viz_actors, env_name=args.env_name) for i in range(num_actors)]
 
     print()
     print("Asynchronous Twin-Delayed Deep Deterministic policy gradients:")
@@ -138,63 +143,10 @@ def evaluator(env, policy, max_traj_len, render_policy=False):
 
     return total_reward, total_steps
 
-class ActorBuffer(object):
-    def __init__(self, size):
-        """Create Replay buffer.
-        Parameters
-        ----------
-        size: int
-            Max number of transitions to store in the buffer. When the buffer
-            overflows the old memories are dropped.
-        """
-        self.storage = []
-        self.max_size = size
-        self.ptr = 0
-
-    def __len__(self):
-        return len(self.storage)
-
-    def storage_size(self):
-        return len(self.storage)
-
-    def add(self, data):
-        if len(self.storage) < self.max_size:
-            self.storage.append(data)
-        self.storage[int(self.ptr)] = data
-        self.ptr = (self.ptr + 1) % self.max_size
-        #print("Added experience to replay buffer.")
-
-    def get_transitions(self):
-        ind = np.arange(0, len(self.storage))
-        x, y, u, r, d = [], [], [], [], []
-
-        for i in ind:
-            X, Y, U, R, D = self.storage[i]
-            x.append(np.array(X, copy=False))
-            y.append(np.array(Y, copy=False))
-            u.append(np.array(U, copy=False))
-            r.append(np.array(R, copy=False))
-            d.append(np.array(D, copy=False))
-
-        #print("Sampled experience from replay buffer.")
-
-        self.clear()
-
-        return np.array(x), np.array(u)
-
-    def clear(self):
-        self.storage = []
-        self.ptr = 0
-
-    def send_to_global_replay(self, remote_replay_id):
-        ray.wait([remote_replay_id.add_bulk.remote(self.storage)])
-        # print("send experience over")
-        self.clear()
-
 
 @ray.remote
 class Actor():
-    def __init__(self, env_fn, learner_id, memory_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256, viz_actor=True, env_name='NOT_SET'):
+    def __init__(self, env_fn, learner_id, memory_id, logger_id, action_dim, start_timesteps, load_freq, taper_load_freq, act_noise, noise_scale, param_noise, id, hidden_size=256, viz_actor=True, env_name='NOT_SET'):
 
         self.device = torch.device('cpu')
 
@@ -209,6 +161,7 @@ class Actor():
         #self.policy = LN_Actor(self.state_dim, self.action_dim, self.max_action, 400, 300).to(device)
         self.learner_id = learner_id
         self.memory_id = memory_id
+        self.logger = logger_id
 
         # Action noise
         self.start_timesteps = start_timesteps
@@ -230,14 +183,16 @@ class Actor():
         # initial load frequency... make this taper down to 1 over time
         self.load_freq = load_freq
 
-        # Local replay buffer
-        self.local_buffer = ActorBuffer(self.max_traj_len * self.load_freq)
+        # Local storage buffer
+        self.storage = deque(maxlen=int(self.max_traj_len * self.load_freq))
 
         self.id = id
 
         self.viz_actor = viz_actor
 
         self.policy, self.training_done = ray.get(self.learner_id.get_global_policy.remote())
+
+        
 
     def collect_experience(self):
 
@@ -259,19 +214,19 @@ class Actor():
                 #global_policy_state_dict, training_done = ray.get(self.learner_id.get_global_policy.remote())
                 # self.policy.load_state_dict(global_policy_state_dict)
 
-                # If we have loaded a global model, we also need to update the param_noise based on the distance metric
-                if self.param_noise is not None:
-                    states, perturbed_actions = self.local_buffer.get_transitions()
-                    unperturbed_actions = np.array([select_action(
-                        self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
-                    dist = distance_metric(perturbed_actions, unperturbed_actions)
-                    self.param_noise.adapt(dist)
-                    # print("loaded global model and adapted parameter noise. Load duration = {}".format(duration))
-                    #print("loaded global model and adapted parameter noise")
-                else:
-                    # print("loaded global model.  Load duration = {}".format(duration))
-                    # print("loaded global model.")
-                    pass
+                # # If we have loaded a global model, we also need to update the param_noise based on the distance metric
+                # if self.param_noise is not None:
+                #     states, perturbed_actions = self.storage[]
+                #     unperturbed_actions = np.array([select_action(
+                #         self.policy_perturbed, self.policy, state, device, param_noise=None) for state in states])
+                #     dist = distance_metric(perturbed_actions, unperturbed_actions)
+                #     self.param_noise.adapt(dist)
+                #     # print("loaded global model and adapted parameter noise. Load duration = {}".format(duration))
+                #     #print("loaded global model and adapted parameter noise")
+                # else:
+                #     # print("loaded global model.  Load duration = {}".format(duration))
+                #     # print("loaded global model.")
+                #     pass
 
             obs = self.env.reset()
             done = False
@@ -309,8 +264,7 @@ class Actor():
                 episode_reward += reward
 
                 # Store data in local replay buffer
-                transition = (obs, new_obs, action, reward, done_bool)
-                self.local_buffer.add(transition)
+                self.storage.append((obs, new_obs, action, reward, done_bool))
                 # self.memory_id.add.remote(transition)
 
                 # # call update from model server
@@ -332,14 +286,15 @@ class Actor():
             self.episode_num += 1
 
             # dump transitions from local buffer into global replay buffer (blocking call)
-            self.local_buffer.send_to_global_replay(self.memory_id)
+            ray.get(self.memory_id.add_bulk.remote(self.storage))
+            self.storage.clear()
 
             # tell learner to update
             self.learner_id.update_model.remote()
 
             # pass episode details to visdom logger on memory server
             if(self.viz_actor):
-                self.memory_id.plot_actor_results.remote(self.id, self.actor_timesteps, episode_reward)
+                self.logger.plot_actor_results.remote(self.id, self.actor_timesteps, episode_reward)
 
             # # TODO: check if this is inefficient
             # # increment episode count and wait for that to complete
@@ -354,7 +309,7 @@ class Actor():
 
 @ray.remote(num_gpus=0)
 class Learner():
-    def __init__(self, env_fn, memory_server, max_timesteps, state_space, action_space, a_lr, c_lr,
+    def __init__(self, env_fn, memory_server, logger_id, max_timesteps, state_space, action_space, a_lr, c_lr,
                  batch_size=500, discount=0.99, tau=0.005, update_freq=10,
                  target_update_freq=2000, evaluate_freq=1000, render_policy=True, hidden_size=256, env_name='NOT_SET'):
 
@@ -393,6 +348,9 @@ class Learner():
 
         # experience replay
         self.memory = memory_server
+
+        # logger
+        self.logger = logger_id
 
         # env attributes
         self.state_dim = self.env.observation_space.shape[0]
@@ -436,11 +394,11 @@ class Learner():
 
     def update_model(self, policy_noise=0.2, noise_clip=0.5, policy_freq=2):
 
-        foo = ray.get(self.memory.storage_size.remote())
+        # foo = ray.get(self.memory.storage_size.remote())
 
-        if foo < self.batch_size:
-            # print("not enough experience yet: {}".format(foo))
-            return
+        # if foo < self.batch_size:
+        #     # print("not enough experience yet: {}".format(foo))
+        #     return
 
         start_time = time.time()
 
@@ -477,7 +435,7 @@ class Learner():
         critic_loss.backward()
         self.critic_optimizer.step()
 
-        self.memory.plot_critic_loss.remote(self.update_counter, critic_loss, torch.mean(current_Q1), torch.mean(current_Q2))
+        self.logger.plot_critic_loss.remote(self.update_counter, critic_loss, torch.mean(current_Q1), torch.mean(current_Q2))
 
         self.update_counter += 1            
 
@@ -503,7 +461,7 @@ class Learner():
                 target_param.data.copy_(
                     self.tau * param.data + (1 - self.tau) * target_param.data)
 
-            self.memory.plot_actor_loss.remote(self.update_counter, actor_loss)
+            self.logger.plot_actor_loss.remote(self.update_counter, actor_loss)
 
             # Evaluate and possibly save
             if self.eval_step_count > self.evaluate_freq:
@@ -550,10 +508,10 @@ class Learner():
         # return average reward
         avg_reward = total_rewards / trials
         avg_eplen = total_eplen / trials
-        self.memory.plot_eval_results.remote(self.step_count, avg_reward, avg_eplen, self.update_counter)
+        self.logger.plot_eval_results.remote(self.step_count, avg_reward, avg_eplen, self.update_counter)
 
         # tell replay to plot hist of actor policy weights
-        self.memory.plot_policy_hist.remote(self.actor, self.update_counter)
+        self.logger.plot_policy_hist.remote(self.actor, self.update_counter)
 
         return avg_reward
 
@@ -592,3 +550,38 @@ class Learner():
         if critic_path is not None:
             self.critic = torch.load(critic_path)
             self.critic.eval()
+
+
+@ray.remote
+class TD3_logger(object):
+    def __init__(self, args):
+
+        self.logger = create_logger(args)
+
+    def plot_actor_results(self, actor_id, actor_timesteps, episode_reward):
+        self.logger.add_scalar('Train/Return', episode_reward, actor_timesteps)
+
+    def plot_eval_results(self, step_count, avg_reward, avg_eplen, update_count):
+        self.logger.add_scalar("Test/Return", avg_reward, update_count)
+        self.logger.add_scalar("Test/Eplen", avg_eplen, update_count)
+        self.logger.add_scalar("Misc/Total Timesteps", step_count, update_count)
+        # self.logger.add_scalar("Misc/Replay Size", len(self.storage), update_count)
+        print("Total T: {}\tEval Return: {}\t Eval Eplen: {}".format(step_count, avg_reward, avg_eplen))
+
+    def plot_actor_loss(self, update_count, actor_loss):
+        self.logger.add_scalar("Train/pi_loss", actor_loss, update_count)
+
+    def plot_critic_loss(self, update_count, critic_loss, Q1_mean, Q2_mean):
+        self.logger.add_scalar("Train/q_loss", critic_loss, update_count)
+        self.logger.add_scalar("Train/avg_q1", Q1_mean, update_count)
+        self.logger.add_scalar("Train/avg_q2", Q2_mean, update_count)
+        # self.logger.add_scalar("Train/critic_Qs_mean", (Q1_mean + Q2_mean) / 2, update_count) # I don't think this is important enough to log
+
+    def plot_policy_hist(self, policy, update_count):
+        for name, param in policy.named_parameters():
+            self.logger.add_histogram("Model Params/"+name, param.data, update_count)
+            # once using distributional critic, plot that distribution
+
+    # # Used to verify that updates are not being bottlenecked (should keep going up straight)
+    # def plot_learner_progress(self, update_count, step_count):
+    #     self.logger.plot('Step Count', 'Update Count',split_name='train',title_name='Total Updates', x=step_count, y=update_count)

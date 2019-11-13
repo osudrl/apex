@@ -280,7 +280,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_experiment(args)
-  elif sys.argv[1] == 'td3_async':
+  elif sys.argv[1] == 'asyncTD3':
     sys.argv.remove(sys.argv[1])
     """
       Utility for running Twin-Delayed Deep Deterministic policy gradients (asynchronous).
