@@ -280,7 +280,16 @@ def run_experiment(args):
             normc_init=False
         )
 
-        policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+        if True:
+          normalizer = PreNormalizer(iter=args.input_norm_steps, noise_std=2, policy=policy, online=False)
+          env = normalizer(Vectorize([env_fn]))
+          mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
+          policy.obs_mean = torch.Tensor(mean)
+          policy.obs_std = torch.Tensor(std)
+
+        else:
+          policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+
         critic.obs_mean = policy.obs_mean
         policy_copy.obs_mean = policy.obs_mean
         critic.obs_std = policy.obs_std
