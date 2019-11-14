@@ -255,7 +255,7 @@ class CassieEnv_rand_dyn:
             self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
             self.sim.set_body_mass(np.clip(mass_noise, 0, None))
             self.sim.set_body_ipos(np.clip(com_noise, 0, None))
-            self.sim.set_ground_friction(np.clip(fric_noise, 0, 1))
+            self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
 
         self.phase = random.randint(0, self.phaselen)
         self.time = 0
