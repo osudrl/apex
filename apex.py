@@ -300,7 +300,7 @@ if __name__ == "__main__":
     parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
     parser.add_argument("--tau", default=0.005, type=float)                         # target update rate (tau)
     parser.add_argument("--update_freq", default=2, type=int)                      # how often to update learner
-    parser.add_argument("--evaluate_freq", default=50000, type=int)                    # how often to evaluate learner
+    parser.add_argument("--evaluate_freq", default=5000, type=int)                    # how often to evaluate learner
     parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
     parser.add_argument("--c_lr", type=float, default=1e-4)                         # Critic: Adam learning rate
 
