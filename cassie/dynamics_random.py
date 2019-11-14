@@ -250,13 +250,7 @@ class CassieEnv_rand_dyn:
             com_noise = [np.random.uniform(a, b) for a, b in com_range]
             """
 
-            #fric_noise = self.default_fric
-            f_f = 0.1
-            fric_noise = np.random.uniform(self.default_fric*(1-f_f), self.default_fric*(1+f_f))
-            #print(fric_noise)
-            #print(self.default_fric)
-            #input()
-
+            fric_noise = [np.random.uniform(0.3, 1.3)] + list(self.default_fric[1:])
 
             self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
             self.sim.set_body_mass(np.clip(mass_noise, 0, None))
