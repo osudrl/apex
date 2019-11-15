@@ -121,7 +121,7 @@ ray_timeline.json
 *.o*
 
 # trained models
-/trained_models/*.pt
+# /trained_models/*.pt
 
 # logging directory
 /logs
