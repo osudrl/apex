@@ -83,11 +83,11 @@ parser.add_argument("--max_grad_norm", type=float, default=0.5, help="Value to c
 parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
 
 args = parser.parse_args()
-args.mirror = False
+args.mirror = True
 args.state_est = True
 args.num_procs = 112
 args.num_steps = 12000 // args.num_procs
-args.input_norm_steps = 10000
+args.input_norm_steps = 100
 args.minibatch_size = 2048
 args.lr = 1e-4
 args.epochs = 5
@@ -95,8 +95,10 @@ args.max_traj_len = 300
 args.seed = int(time.time())
 args.max_grad_norm = 0.05
 args.use_gae = False
-args.name = "fwrd_walk_StateEst_trajmatch"
-args.logdir = "./logs/5k/"
+args.name = "fwrd_StateEst_symtuples_bounded_speedmatch_SGD_lr1e-5"
+args.logdir = "./logs/test/"
+# args.name = "test"
+# args.logdir = "./logs/test/"
 # Check if policy name already exists. If it does, increment filename
 index = ''
 while os.path.isfile(os.path.join("./trained_models/", args.name + index + ".pt")):
@@ -136,8 +138,9 @@ if __name__ == "__main__":
         from cassie.speed_sidestep_env import CassieEnv_speed_sidestep
 
         # set up cassie environment
-        env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
-        #env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", clock_based=True, state_est=args.state_est)
+        # env_fn = functools.partial(CassieEnv, "walking", clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=args.state_est)
+        # env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", clock_based=True, state_est=args.state_est)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
 
@@ -150,11 +153,13 @@ if __name__ == "__main__":
                             25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42]
             else:
                 # without state estimator
+                print("no state est")
                 mirror_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7,
                             8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36,
                             37, 38, 39, -26, -27, 28, 29, 30, 31, 32]
             
             mirror_obs += [i for i in range(obs_dim - env_fn().ext_size, obs_dim)]
+            print("mirror obs len: ", len(mirror_obs))
             env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=mirror_obs, mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
     else:
         import gym
@@ -167,20 +172,22 @@ if __name__ == "__main__":
     #env.seed(args.seed)
     #torch.manual_seed(args.seed)
 
-    policy = GaussianMLP(
-        obs_dim, action_dim, 
-        nonlinearity="relu", 
-        bounded=False, 
-        init_std=np.exp(-2), 
-        learn_std=False,
-        normc_init=False
-    )
+    # policy = GaussianMLP(
+    #     obs_dim, action_dim, 
+    #     nonlinearity="relu", 
+    #     bounded=True, 
+    #     init_std=np.exp(-2), 
+    #     learn_std=False,
+    #     normc_init=False
+    # )
+    policy = torch.load("./trained_models/fwrd_StateEst_mirloss_trajmatch.pt")
+
     # policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
-    normalizer = PreNormalizer(iter=args.input_norm_steps, noise_std=2, policy=policy, online=False)
-    env = normalizer(Vectorize([env_fn]))
-    mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
-    policy.obs_mean = torch.Tensor(mean)
-    policy.obs_std = torch.Tensor(std)
+    # normalizer = PreNormalizer(iter=args.input_norm_steps, noise_std=2, policy=policy, online=False)
+    # env = normalizer(Vectorize([env_fn]))
+    # mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
+    # policy.obs_mean = torch.Tensor(mean)
+    # policy.obs_std = torch.Tensor(std)
 
     # Load previous policy
     #policy = torch.load("./trained_models/sidestep/sidestep_StateEst_speed-05-2_freq1-2.pt")

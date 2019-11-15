@@ -26,11 +26,16 @@ class MirrorPPO(PPO):
         if env.clock_based:
             mirror_observation = env.mirror_clock_observation
         mirror_action = env.mirror_action
-
-        # minibatch_size = self.minibatch_size or advantages.numel()
-        # Use only half of minibatch_size since mirror states will double the minibatch size
-        minibatch_size = int(self.minibatch_size / 2) or advantages.numel()  
-        print("minibatch_size / 2: ", minibatch_size)
+        sym_tuples = True
+        mir_loss = False
+        print("minibatch_size / 2: ", self.minibatch_size)
+        if sym_tuples:
+            # Use only half of minibatch_size since mirror states will double the minibatch size
+            minibatch_size = int(self.minibatch_size / 2) or advantages.numel()
+        else:
+            minibatch_size = self.minibatch_size or advantages.numel()
+        
+        max_act = -np.inf
 
         for _ in range(self.epochs):
                 losses = []
@@ -49,7 +54,8 @@ class MirrorPPO(PPO):
                     #      obs_batch @ torch.Tensor(env.obs_symmetry_matrix)]
                     # ).detach()
 
-                    action_batch = actions[indices]
+                    # action_batch = actions[indices]
+                    orig_act = actions[indices]
                     # action_batch = torch.cat(
                     #     [action_batch,
                     #      action_batch @ torch.Tensor(env.action_symmetry_matrix)]
@@ -71,11 +77,23 @@ class MirrorPPO(PPO):
                         mir_obs = mirror_observation(orig_obs, env.clock_inds)
                     else:
                         mir_obs = mirror_observation(orig_obs)
-                    mir_actions = mirror_action(action_batch)
-                    obs_batch = torch.cat([orig_obs, mir_obs])
-                    action_batch = torch.cat([action_batch, mir_actions])
-                    return_batch = torch.cat([return_batch, return_batch])
-                    advantage_batch = torch.cat([advantage_batch, advantage_batch])
+                    if sym_tuples:
+                        mir_actions = mirror_action(orig_act)
+                        obs_batch = torch.cat([orig_obs, mir_obs])
+                        action_batch = torch.cat([orig_act, mir_actions])
+                        # obs_noise = 0.5*torch.rand(orig_obs.shape) - 0.25
+                        # obs_batch = torch.cat([orig_obs, obs_noise])
+                        # action_noise = 0.5*torch.rand(orig_act.shape) - 0.25
+                        # action_batch = torch.cat([orig_act, action_noise])
+                        return_batch = torch.cat([return_batch, return_batch])
+                        advantage_batch = torch.cat([advantage_batch, advantage_batch])
+                    else:
+                        obs_batch = orig_obs
+                        action_batch = orig_act
+
+                    # print("mirror act mean: {0:.3f}\t orig act mean: {1:.3f}".format(torch.mean(torch.abs(mir_actions)), torch.mean(torch.abs(orig_act))))
+                    if max_act < np.max(torch.abs(orig_act).numpy()):
+                        max_act = np.max(torch.abs(orig_act).numpy())
 
                     values, pdf = policy.evaluate(obs_batch)
 
@@ -95,12 +113,14 @@ class MirrorPPO(PPO):
                     critic_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                     # Mirror Symmetry Loss
-                    _, deterministic_actions = policy(obs_batch)
-                    if env.clock_based:
-                        mir_obs = mirror_observation(obs_batch, env.clock_inds)
-                        _, mirror_actions = policy(mir_obs)
-                    else: 
-                        _, mirror_actions = policy(mirror_observation(obs_batch))
+                    # _, deterministic_actions = policy(obs_batch)
+                    _, deterministic_actions = policy(orig_obs)
+                    _, mirror_actions = policy(mir_obs)
+                    # if env.clock_based:
+                    #     mir_obs = mirror_observation(obs_batch, env.clock_inds)
+                        # _, mirror_actions = policy(mir_obs)
+                    # else: 
+                        # _, mirror_actions = policy(mirror_observation(obs_batch))
                     mirror_actions = mirror_action(mirror_actions)
 
                     mirror_loss = 5 * (deterministic_actions - mirror_actions).pow(2).mean()
@@ -110,7 +130,11 @@ class MirrorPPO(PPO):
                     # TODO: add ability to optimize critic and actor seperately, with different learning rates
 
                     optimizer.zero_grad()
-                    (actor_loss + critic_loss + mirror_loss + entropy_penalty).backward()
+                    if mir_loss:
+                        (actor_loss + critic_loss + mirror_loss + entropy_penalty).backward()
+                    else:
+                        # print('no mirror loss')
+                        (actor_loss + critic_loss + entropy_penalty).backward()
 
                     # Clip the gradient norm to prevent "unlucky" minibatches from 
                     # causing pathalogical updates
@@ -130,7 +154,7 @@ class MirrorPPO(PPO):
                 if kl_divergence(pdf, old_pdf).mean() > 0.02:
                     print("Max kl reached, stopping optimization early.")
                     break
-        return np.mean(losses, axis=0)
+        return np.mean(losses, axis=0), max_act
 
     def train(self,
               env_fn,
@@ -140,7 +164,8 @@ class MirrorPPO(PPO):
 
         old_policy = deepcopy(policy)
 
-        optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
+        # optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
+        optimizer = optim.SGD(policy.parameters(), lr=self.lr)
 
         opt_time = np.zeros(n_itr)
         samp_time = np.zeros(n_itr)
@@ -150,6 +175,7 @@ class MirrorPPO(PPO):
 
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
+            print("Policy name: ", self.name)
 
             sample_start = time.time()
             batch = self.sample_parallel(env_fn, policy, self.num_steps, self.max_traj_len)
@@ -171,7 +197,7 @@ class MirrorPPO(PPO):
 
             optimizer_start = time.time()
 
-            losses = self.update(policy, old_policy, optimizer, observations, actions, returns, advantages, env_fn) 
+            losses, max_act = self.update(policy, old_policy, optimizer, observations, actions, returns, advantages, env_fn) 
            
             opt_time[itr] = time.time() - optimizer_start
             print("optimizer time elapsed: {:.2f} s".format(opt_time[itr]))        
@@ -192,6 +218,8 @@ class MirrorPPO(PPO):
 
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
+
+                grads = np.concatenate([p.grad.data.numpy().flatten() for p in policy.parameters() if p.grad is not None])
 
                 if type(logger) is Logger:
                     logger.record('Return (test)',avg_eval_reward, itr, 'Return', x_var_name='Iterations', split_name='test')
@@ -216,6 +244,13 @@ class MirrorPPO(PPO):
                     logger.add_scalar("Data/Return (batch)", avg_batch_reward, itr)
                     logger.add_scalar("Data/Mean Eplen", avg_ep_len, itr)
 
+                    logger.add_scalar("Gradients Info/Grad Norm", np.sqrt(np.mean(np.square(grads))), itr)
+                    logger.add_scalar("Gradients Info/Max Grad", np.max(np.abs(grads)), itr)
+                    logger.add_scalar("Gradients Info/Grad Var", np.var(grads), itr)
+
+                    logger.add_scalar("Action Info/Max action", max_act, itr)
+                    # logger.add_scalar("Action Info/Max mirror action", max_acts[1], itr)
+
                     logger.add_scalar("Misc/Mean KL Div", kl, itr)
                     logger.add_scalar("Misc/Mean Entropy", entropy, itr)
                     logger.add_scalar("Misc/Critic Loss", losses[2], itr)
@@ -225,6 +260,9 @@ class MirrorPPO(PPO):
                     logger.add_scalar("Misc/Sample Times", samp_time[itr], itr)
                     logger.add_scalar("Misc/Optimize Times", opt_time[itr], itr)
                     logger.add_scalar("Misc/Evaluation Times", eval_time[itr], itr)
+
+                    for i in range(pdf.loc.shape[1]): # go thru all actions
+                        logger.add_histogram("Action Dist/action_"+str(i), pdf.loc[:,i], itr)
                 else:
                     print("No Logger")
 

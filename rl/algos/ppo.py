@@ -239,17 +239,12 @@ class PPO:
         # Don't don't bother launching another process for single thread
         if self.n_proc > 1:
             real_proc = self.n_proc
-            if limit_cores:
-                real_proc = 24
-            # result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
+            if self.limit_cores:
+                print("limit cores active")
+                real_proc = 50
+                args = (self, env_fn, policy, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
             result_ids = [worker.remote(*args) for _ in range(real_proc)]
             result = ray.get(result_ids)
-            # result = []
-            # for i in range(self.n_proc):
-            #     result.append(worker.remote(*args))
-            #     print(ray.available_resources())
-            #     print("\n\n\n")
-            # result = [ray.get(proc_id) for proc_id in result]
         else:
             result = [worker._function(*args)]
         
@@ -269,7 +264,7 @@ class PPO:
             return merged
 
         total_buf = merge(result)
-        if len(total_buf) > min_steps * 1.5:
+        if len(total_buf) > min_steps*self.n_proc * 1.5:
             self.limit_cores = 1
         return total_buf
 
@@ -291,6 +286,7 @@ class PPO:
 
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
+            print("Policy name: ", self.name)
 
             sample_start = time.time()
             batch = self.sample_parallel(env_fn, policy, self.num_steps, self.max_traj_len)
@@ -422,6 +418,9 @@ class PPO:
                     logger.add_histogram("Misc/Sample Times", samp_time[0:itr+1], itr)
                     logger.add_histogram("Misc/Optimize Times", opt_time[0:itr+1], itr)
                     logger.add_histogram("Misc/Evaluation Times", eval_time[0:itr+1], itr)
+
+                    for i in range(pdf.loc.shape[1]): # go thru al actions
+                        logger.add_histogram("Action Dist/action_"+str(i), pdf.loc[:,i], itr)
                 else:
                     print("No logger")
 

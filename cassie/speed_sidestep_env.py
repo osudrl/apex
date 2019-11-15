@@ -85,7 +85,8 @@ class CassieEnv_speed_sidestep:
         self.max_force = 0
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        self.prev_action = ref_pos[self.pos_idx]
+        self.prev_action = None
+        self.curr_action = None
         self.phase_add = 1
         if self.state_est:
             self.clock_inds = [46, 47]
@@ -105,8 +106,9 @@ class CassieEnv_speed_sidestep:
         #real_action = (1-alpha)*self.prev_action + alpha*target
         #self.prev_action = real_action      # Save previous action
 
-        # real_action[4] += -1.5968
-        # real_action[9] += -1.5968
+        ######## Remove foot offset ########
+        real_action[4] -= -1.5968
+        real_action[9] -= -1.5968
                 
         self.u = pd_in_t()
         for i in range(5):
@@ -132,13 +134,26 @@ class CassieEnv_speed_sidestep:
         # self.max_force = max(foot_forces[0], foot_forces[1])
 
     def step(self, action):
+        ######## Linear Interpolate ########
+        # num_steps = int(self.simrate * 3/4)  # Number of steps to interpolate over. Should be between 0 and self.simrate
+        # alpha = 1 / num_steps
+        # if self.prev_action is not None:
+        #     for _ in range(self.simrate):            
+        #         self.step_simulation((1-alpha)*self.prev_action + alpha*action)
+        #         if alpha < 1:
+        #             alpha += 1 / num_steps
+        #         else:
+        #             alpha = 1
+        # else:
+        ######## Regular action (no interpolate) ######## 
         for _ in range(self.simrate):
             self.step_simulation(action)
-
+            
         height = self.sim.qpos()[2]
 
         self.time  += 1
         self.phase += self.phase_add
+        self.curr_action = action
 
         if self.phase > self.phaselen:
             self.phase = 0
@@ -148,6 +163,7 @@ class CassieEnv_speed_sidestep:
         done = not(height > 0.4 and height < 3.0)
 
         reward = self.compute_reward()
+        self.prev_action = action
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.3:
@@ -178,7 +194,7 @@ class CassieEnv_speed_sidestep:
         self.side_speed = 0.6*random.random() - 0.3
         self.phase_add = 1# + random.random()
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        self.prev_action = ref_pos[self.pos_idx]
+        self.prev_action = None
 
         return self.get_full_state()
 
@@ -200,7 +216,7 @@ class CassieEnv_speed_sidestep:
         self.cassie_state = self.sim.step_pd(self.u)
         self.phase_add = 1
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        self.prev_action = ref_pos[self.pos_idx]
+        self.prev_action = None
 
         return self.get_full_state()
     
@@ -308,49 +324,51 @@ class CassieEnv_speed_sidestep:
         #         )
         #     )  
 
-        # reward = np.sign(qvel[0])*qvel[0]**2
-        #forward_diff = np.abs(qvel[0] - self.speed)
-        #side_diff = np.abs(qvel[1] - self.side_speed)
-        # speed_rew = qvel[0]
-        #orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
-        # y_vel = np.abs(qvel[1])
-        #if forward_diff < 0.05:
+        # forward_diff = np.abs(qvel[0] - self.speed)
+        # side_diff = np.abs(qvel[1] - self.side_speed)
+        # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+        # if forward_diff < 0.05:
         #    forward_diff = 0
-        #if side_diff < 0.05:
+        # if side_diff < 0.05:
         #    side_diff = 0
-        # if y_vel < 0.03:
-        #   y_vel = 0
-        # straight_diff = np.abs(qpos[1])
-        # if straight_diff < 0.05:
-        #   straight_diff = 0
-        # Foot position penalty
+        ######## Foot position penalty ########
         #foot_pos = np.zeros(6)
         #self.sim.foot_pos(foot_pos)
         #foot_dist = np.linalg.norm(foot_pos[0:2]-foot_pos[3:5])
         #foot_penalty = 0
         #if foot_dist < 0.12:
         #    foot_penalty = 0.2
-        # Foot force penalty
-        #foot_forces = self.sim.get_foot_forces()
-        #lforce = max((foot_forces[0] - 700)/1000, 0)
-        #rforce = max((foot_forces[1] - 700)/1000, 0)
-        # Hip yaw penalty (pigeon/duck toed)
+        ######## Foot force penalty ########
+        # foot_forces = self.sim.get_foot_forces()
+        # lforce = max((foot_forces[0] - 700)/1000, 0)
+        # rforce = max((foot_forces[1] - 700)/1000, 0)
+        ######## Hip yaw penalty (pigeon/duck toed) #########
         # lhipyaw = qpos[8]
         # rhipyaw = qpos[22]
         # if lhipyaw < 0.05:
         #     lhipyaw = 0
         # if rhipyaw < 0.05:
         #     rhipyaw = 0
-        # Foot orientation penalty
+        ######## Foot orientation penalty #######
         #leuler = quaternion2euler(self.cassie_state.leftFoot.orientation)
         #reuler = quaternion2euler(self.cassie_state.rightFoot.orientation)
-        #reward = .4*np.exp(-forward_diff) + .3*np.exp(-side_diff) + .1*np.exp(-orient_diff) + \
-        #        .1*np.exp(-leuler[1]) + .1*np.exp(-reuler[1]) - foot_penalty - lforce - rforce
-        # desired_speed = 3.0
-        # speed_diff = np.abs(qvel[0] - desired_speed)
-        # if speed_diff > 1:
-        #     speed_diff = speed_diff**2
-        # reward = 20 - speed_diff
+        ######## Torque penalty ########
+        # torque = np.linalg.norm(self.cassie_state.motor.torque[:])        
+        ######## Pelvis z accel penalty #########
+        # pelaccel = np.abs(self.cassie_state.pelvis.translationalAcceleration[2])
+        # pelaccel_penalty = 0
+        # if pelaccel > 6:
+        #     pelaccel_penalty = (pelaccel - 6) / 30
+        ######## Prev action penalty ########
+        # if self.prev_action is not None:
+        #     prev_penalty = np.linalg.norm(self.curr_action - self.prev_action) / 4
+        # else:
+        #     prev_penalty = 0 
+        # print("prev penalty: ", prev_penalty)
+
+        # reward = .4*np.exp(-forward_diff) + .3*np.exp(-side_diff) + .3*np.exp(-orient_diff) - prev_penalty
+        # reward = .3*np.exp(-forward_diff) + .3*np.exp(-side_diff) + .2*np.exp(-orient_diff) + \
+        #        .2*np.exp(-torque / 80) - pelaccel_penalty
 
         return reward
 

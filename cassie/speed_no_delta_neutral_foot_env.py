@@ -1,6 +1,7 @@
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
 from .trajectory import CassieTrajectory
+from cassie.quaternion_function import *
 
 from math import floor
 
@@ -150,7 +151,10 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.counter = 0
 
         qpos, qvel = self.get_ref_state(self.phase)
-        # qpos[2] -= .1
+        # orientation = random.randint(-10, 10) * np.pi / 25
+        # quaternion = euler2quat(z=orientation, y=0, x=0)
+        # qpos[3:7] = quaternion
+        # # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
@@ -158,8 +162,8 @@ class CassieEnv_speed_no_delta_neutral_foot:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = (random.randint(-5, 10)) / 10
-        self.phase_add = 1#random.rand() * 2
+        self.speed = (random.randint(0, 10)) / 10
+        self.phase_add = 1 #+ random.random() * 0.5
 
         return self.get_full_state()
 
@@ -169,7 +173,7 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.time = 0
         self.counter = 0
         self.speed = 1
-        self.phase_add = 2
+        self.phase_add = 1
 
         qpos, qvel = self.get_ref_state(self.phase)
 
@@ -219,51 +223,51 @@ class CassieEnv_speed_no_delta_neutral_foot:
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
-        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        # ref_pos, ref_vel = self.get_ref_state(self.phase)
 
-        # TODO: should be variable; where do these come from?
-        # TODO: see magnitude of state variables to gauge contribution to reward
-        weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
+        # # TODO: should be variable; where do these come from?
+        # # TODO: see magnitude of state variables to gauge contribution to reward
+        # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
-        joint_error       = 0
-        com_error         = 0
-        orientation_error = 0
-        spring_error      = 0
+        # joint_error       = 0
+        # com_error         = 0
+        # orientation_error = 0
+        # spring_error      = 0
 
-        # each joint pos
-        for i, j in enumerate(self.pos_idx):
-            target = ref_pos[j]
-            actual = qpos[j]
+        # # each joint pos
+        # for i, j in enumerate(self.pos_idx):
+        #     target = ref_pos[j]
+        #     actual = qpos[j]
 
-            joint_error += 30 * weight[i] * (target - actual) ** 2
+        #     joint_error += 30 * weight[i] * (target - actual) ** 2
 
-        # center of mass: x, y, z
-        for j in [0, 1, 2]:
-            target = ref_pos[j]
-            actual = qpos[j]
+        # # center of mass: x, y, z
+        # for j in [0, 1, 2]:
+        #     target = ref_pos[j]
+        #     actual = qpos[j]
 
-            # NOTE: in Xie et al y target is 0
+        #     # NOTE: in Xie et al y target is 0
 
-            com_error += (target - actual) ** 2
+        #     com_error += (target - actual) ** 2
         
-        # COM orientation: qx, qy, qz
-        for j in [4, 5, 6]:
-            target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
-            actual = qpos[j]
+        # # COM orientation: qx, qy, qz
+        # for j in [4, 5, 6]:
+        #     target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
+        #     actual = qpos[j]
 
-            orientation_error += (target - actual) ** 2
+        #     orientation_error += (target - actual) ** 2
 
-        # left and right shin springs
-        for i in [15, 29]:
-            target = ref_pos[i] # NOTE: in Xie et al spring target is 0
-            actual = qpos[i]
+        # # left and right shin springs
+        # for i in [15, 29]:
+        #     target = ref_pos[i] # NOTE: in Xie et al spring target is 0
+        #     actual = qpos[i]
 
-            spring_error += 1000 * (target - actual) ** 2      
+        #     spring_error += 1000 * (target - actual) ** 2      
         
-        reward = 0.5 * np.exp(-joint_error) +       \
-                 0.3 * np.exp(-com_error) +         \
-                 0.1 * np.exp(-orientation_error) + \
-                 0.1 * np.exp(-spring_error)
+        # reward = 0.5 * np.exp(-joint_error) +       \
+        #          0.3 * np.exp(-com_error) +         \
+        #          0.1 * np.exp(-orientation_error) + \
+        #          0.1 * np.exp(-spring_error)
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
@@ -277,13 +281,18 @@ class CassieEnv_speed_no_delta_neutral_foot:
         #     )  
 
         # reward = np.sign(qvel[0])*qvel[0]**2
-        # diff = np.abs(qvel[0] - self.speed)
-        # reward = np.exp(-diff)
-        # desired_speed = 3.0
-        # speed_diff = np.abs(qvel[0] - desired_speed)
-        # if speed_diff > 1:
-        #     speed_diff = speed_diff**2
-        # reward = 20 - speed_diff
+        forward_diff = np.abs(qvel[0] - self.speed)
+        orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+        y_vel = np.abs(qvel[1])
+        if forward_diff < 0.05:
+           forward_diff = 0
+        if y_vel < 0.03:
+          y_vel = 0
+        straight_diff = np.abs(qpos[1])
+        if straight_diff < 0.05:
+          straight_diff = 0
+
+        reward = .4*np.exp(-forward_diff) + .3*np.exp(-orient_diff) + .1*np.exp(-y_vel) + .2*np.exp(-straight_diff)
 
         return reward
 
@@ -295,7 +304,7 @@ class CassieEnv_speed_no_delta_neutral_foot:
         if phase > self.phaselen:
             phase = 0
 
-        pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        pos = np.copy(self.trajectory.qpos[int(phase * self.simrate)])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
@@ -313,7 +322,7 @@ class CassieEnv_speed_no_delta_neutral_foot:
         # regardless of reference trajectory?
         pos[1] = 0
 
-        vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        vel = np.copy(self.trajectory.qvel[int(phase * self.simrate)])
         vel[0] *= self.speed
 
         return pos, vel
