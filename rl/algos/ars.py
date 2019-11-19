@@ -3,6 +3,8 @@ import torch
 import ray
 import time
 
+from apex import env_factory, create_logger
+
 # This function adapted from https://github.com/modestyachts/ARS/blob/master/code/shared_noise.py
 # (Thanks to Horia Mania)
 # In a nutshell, this created the deltas to be used in the experiment ahead of time.
@@ -90,7 +92,7 @@ class ARS_process(object):
     return ret
 
 class ARS:
-  def __init__(self, policy_thunk, env_thunk, step_size=0.02, std=0.0075, deltas=32, workers=4, top_n=None, seed=0):
+  def __init__(self, policy_thunk, env_thunk, step_size=0.02, std=0.0075, deltas=32, workers=4, top_n=None, seed=0, redis_addr=None):
     self.std = std
     self.num_deltas = deltas
     self.num_workers = workers
@@ -105,7 +107,10 @@ class ARS:
       self.top_n = deltas
 
     if not ray.is_initialized():
-      ray.init()
+      if redis_addr is not None:
+        ray.init(redis_address=redis_addr)
+      else:
+        ray.init()
 
     deltas_id  = create_shared_noise.remote(seed=seed, std=std)
     noise = ray.get(deltas_id)
@@ -136,8 +141,6 @@ class ARS:
 
     r_std = np.std(r_pos + r_neg)
 
-    #print("{:5.1f}".format(r_std), end=" | ")
-
     # if use top performing directions
     if self.top_n < self.num_deltas:
       sorted_indices = np.argsort(np.maximum(r_pos, r_neg))
@@ -152,3 +155,111 @@ class ARS:
         param.data += self.step_size * weighting * reward_factor * torch.from_numpy(d_param).data
     return timesteps
 
+def run_experiment(args):
+
+  # wrapper function for creating parallelized envs
+  env_thunk = env_factory(args.env_name)
+  with env_thunk() as env:
+      obs_space = env.observation_space.shape[0]
+      act_space = env.action_space.shape[0]
+
+  # wrapper function for creating parallelized policies
+  def policy_thunk():
+    from rl.policies.actor import FF_Actor, LSTM_Actor, Linear_Actor
+    if args.load_model is not None:
+      return torch.load(args.load_model)
+    else:
+      if not args.recurrent:
+        policy = Linear_Actor(obs_space, act_space, hidden_size=args.hidden_size).float()
+      else:
+        policy = LSTM_Actor(obs_space, act_space, hidden_size=args.hidden_size).float()
+
+      # policy parameters should be zero initialized according to ARS paper
+      for p in policy.parameters():
+        p.data = torch.zeros(p.shape)
+      return policy
+
+  # the 'black box' function that will get passed into ARS
+  def eval_fn(policy, env, reward_shift, traj_len, visualize=False, normalize=False):
+    if hasattr(policy, 'init_hidden_state'):
+      policy.init_hidden_state()
+
+    state = torch.tensor(env.reset()).float()
+    rollout_reward = 0
+    done = False
+
+    timesteps = 0
+    while not done and timesteps < traj_len:
+      if normalize:
+        state = policy.normalize_state(state)
+      action = policy.forward(state).detach().numpy()
+      state, reward, done, _ = env.step(action)
+      state = torch.tensor(state).float()
+      rollout_reward += reward - reward_shift
+      timesteps+=1
+    return rollout_reward, timesteps
+  import locale
+  locale.setlocale(locale.LC_ALL, '')
+
+  print("Augmented Random Search:")
+  print("\tenv:          {}".format(args.env_name))
+  print("\tseed:         {}".format(args.seed))
+  print("\ttimesteps:    {:n}".format(args.timesteps))
+  print("\tstd:          {}".format(args.std))
+  print("\tdeltas:       {}".format(args.deltas))
+  print("\tstep size:    {}".format(args.lr))
+  print("\treward shift: {}".format(args.reward_shift))
+  print()
+  algo = ARS(policy_thunk, env_thunk, deltas=args.deltas, step_size=args.lr, std=args.std, workers=args.workers, redis_addr=args.redis)
+
+  if args.algo not in ['v1', 'v2']:
+    print("Valid arguments for --algo are 'v1' and 'v2'")
+    exit(1)
+  elif args.algo == 'v2':
+    normalize_states = True
+  else:
+    normalize_states = False
+
+  def black_box(p, env):
+    return eval_fn(p, env, args.reward_shift, args.traj_len, normalize=normalize_states)
+
+  avg_reward = 0
+  timesteps = 0
+  i = 0
+
+  logger = create_logger(args)
+
+  if args.save_model is None:
+    args.save_model = os.path.join(logger.dir, 'actor.pt')
+
+  env = env_thunk()
+  while timesteps < args.timesteps:
+    if not i % args.average_every:
+      avg_reward = 0
+      print()
+
+    start = time.time()
+    samples = algo.step(black_box)
+    elapsed = time.time() - start
+    iter_reward = 0
+    for eval_rollout in range(10):
+      reward, _ = eval_fn(algo.policy, env, 0, args.traj_len, normalize=normalize_states)
+      iter_reward += reward / 10
+
+
+    timesteps += samples
+    avg_reward += iter_reward
+    secs_per_sample = 1000 * elapsed / samples
+    print(("iter {:4d} | "
+           "ret {:6.2f} | "
+           "last {:3d} iters: {:6.2f} | "
+           "{:0.4f}s per 1k steps | "
+           "timesteps {:10n}").format(i+1,  \
+            iter_reward, (i%args.average_every)+1,      \
+            avg_reward/((i%args.average_every)+1), \
+            secs_per_sample, timesteps),    \
+            end="\r")
+    i += 1
+
+    logger.add_scalar('eval', iter_reward, timesteps)
+    torch.save(algo.policy, args.save_model)
