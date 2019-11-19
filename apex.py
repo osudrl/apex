@@ -26,7 +26,7 @@ def print_logo(subtitle="", option=2):
   print(subtitle)
   print("\n")
 
-def env_factory(path, state_est=False, mirror=False, speed=None, clock_based=True, **kwargs):
+def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=True, **kwargs):
     from functools import partial
 
     """
