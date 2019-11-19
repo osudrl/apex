@@ -43,7 +43,7 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
-        env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=True)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
       elif path == 'CassieRandomDynamics-v0':
@@ -53,7 +53,7 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
           from rl.envs.wrappers import SymmetricEnv
           if state_est:
               # with state estimator
-              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
           else:
               # without state estimator
               env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
