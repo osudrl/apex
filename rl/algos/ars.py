@@ -92,7 +92,7 @@ class ARS_process(object):
     return ret
 
 class ARS:
-  def __init__(self, policy_thunk, env_thunk, step_size=0.02, std=0.0075, deltas=32, workers=4, top_n=None, seed=0):
+  def __init__(self, policy_thunk, env_thunk, step_size=0.02, std=0.0075, deltas=32, workers=4, top_n=None, seed=0, redis_addr=None):
     self.std = std
     self.num_deltas = deltas
     self.num_workers = workers
@@ -107,7 +107,10 @@ class ARS:
       self.top_n = deltas
 
     if not ray.is_initialized():
-      ray.init()
+      if redis_addr is not None:
+        ray.init(redis_address=redis_addr)
+      else:
+        ray.init()
 
     deltas_id  = create_shared_noise.remote(seed=seed, std=std)
     noise = ray.get(deltas_id)
@@ -189,7 +192,7 @@ def run_experiment(args):
     while not done and timesteps < traj_len:
       if normalize:
         state = policy.normalize_state(state)
-      action = policy.forward(state).detach()
+      action = policy.forward(state).detach().numpy()
       state, reward, done, _ = env.step(action)
       state = torch.tensor(state).float()
       rollout_reward += reward - reward_shift
@@ -207,7 +210,7 @@ def run_experiment(args):
   print("\tstep size:    {}".format(args.lr))
   print("\treward shift: {}".format(args.reward_shift))
   print()
-  algo = ARS(policy_thunk, env_thunk, deltas=args.deltas, step_size=args.lr, std=args.std, workers=args.workers)
+  algo = ARS(policy_thunk, env_thunk, deltas=args.deltas, step_size=args.lr, std=args.std, workers=args.workers, redis_addr=args.redis)
 
   if args.algo not in ['v1', 'v2']:
     print("Valid arguments for --algo are 'v1' and 'v2'")
@@ -225,6 +228,9 @@ def run_experiment(args):
   i = 0
 
   logger = create_logger(args)
+
+  if args.save_model is None:
+    args.save_model = os.path.join(logger.dir, 'actor.pt')
 
   env = env_thunk()
   while timesteps < args.timesteps:

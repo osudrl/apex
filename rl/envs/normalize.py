@@ -19,7 +19,7 @@ def get_normalization_params(iter, policy, env_fn, noise_std):
 
         state = torch.Tensor(state)
 
-        _, action = policy.act(state, deterministic=True)
+        action = policy.act(state, deterministic=True)
 
         # add gaussian noise to deterministic action
         action = action + torch.randn(action.size()) * noise_std

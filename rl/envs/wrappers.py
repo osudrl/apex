@@ -71,7 +71,7 @@ def _get_symmetry_matrix(mirrored):
     numel = len(mirrored)
     mat = np.zeros((numel, numel))
 
-    for (i, j) in zip(np.arange(numel), np.abs(mirrored)):
+    for (i, j) in zip(np.arange(numel), np.abs(np.array(mirrored).astype(int))):
         mat[i, j] = np.sign(mirrored[i])
 
     return mat
