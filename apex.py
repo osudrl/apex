@@ -45,9 +45,9 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
       if path == 'Cassie-v0':
         env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=True)
       elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=False, state_est=False)
       elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=False, state_est=False)
 
       if mirror:
           from rl.envs.wrappers import SymmetricEnv
