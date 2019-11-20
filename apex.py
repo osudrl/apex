@@ -39,15 +39,18 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
-      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
+    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', 'CassieStandingEnv']:
+      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq, CassieStandingEnv
 
       if path == 'Cassie-v0':
         env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=True)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=False, state_est=False)
-      elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=False, state_est=False)
+      elif path == 'CassieGroundFrictionEnv':
+        env_fn = partial(CassieGroundFrictionEnv, "walking", simrate=60, clock_based=False, state_est=True, torsional_friction=0.005)
+      elif path == 'CassieStandingEnv':
+        env_fn = partial(CassieStandingEnv, simrate=60)
+
 
       if mirror:
           from rl.envs.wrappers import SymmetricEnv
@@ -369,6 +372,9 @@ if __name__ == "__main__":
 
     # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
+
+    # arg for training on ground_friction_env
+    parser.add_argument("--torsional_friction", type=float, default=0.005)              # change torsional friction
 
     args = parser.parse_args()
     args.num_steps = args.num_steps // args.num_procs
