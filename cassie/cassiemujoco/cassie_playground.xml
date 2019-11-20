@@ -78,45 +78,45 @@
 
   <worldbody>
     <!-- start location 0 - steps -->
-    <geom conaffinity="1" condim="3" type="hfield" hfield="start" pos="-1.0 0 0.0"  material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="start" pos="-1.0 0 0.0"  material="plane" friction=".8 .1 .1" />
     <!-- steps geom -->
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="1.5 0 0.1"  material="plane" friction=".8 .1 .1" />
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="2.0 0 0.2"  material="plane" friction=".8 .1 .1" />
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="2.5 0 0.3"  material="plane" friction=".8 .1 .1" />
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="3.0 0 0.4"  material="plane" friction=".8 .1 .1" />
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="3.5 0 0.5"  material="plane" friction=".8 .1 .1" />
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="4.0 0 0.4"  material="plane" friction=".8 .1 .1" />
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="4.5 0 0.3"  material="plane" friction=".8 .1 .1" />
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="5.0 0 0.2"  material="plane" friction=".8 .1 .1" />
-    <geom conaffinity="1" condim="3" type="hfield" hfield="step" pos="5.5 0 0.1"  material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="1.5 0 0.1"   material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="2.0 0 0.2"   material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="2.5 0 0.3"   material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="3.0 0 0.4"   material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="3.5 0 0.5"   material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="4.0 0 0.4"   material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="4.5 0 0.3"   material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="5.0 0 0.2"   material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="step"  pos="5.5 0 0.1"   material="plane" friction=".8 .1 .1" />
 
     <!-- start location 1 - slope -->
-    <geom conaffinity="1" condim="3" type="hfield" hfield="start" pos="8.5 0 0.0"  material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="start" pos="8.5 0 0.0"  material="plane" friction=".8 .1 .1" />
     <!-- slope geom -->
     <geom name='slope'      pos='16 0 0'  size='5 5 .125' type='hfield' material='plane' condim='3' conaffinity='15' hfield="slope"/>
 
     <!-- start location 2 - pyramid -->
-    <geom conaffinity="1" condim="3" type="hfield" hfield="start" pos="23.5 0 0.0"  material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="start" pos="23.5 0 0.0"  material="plane" friction=".8 .1 .1" />
     <!-- pyramid geom -->
     <geom name='pyramid'    pos='31 0 0'  size='5 5 .125' type='hfield' material='plane' condim='3' conaffinity='15' hfield="pyramid"/>
 
     <!-- start location 3 - bowl -->
-    <geom conaffinity="1" condim="3" type="hfield" hfield="start" pos="38.5 0 0.0"  material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="start" pos="38.5 0 0.0"  material="plane" friction=".8 .1 .1" />
       <!-- bowl geom, drop should be the negative max height value set in the height field-->
     <geom name='bowl'       pos='46 0 -0.7'   size='5 5 .125' type='hfield' material='plane' condim='3' conaffinity='15' hfield="bowl"/>
 
     <!-- start location 4 - hill -->
-    <geom conaffinity="1" condim="3" type="hfield" hfield="start" pos="53.5 0 0.0"  material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="start" pos="53.5 0 0.0"  material="plane" friction=".8 .1 .1" />
     <!-- hill geom -->
     <geom name='hill'        pos='61 0 0'   size='5 5 .125' type='hfield' material='plane' condim='3' conaffinity='15' hfield="hill"/>
 
     <!-- start location 4 - hill -->
-    <geom conaffinity="1" condim="3" type="hfield" hfield="start" pos="68.5 0 0.0"  material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="start" pos="68.5 0 0.0"  material="plane" friction=".8 .1 .1" />
     <!-- side hill geom -->
     <geom name='side_hill'   pos='76 0 0' size='5 5 .125' type='hfield' material='plane' condim='3' conaffinity='15' hfield="side_hill"/>
 
     <!-- end walking strip -->
-    <geom conaffinity="1" condim="3" type="hfield" hfield="start" pos="83.5 0 0.0"  material="plane" friction=".8 .1 .1" />
+    <geom conaffinity="15" condim="3" type="hfield" hfield="start" pos="83.5 0 0.0"  material="plane" friction=".8 .1 .1" />
 
 
 
