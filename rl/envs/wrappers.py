@@ -57,8 +57,8 @@ class SymmetricEnv:
     # when the SymmeticEnv is created should not move the clock input order. The indices of the obs vector
     # where the clocks are located need to be inputted.
     def mirror_clock_observation(self, obs, clock_inds):
-        print(obs.shape)
-        print(self.obs_mirror_matrix.shape)
+        # print(obs.shape)
+        # print(self.obs_mirror_matrix.shape)
         mirror_obs = obs @ self.obs_mirror_matrix
         clock = mirror_obs[:, self.clock_inds]
         # print("clock: ", clock)
@@ -71,7 +71,7 @@ def _get_symmetry_matrix(mirrored):
     numel = len(mirrored)
     mat = np.zeros((numel, numel))
 
-    for (i, j) in zip(np.arange(numel), np.abs(mirrored)):
+    for (i, j) in zip(np.arange(numel), np.abs(np.array(mirrored).astype(int))):
         mat[i, j] = np.sign(mirrored[i])
 
     return mat

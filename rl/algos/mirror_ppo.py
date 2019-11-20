@@ -66,11 +66,12 @@ class MirrorPPO(PPO):
                     #      advantage_batch]
                     # ).detach()
 
-                    values, pdf = policy.evaluate(obs_batch)
+                    values = critic.act(obs_batch)
+                    pdf = policy.evaluate(obs_batch)
 
                     # TODO, move this outside loop?
                     with torch.no_grad():
-                        _, old_pdf = old_policy.evaluate(obs_batch)
+                        old_pdf = old_policy.evaluate(obs_batch)
                         old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
                     
                     log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
@@ -84,12 +85,12 @@ class MirrorPPO(PPO):
                     critic_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                     # Mirror Symmetry Loss
-                    _, deterministic_actions = policy(obs_batch)
+                    deterministic_actions = policy(obs_batch)
                     if env.clock_based:
                         mir_obs = mirror_observation(obs_batch, env.clock_inds)
-                        _, mirror_actions = policy(mir_obs)
+                        mirror_actions = policy(mir_obs)
                     else: 
-                        _, mirror_actions = policy(mirror_observation(obs_batch))
+                        mirror_actions = policy(mirror_observation(obs_batch))
                     mirror_actions = mirror_action(mirror_actions)
 
                     mirror_loss = 4 * (deterministic_actions - mirror_actions).pow(2).mean()
@@ -175,6 +176,8 @@ class MirrorPPO(PPO):
                 test = self.sample_parallel(env_fn, policy, critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
+                avg_eval_reward = np.mean(test.ep_returns)
+
                 pdf     = policy.evaluate(observations)
                 old_pdf = old_policy.evaluate(observations)
 
@@ -187,8 +190,6 @@ class MirrorPPO(PPO):
                 logger.add_scalar("Train/Mean KL Div", kl, itr)
                 logger.add_scalar("Train/Mean Entropy", entropy, itr)
                 logger.add_scalar("Misc/Timesteps", self.total_steps, itr)
-
-                logger.dump()
 
             # TODO: add option for how often to save model
             if np.mean(test.ep_returns) > self.max_return:
@@ -280,16 +281,7 @@ def run_experiment(args):
             normc_init=False
         )
 
-        if True:
-          normalizer = PreNormalizer(iter=args.input_norm_steps, noise_std=2, policy=policy, online=False)
-          env = normalizer(Vectorize([env_fn]))
-          mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
-          policy.obs_mean = torch.Tensor(mean)
-          policy.obs_std = torch.Tensor(std)
-
-        else:
-          policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
-
+        policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
         critic.obs_mean = policy.obs_mean
         policy_copy.obs_mean = policy.obs_mean
         critic.obs_std = policy.obs_std
