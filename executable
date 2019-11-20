@@ -1,0 +1,4 @@
+#!/bin/bash
+
+python apex.py ppo --torsional_friction 0.001
+
