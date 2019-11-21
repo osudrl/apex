@@ -10,6 +10,17 @@ import random
 
 import pickle
 
+def getAllTrajectories(speeds):
+    trajectories = []
+
+    for i, speed in enumerate(speeds):
+        dirname = os.path.dirname(__file__)
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajs", "walkCycle_{}.pkl".format(speed))
+        trajectories.append(CassieIKTrajectory(traj_path))
+
+    return trajectories
+
+
 class CassieIKTrajectory:
     def __init__(self, filepath):
         with open(filepath, "rb") as f:
@@ -22,8 +33,8 @@ class CassieIKTrajectory:
         self.lfoot = np.copy(trajectory["lfoot"])
 
 # simrate used to be 60
-class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, speed=0.0):
+class UnifiedCassieIKEnv:
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -31,10 +42,10 @@ class CassieIKEnv:
         self.state_est = state_est
 
         if clock_based:
-            self.observation_space = np.zeros(42)
+            self.observation_space = np.zeros(42 + 1)
             self.clock_inds = [40, 41]
             if self.state_est:
-                self.observation_space = np.zeros(48)       # Size for use with state est
+                self.observation_space = np.zeros(48 + 1)       # Size for use with state est
                 self.clock_inds = [46, 47]
         else:
             self.observation_space = np.zeros(80)
@@ -42,11 +53,12 @@ class CassieIKEnv:
                 self.observation_space = np.zeros(86)       # Size for use without state est
         self.action_space      = np.zeros(10)
 
-        dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsImprovedCost/walkCycle_{}.pkl".format(speed))
-        print("loaded trajectory file: " + "aslipTrajsTaller/walkCycle_{}.pkl".format(speed))
 
-        self.trajectory = CassieIKTrajectory(traj_path)
+
+        # hashmap to map speed to index
+        self.speeds = [x / 10 for x in range(0, 31)]
+        self.trajectories = getAllTrajectories(self.speeds)
+        self.num_speeds = len(self.trajectories)
 
         self.P = np.array([100,  100,  88,  96,  50]) 
         self.D = np.array([10.0, 10.0, 8.0, 9.6, 5.0])
@@ -59,6 +71,10 @@ class CassieIKEnv:
         self.time    = 0 # number of time steps in current episode
         self.phase   = 0 # portion of the phase the robot is in
         self.counter = 0 # number of phase cycles completed in episode
+
+        # NOTE: each trajectory in trajectories should have the same length
+        self.current_traj_speed = self.speeds[0]
+        self.trajectory = self.trajectories[0]
 
         # NOTE: a reference trajectory represents ONE phase cycle
 
@@ -160,6 +176,9 @@ class CassieIKEnv:
         return self.get_full_state(), reward, done, {}
 
     def reset(self):
+        random_speed_idx = random.randint(0, self.num_speeds-1)
+        self.current_traj_speed = self.speeds[random_speed_idx]
+        self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
         self.phase = random.randint(0, self.phaselen)
         # self.phase = 0
         self.time = 0
@@ -169,7 +188,7 @@ class CassieIKEnv:
         # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel * 0.333)
+        self.sim.set_qvel(qvel)
         # self.sim.set_qvel(np.zeros(qvel.shape))
 
         # Need to reset u? Or better way to reset cassie_state than taking step
@@ -183,6 +202,9 @@ class CassieIKEnv:
 
     # used for plotting against the reference trajectory
     def reset_for_test(self):
+        random_speed_idx = random.randint(0, self.num_speeds)
+        self.current_traj_speed = self.speeds[random_speed_idx]
+        self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
         self.phase = 0
         self.time = 0
         self.counter = 0
@@ -400,7 +422,7 @@ class CassieIKEnv:
             clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                      np.cos(2 * np.pi *  self.phase / self.phaselen)]
             
-            ext_state = clock
+            ext_state = ext_state = np.concatenate((clock, [self.current_traj_speed]))
 
         else:
             ext_state = np.concatenate([ref_pos[pos_index], ref_vel[vel_index]])

@@ -39,7 +39,7 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
+    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', 'CassieIK-v0']:
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
@@ -48,6 +48,8 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+      elif path == 'CassieIK-v0':
+        env_fn = partial(CassieIKEnv, "walking", clock_based=True, state_est=state_est, speed=speed)
 
       if mirror:
           from rl.envs.wrappers import SymmetricEnv
@@ -341,7 +343,7 @@ if __name__ == "__main__":
 
     # general args
     parser.add_argument("--policy_name", type=str, default="PPO")
-    parser.add_argument("--env_name", "-e",   default="Cassie-v0")
+    parser.add_argument("--env_name", "-e",   default="CassieIK-v0")
     parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")        # Where to log diagnostics to
     parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
     parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
