@@ -27,6 +27,8 @@ class CassieIKEnv:
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
+        self.speed = speed
+
         self.clock_based = clock_based
         self.state_est = state_est
 
@@ -43,7 +45,7 @@ class CassieIKEnv:
         self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsImprovedCost/walkCycle_{}.pkl".format(speed))
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsImprovedCost/walkCycle_{}.pkl".format(self.speed))
         # print("loaded trajectory file: " + "aslipTrajsTaller/walkCycle_{}.pkl".format(speed))
 
         self.trajectory = CassieIKTrajectory(traj_path)
@@ -169,8 +171,8 @@ class CassieIKEnv:
         # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel * 0.333)
-        # self.sim.set_qvel(np.zeros(qvel.shape))
+        # self.sim.set_qvel(qvel * 0.333)
+        self.sim.set_qvel(np.zeros(qvel.shape))
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -205,6 +207,7 @@ class CassieIKEnv:
     # see notes for details
     def compute_reward(self):
         qpos = np.copy(self.sim.qpos())
+        qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
 
@@ -224,7 +227,7 @@ class CassieIKEnv:
         spring_error      = 0
 
         # enforce distance between feet and com
-        ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase)
+        ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
 
         # left foot
         lfoot = self.cassie_state.leftFoot.position[:]
@@ -236,6 +239,9 @@ class CassieIKEnv:
             print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
             print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
             print(footpos_error)
+
+        # speed reward component
+        speed_diff = (qvel[0] - self.speed) ** 2
 
         # each joint pos, skipping feet
         for i, j in enumerate(self.pos_idx):
@@ -279,7 +285,7 @@ class CassieIKEnv:
                  0.5 * np.exp(-joint_error) +       \
                  0.2 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
-                 0.0 * np.exp(-spring_error)
+                 0.1 * np.exp(-speed_diff)
         #reward = np.exp(-joint_error)
 
         # orientation error does not look informative
