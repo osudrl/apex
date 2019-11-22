@@ -44,7 +44,7 @@ class CassieIKEnv:
 
         dirname = os.path.dirname(__file__)
         traj_path = os.path.join(dirname, "trajectory", "aslipTrajsImprovedCost/walkCycle_{}.pkl".format(speed))
-        print("loaded trajectory file: " + "aslipTrajsTaller/walkCycle_{}.pkl".format(speed))
+        # print("loaded trajectory file: " + "aslipTrajsTaller/walkCycle_{}.pkl".format(speed))
 
         self.trajectory = CassieIKTrajectory(traj_path)
 
@@ -270,9 +270,14 @@ class CassieIKEnv:
 
             spring_error += (target - actual) ** 2      
         
-        reward = 0.1 * np.exp(-footpos_error) +       \
+        # reward = 0.1 * np.exp(-footpos_error) +       \
+        #          0.5 * np.exp(-joint_error) +       \
+        #          0.3 * np.exp(-com_error) +         \
+        #          0.1 * np.exp(-orientation_error) + \
+        #          0.0 * np.exp(-spring_error)
+        reward = 0.2 * np.exp(-footpos_error) +       \
                  0.5 * np.exp(-joint_error) +       \
-                 0.3 * np.exp(-com_error) +         \
+                 0.2 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
                  0.0 * np.exp(-spring_error)
         #reward = np.exp(-joint_error)

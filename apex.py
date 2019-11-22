@@ -125,12 +125,12 @@ def create_logger(args):
   logger.dir = output_dir
   return logger
 
-def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
+def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0):
 
   if env_name is None:
-    env = env_factory(policy.env_name)()
+    env = env_factory(policy.env_name, speed=speed)()
   else:
-    env = env_factory(env_name)()
+    env = env_factory(env_name, speed=speed)()
 
   while True:
     state = env.reset()
@@ -382,12 +382,13 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
     parser.add_argument("--env_name", default=None, type=str)
     parser.add_argument("--traj_len", default=400, type=str)
+    parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
 
 
-    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len)
+    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed)
 
     
   else:
