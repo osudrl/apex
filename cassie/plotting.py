@@ -41,13 +41,17 @@ plt.subplot(2,2,1)
 plt.plot(time[0:500], motor[0:500,4], 'r')
 plt.plot(time[0:500], motor[0:500, 9], 'k')
 
-plt.subplot(2,2,2)
-plt.plot(time[1200:1300], joint[1200:1300,2], 'r')
-plt.plot(time[1200:1300], joint[1200:1300, 5], 'k')
+ax2 = plt.subplot(2,2,2)
+ax2.plot(time[1200:1300], joint[1200:1300,2], 'r')
+ax2.plot(time[1200:1300], joint[1200:1300, 5], 'k')
 
-plt.subplot(2,2,3)
-plt.plot(time[1200:1300], qpos[1200:1300,20], 'r')
-plt.plot(time[1200:1300], qpos[1200:1300, 34], 'k')
+ax3 = plt.subplot(2,2,3)
+ax3.plot(time[1200:1300], qpos[1200:1300,20], 'r')
+ax3.plot(time[1200:1300], qpos[1200:1300, 34], 'k')
+
+ax2.get_shared_x_axes().join(ax2, ax3)
+ax2.set_xticklabels([])
+
 
 #trajectory data
 plt.subplot(2,2,4)
