@@ -26,7 +26,7 @@ def print_logo(subtitle="", option=2):
   print(subtitle)
   print("\n")
 
-def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
+def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=True, **kwargs):
     from functools import partial
 
     """
@@ -43,9 +43,9 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
-        env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=True)
+        env_fn = partial(CassieEnv, "walking", clock_based=clock_based, state_est=state_est)
       elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=False, state_est=False)
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
       elif path == 'CassieIK-v0':
@@ -372,6 +372,9 @@ if __name__ == "__main__":
     # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
 
+    # arg for training on ground_friction_env
+    parser.add_argument("--torsional_friction", type=float, default=0.005)              # change torsional friction
+
     args = parser.parse_args()
     args.num_steps = args.num_steps // args.num_procs
     run_experiment(args)
@@ -382,7 +385,12 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
     parser.add_argument("--env_name", default=None, type=str)
     parser.add_argument("--traj_len", default=400, type=str)
+<<<<<<< HEAD
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
+=======
+    parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
+    parser.add_argument("--clock_based", default=False, action='store_true')
+>>>>>>> 428f1118ee8a9a2bc2c4aa2e918dc3ccccac6cd4
     args = parser.parse_args()
 
     policy = torch.load(args.policy)

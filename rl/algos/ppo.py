@@ -199,6 +199,12 @@ class PPO:
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
         """
+        torch.set_num_threads(1) # By default, PyTorch will use multiple cores to speed up operations.
+                                 # This can cause issues when Ray also uses multiple cores, especially on machines
+                                 # with a lot of CPUs. I observed a significant speedup when limiting PyTorch 
+                                 # to a single core - I think it basically stopped ray workers from stepping on each
+                                 # other's toes.
+
         env = WrapEnv(env_fn) # TODO
 
         memory = PPOBuffer(self.gamma, self.lam)
