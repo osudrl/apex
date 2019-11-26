@@ -11,6 +11,8 @@ from rl.policies.actor import GaussianMLP_Actor
 from rl.policies.critic import GaussianMLP_Critic
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
+from rl.envs.wrappers import SymmetricEnv
+
 import functools
 
 # TODO:
@@ -241,7 +243,7 @@ def run_experiment(args):
     #     max_episode_steps = 1000
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 

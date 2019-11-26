@@ -39,7 +39,7 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
+    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', 'CassieIK-v0']:
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
@@ -47,7 +47,9 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=False, state_est=False)
       elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=False, state_est=False)
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+      elif path == 'CassieIK-v0':
+        env_fn = partial(CassieIKEnv, "walking", clock_based=True, state_est=state_est, speed=speed)
 
       if mirror:
           from rl.envs.wrappers import SymmetricEnv
@@ -123,12 +125,12 @@ def create_logger(args):
   logger.dir = output_dir
   return logger
 
-def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
+def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0):
 
   if env_name is None:
-    env = env_factory(policy.env_name)()
+    env = env_factory(policy.env_name, speed=speed)()
   else:
-    env = env_factory(env_name)()
+    env = env_factory(env_name, speed=speed)()
 
   while True:
     state = env.reset()
@@ -341,7 +343,7 @@ if __name__ == "__main__":
 
     # general args
     parser.add_argument("--policy_name", type=str, default="PPO")
-    parser.add_argument("--env_name", "-e",   default="Cassie-v0")
+    parser.add_argument("--env_name", "-e",   default="CassieIK-v0")
     parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")        # Where to log diagnostics to
     parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
     parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
@@ -380,12 +382,13 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
     parser.add_argument("--env_name", default=None, type=str)
     parser.add_argument("--traj_len", default=400, type=str)
+    parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
 
 
-    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len)
+    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed)
 
     
   else:
