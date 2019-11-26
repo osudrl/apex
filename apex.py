@@ -26,7 +26,7 @@ def print_logo(subtitle="", option=2):
   print(subtitle)
   print("\n")
 
-def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
+def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=True, **kwargs):
     from functools import partial
 
     """
@@ -39,21 +39,23 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
+    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', 'CassieIK-v0']:
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
-        env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieEnv, "walking", clock_based=clock_based, state_est=state_est)
+      elif path == 'CassieRandomDynamics-v0':
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
-      elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+      elif path == 'CassieIK-v0':
+        env_fn = partial(CassieIKEnv, "walking", clock_based=True, state_est=state_est, speed=speed)
 
       if mirror:
           from rl.envs.wrappers import SymmetricEnv
           if state_est:
               # with state estimator
-              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
           else:
               # without state estimator
               env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
@@ -123,12 +125,12 @@ def create_logger(args):
   logger.dir = output_dir
   return logger
 
-def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None):
+def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0):
 
   if env_name is None:
-    env = env_factory(policy.env_name)()
+    env = env_factory(policy.env_name, speed=speed)()
   else:
-    env = env_factory(env_name)()
+    env = env_factory(env_name, speed=speed)()
 
   while True:
     state = env.reset()
@@ -300,14 +302,13 @@ if __name__ == "__main__":
     parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
     parser.add_argument("--tau", default=0.005, type=float)                         # target update rate (tau)
     parser.add_argument("--update_freq", default=2, type=int)                      # how often to update learner
-    parser.add_argument("--evaluate_freq", default=500, type=int)                    # how often to evaluate learner
+    parser.add_argument("--evaluate_freq", default=5000, type=int)                    # how often to evaluate learner
     parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
     parser.add_argument("--c_lr", type=float, default=1e-4)                         # Critic: Adam learning rate
 
     # actor specific args
     parser.add_argument("--num_procs", default=30, type=int)                        # Number of actors
     parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
-    parser.add_argument("--policy_name", default="TD3")                             # Policy name
     parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
     parser.add_argument("--initial_load_freq", default=10, type=int)                # initial amount of time between loading global model
     parser.add_argument("--act_noise", default=0.3, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
@@ -323,7 +324,7 @@ if __name__ == "__main__":
     parser.add_argument("--render_policy", type=bool, default=False)                # render during eval
 
     # misc args
-    parser.add_argument("--name", type=str, default="model")
+    parser.add_argument("--policy_name", type=str, default="model")                 # name to save policy to
     parser.add_argument("--seed", type=int, default=1, help="RNG seed")
     parser.add_argument("--logger_name", type=str, default="tensorboard")           # logger to use (tensorboard or visdom)
     parser.add_argument("--logdir", type=str, default="./logs/asynctd3/experiments/", help="Where to log diagnostics to")
@@ -342,7 +343,7 @@ if __name__ == "__main__":
 
     # general args
     parser.add_argument("--policy_name", type=str, default="PPO")
-    parser.add_argument("--env_name", "-e",   default="Cassie-v0")
+    parser.add_argument("--env_name", "-e",   default="CassieIK-v0")
     parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")        # Where to log diagnostics to
     parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
     parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
@@ -371,6 +372,9 @@ if __name__ == "__main__":
     # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
 
+    # arg for training on ground_friction_env
+    parser.add_argument("--torsional_friction", type=float, default=0.005)              # change torsional friction
+
     args = parser.parse_args()
     args.num_steps = args.num_steps // args.num_procs
     run_experiment(args)
@@ -381,12 +385,18 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
     parser.add_argument("--env_name", default=None, type=str)
     parser.add_argument("--traj_len", default=400, type=str)
+<<<<<<< HEAD
+    parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
+=======
+    parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
+    parser.add_argument("--clock_based", default=False, action='store_true')
+>>>>>>> 428f1118ee8a9a2bc2c4aa2e918dc3ccccac6cd4
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
 
 
-    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len)
+    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed)
 
     
   else:

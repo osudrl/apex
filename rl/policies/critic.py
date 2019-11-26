@@ -85,7 +85,7 @@ class FF_Critic(Critic):
     self.critic_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
     for _ in range(hidden_layers-1):
         self.critic_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.network_out = nn.Linear(hidden_size, 1)
 
     self.env_name = env_name
     self.initialize_parameters()
@@ -113,14 +113,14 @@ class Dual_Q_Critic(Critic):
     self.q1_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
     for _ in range(hidden_layers-1):
         self.q1_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.q1_out = nn.Linear(hidden_size, action_dim)
+    self.q1_out = nn.Linear(hidden_size, 1)
 
     # Q2 architecture
     self.q2_layers = nn.ModuleList()
     self.q2_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
     for _ in range(hidden_layers-1):
         self.q2_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.q2_out = nn.Linear(hidden_size, action_dim)
+    self.q2_out = nn.Linear(hidden_size, 1)
 
     self.env_name = env_name
 
@@ -172,7 +172,7 @@ class LSTM_Critic(Critic):
     self.critic_layers += [nn.LSTMCell(input_dim + action_dim, hidden_size)]
     for _ in range(hidden_layers-1):
         self.critic_layers += [nn.LSTMCell(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.network_out = nn.Linear(hidden_size, 1)
 
     self.init_hidden_state()
 

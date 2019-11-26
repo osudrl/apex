@@ -75,9 +75,11 @@ class CassieEnv_rand_dyn:
         self.default_damping = self.sim.get_dof_damping()
         self.default_mass = self.sim.get_body_mass()
         self.default_ipos = self.sim.get_body_ipos()
+        self.default_fric = self.sim.get_ground_friction()
         #print(self.default_damping)
         #print(self.default_mass)
         #print(self.default_ipos)
+        #print(self.default_fric)
         #input()
     
 
@@ -156,8 +158,6 @@ class CassieEnv_rand_dyn:
             side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
             damp_range = pelvis_damp_range + side_damp + side_damp
             damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
-
-            print(damp_noise - self.default_damping)
 
             #nbody layout:
             # 0:  worldbody (zero)
@@ -250,9 +250,12 @@ class CassieEnv_rand_dyn:
             com_noise = [np.random.uniform(a, b) for a, b in com_range]
             """
 
+            fric_noise = [np.random.uniform(0.3, 1.3)] + list(self.default_fric[1:])
+
             self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
             self.sim.set_body_mass(np.clip(mass_noise, 0, None))
             self.sim.set_body_ipos(np.clip(com_noise, 0, None))
+            self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
 
         self.phase = random.randint(0, self.phaselen)
         self.time = 0
