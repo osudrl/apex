@@ -13,6 +13,7 @@ from cassie.no_delta_env import CassieEnv_nodelta
 from cassie.speed_env import CassieEnv_speed
 from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
 from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
+from cassie.cassie_standing_env import CassieStandingEnv
 
 from rl.envs import Normalize, Vectorize
 from rl.policies import GaussianMLP, EnsemblePolicy
@@ -39,7 +40,8 @@ def visualize(env, policy, trj_len, deterministic=True, dt=0.033, speedup=1):
         state = torch.Tensor(env.reset())
 
         
-        for t in range(trj_len):
+        #for t in range(trj_len):
+        while True:
 
             #start = time.time()
             _, action = policy.act(state, deterministic)
@@ -371,7 +373,7 @@ def make_env_fn(state_est=False):
 
 
 parser = argparse.ArgumentParser(description="Run a model, including visualization and plotting.")
-parser.add_argument("-p", "--model_path", type=str, default="./trained_models/demo2.pt",
+parser.add_argument("-p", "--model_path", type=str, default="./trained_models/model.pt",
                     help="File path for model to test")
 parser.add_argument("-x", "--no-visualize", dest="visualize", default=True, action='store_false',
                     help="Don't render the policy.")
@@ -406,7 +408,7 @@ if __name__ == "__main__":
         # env_fn = functools.partial(CassieEnv_speed, "walking", clock_based=True, state_est=False)
         # env_fn = functools.partial(CassieEnv_nodelta, "walking", clock_based=True, state_est=False)
         # env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-
+        env_fn = functools.partial(CassieStandingEnv, simrate=60)
         env = Vectorize([env_fn])
 
         obs_dim = env_fn().observation_space.shape[0] 
@@ -453,7 +455,7 @@ if __name__ == "__main__":
         policy = torch.load(args.model_path)
         policy.train(0)
 
-        env_fn = make_env_fn()
+        env_fn = functools.partial(CassieStandingEnv, simrate=60)
         
         env = env_fn()
 

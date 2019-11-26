@@ -39,7 +39,6 @@ def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=True
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    print(kwargs)
     if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0']:
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
@@ -54,7 +53,7 @@ def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=True
           from rl.envs.wrappers import SymmetricEnv
           if state_est:
               # with state estimator
-              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+              env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
           else:
               # without state estimator
               env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
@@ -280,7 +279,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_experiment(args)
-  elif sys.argv[1] == 'td3_async':
+  elif sys.argv[1] == 'asyncTD3':
     sys.argv.remove(sys.argv[1])
     """
       Utility for running Twin-Delayed Deep Deterministic policy gradients (asynchronous).
@@ -301,14 +300,13 @@ if __name__ == "__main__":
     parser.add_argument("--discount", default=0.99, type=float)                     # exploration/exploitation discount factor
     parser.add_argument("--tau", default=0.005, type=float)                         # target update rate (tau)
     parser.add_argument("--update_freq", default=2, type=int)                      # how often to update learner
-    parser.add_argument("--evaluate_freq", default=500, type=int)                    # how often to evaluate learner
+    parser.add_argument("--evaluate_freq", default=5000, type=int)                    # how often to evaluate learner
     parser.add_argument("--a_lr", type=float, default=3e-4)                         # Actor: Adam learning rate
-    parser.add_argument("--c_lr", type=float, default=1e-3)                         # Critic: Adam learning rate
+    parser.add_argument("--c_lr", type=float, default=1e-4)                         # Critic: Adam learning rate
 
     # actor specific args
     parser.add_argument("--num_procs", default=30, type=int)                        # Number of actors
     parser.add_argument("--max_traj_len", type=int, default=400)                    # max steps in each episode
-    parser.add_argument("--policy_name", default="TD3")                             # Policy name
     parser.add_argument("--start_timesteps", default=1e4, type=int)                 # How many time steps purely random policy is run for
     parser.add_argument("--initial_load_freq", default=10, type=int)                # initial amount of time between loading global model
     parser.add_argument("--act_noise", default=0.3, type=float)                     # Std of Gaussian exploration noise (used to be 0.1)
@@ -324,7 +322,7 @@ if __name__ == "__main__":
     parser.add_argument("--render_policy", type=bool, default=False)                # render during eval
 
     # misc args
-    parser.add_argument("--name", type=str, default="model")
+    parser.add_argument("--policy_name", type=str, default="model")                 # name to save policy to
     parser.add_argument("--seed", type=int, default=1, help="RNG seed")
     parser.add_argument("--logger_name", type=str, default="tensorboard")           # logger to use (tensorboard or visdom)
     parser.add_argument("--logdir", type=str, default="./logs/asynctd3/experiments/", help="Where to log diagnostics to")
@@ -371,6 +369,9 @@ if __name__ == "__main__":
 
     # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
+
+    # arg for training on ground_friction_env
+    parser.add_argument("--torsional_friction", type=float, default=0.005)              # change torsional friction
 
     args = parser.parse_args()
     args.num_steps = args.num_steps // args.num_procs
