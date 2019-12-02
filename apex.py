@@ -385,12 +385,9 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
     parser.add_argument("--env_name", default=None, type=str)
     parser.add_argument("--traj_len", default=400, type=str)
-<<<<<<< HEAD
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
-=======
     parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
     parser.add_argument("--clock_based", default=False, action='store_true')
->>>>>>> 428f1118ee8a9a2bc2c4aa2e918dc3ccccac6cd4
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
