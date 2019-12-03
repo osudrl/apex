@@ -15,9 +15,10 @@ def getAllTrajectories(speeds):
 
     for i, speed in enumerate(speeds):
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", "aslipTrajs", "walkCycle_{}.pkl".format(speed))
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsImprovedCost", "walkCycle_{}.pkl".format(speed))
         trajectories.append(CassieIKTrajectory(traj_path))
 
+    print("Got all trajectories")
     return trajectories
 
 
@@ -56,7 +57,7 @@ class UnifiedCassieIKEnv:
 
 
         # hashmap to map speed to index
-        self.speeds = [x / 10 for x in range(0, 31)]
+        self.speeds = [x / 10 for x in range(0, 21)]
         self.trajectories = getAllTrajectories(self.speeds)
         self.num_speeds = len(self.trajectories)
 
@@ -178,6 +179,7 @@ class UnifiedCassieIKEnv:
     def reset(self):
         random_speed_idx = random.randint(0, self.num_speeds-1)
         self.current_traj_speed = self.speeds[random_speed_idx]
+        print("current speed: {}".format(self.current_traj_speed))
         self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
         self.phase = random.randint(0, self.phaselen)
         # self.phase = 0
@@ -188,8 +190,8 @@ class UnifiedCassieIKEnv:
         # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel)
-        # self.sim.set_qvel(np.zeros(qvel.shape))
+        # self.sim.set_qvel(qvel)
+        self.sim.set_qvel(np.zeros(qvel.shape))
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -227,6 +229,7 @@ class UnifiedCassieIKEnv:
     # see notes for details
     def compute_reward(self):
         qpos = np.copy(self.sim.qpos())
+        qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
 
@@ -246,7 +249,7 @@ class UnifiedCassieIKEnv:
         spring_error      = 0
 
         # enforce distance between feet and com
-        ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase)
+        ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
 
         # left foot
         lfoot = self.cassie_state.leftFoot.position[:]
@@ -258,6 +261,9 @@ class UnifiedCassieIKEnv:
             print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
             print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
             print(footpos_error)
+
+        # speed reward component
+        speed_diff = (qvel[0] - self.current_traj_speed) ** 2
 
         # each joint pos, skipping feet
         for i, j in enumerate(self.pos_idx):
@@ -292,11 +298,16 @@ class UnifiedCassieIKEnv:
 
             spring_error += (target - actual) ** 2      
         
-        reward = 0.1 * np.exp(-footpos_error) +       \
+        # reward = 0.1 * np.exp(-footpos_error) +       \
+        #          0.5 * np.exp(-joint_error) +       \
+        #          0.3 * np.exp(-com_error) +         \
+        #          0.1 * np.exp(-orientation_error) + \
+        #          0.0 * np.exp(-spring_error)
+        reward = 0.2 * np.exp(-footpos_error) +       \
                  0.5 * np.exp(-joint_error) +       \
-                 0.3 * np.exp(-com_error) +         \
+                 0.2 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
-                 0.0 * np.exp(-spring_error)
+                 0.1 * np.exp(-speed_diff)
         #reward = np.exp(-joint_error)
 
         # orientation error does not look informative
