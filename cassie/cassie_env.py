@@ -17,7 +17,6 @@ class CassieIKTrajectory:
 
         self.qpos = np.copy(trajectory["qpos"])
         self.qvel = np.copy(trajectory["qvel"])
-        #self.foot =
     
     def __len__(self):
         return len(self.qpos)
@@ -32,20 +31,21 @@ class CassieEnv:
 
         if clock_based:
             self.observation_space = np.zeros(42)
+            self.clock_inds = [40, 41]
             if self.state_est:
                 self.observation_space = np.zeros(48)       # Size for use with state est
+                self.clock_inds = [46, 47]
         else:
             self.observation_space = np.zeros(80)
             if self.state_est:
-                self.observation_space = np.zeros(86)       # Size for use with state est
-        self.action_space      = np.zeros(10)
+                self.observation_space = np.zeros(86)       # Size for use without state est
+        self.action_space = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
         if traj == "walking":
             traj_path = os.path.join(dirname, "trajectory", "stepdata.bin")
 
         elif traj == "stepping":
-            # traj_path = os.path.join(dirname, "trajectory", "spline_stepping_traj.pkl")
             traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
 
         # self.trajectory = CassieIKTrajectory(traj_path)
@@ -90,24 +90,6 @@ class CassieEnv:
         ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
         
         target = action + ref_pos[self.pos_idx]
-
-        h = 0.0005
-        Tf = 1.0 / 300.0
-        alpha = h / (Tf + h)
-        real_action = (1-alpha)*self.prev_action + alpha*target
-
-        # diff = real_action - self.prev_action
-        # max_diff = np.ones(10)*0.1
-        # for i in range(10):
-        #     if diff[i] < -max_diff[i]:
-        #         target[i] = self.prev_action[i] - max_diff[i]
-        #     elif diff[i] > max_diff[i]:
-        #         target[i] = self.prev_action[i] + max_diff[i]
-
-        self.prev_action = real_action
-        # real_action = target
-        
-        # target = action + ref_pos[self.pos_idx]
         
         self.u = pd_in_t()
         for i in range(5):
@@ -122,8 +104,8 @@ class CassieEnv:
             self.u.leftLeg.motorPd.torque[i]  = 0 # Feedforward torque
             self.u.rightLeg.motorPd.torque[i] = 0 
 
-            self.u.leftLeg.motorPd.pTarget[i]  = real_action[i]
-            self.u.rightLeg.motorPd.pTarget[i] = real_action[i + 5]
+            self.u.leftLeg.motorPd.pTarget[i]  = target[i]
+            self.u.rightLeg.motorPd.pTarget[i] = target[i + 5]
 
             self.u.leftLeg.motorPd.dTarget[i]  = 0
             self.u.rightLeg.motorPd.dTarget[i] = 0
@@ -132,13 +114,6 @@ class CassieEnv:
 
     def step(self, action):
         for _ in range(self.simrate):
-            # h = 0.005
-            # Tf = 1.0 / 300.0
-            # alpha = h / (Tf + h)
-            # real_action = (1-alpha)*self.prev_action + alpha*action
-            # self.prev_action = real_action
-            # self.step_simulation(real_action)
-            
             self.step_simulation(action)
 
         height = self.sim.qpos()[2]
@@ -285,17 +260,6 @@ class CassieEnv:
                  0.3 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
                  0.1 * np.exp(-spring_error)
-
-        # orientation error does not look informative
-        # maybe because it's comparing euclidean distance on quaternions
-        # print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-        #             0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-        #             0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-        #             0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-        #             0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
-        #             reward
-        #         )
-        #     )  
 
         # reward = np.sign(qvel[0])*qvel[0]**2
         # desired_speed = 3.0

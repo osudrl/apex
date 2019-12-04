@@ -27,6 +27,9 @@ cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 class CassieSim:
     def __init__(self, modelfile):
         self.c = cassie_sim_init(modelfile.encode('utf-8'))
+        self.nv = 32
+        self.nbody = 26
+        self.nq = 35
 
     def step(self, u):
         y = cassie_out_t()
@@ -52,11 +55,11 @@ class CassieSim:
 
     def qpos(self):
         qposp = cassie_sim_qpos(self.c)
-        return qposp[:35]
+        return qposp[:self.nq]
 
     def qvel(self):
         qvelp = cassie_sim_qvel(self.c)
-        return qvelp[:32]
+        return qvelp[:self.nv]
 
     def set_time(self, time):
         timep = cassie_sim_time(self.c)
@@ -64,12 +67,12 @@ class CassieSim:
 
     def set_qpos(self, qpos):
         qposp = cassie_sim_qpos(self.c)
-        for i in range(min(len(qpos), 35)):
+        for i in range(min(len(qpos), self.nq)):
             qposp[i] = qpos[i]
 
     def set_qvel(self, qvel):
         qvelp = cassie_sim_qvel(self.c)
-        for i in range(min(len(qvel), 32)):
+        for i in range(min(len(qvel), self.nv)):
             qvelp[i] = qvel[i]
 
     def hold(self):
@@ -105,6 +108,84 @@ class CassieSim:
         force = np.zeros(12)
         self.foot_force(force)
         return force[[2, 8]]
+
+    def get_dof_damping(self):
+        ptr = cassie_sim_dof_damping(self.c)
+        ret = np.zeros(self.nv)
+        for i in range(self.nv):
+          ret[i] = ptr[i]
+        return ret
+    
+    def get_body_mass(self):
+        ptr = cassie_sim_body_mass(self.c)
+        ret = np.zeros(self.nbody)
+        for i in range(self.nbody):
+          ret[i] = ptr[i]
+        return ret
+
+    def get_body_ipos(self):
+        nbody = self.nbody * 3
+        ptr = cassie_sim_body_ipos(self.c)
+        ret = np.zeros(nbody)
+        for i in range(nbody):
+          ret[i] = ptr[i]
+        return ret
+
+    def get_ground_friction(self):
+        ptr = cassie_sim_ground_friction(self.c)
+        ret = np.zeros(3)
+        for i in range(3):
+          ret[i] = ptr[i]
+        return ret
+
+    def set_dof_damping(self, data):
+        c_arr = (ctypes.c_double * self.nv)()
+
+        if len(data) != self.nv:
+          print("SIZE MISMATCH SET_DOF_DAMPING()")
+          exit(1)
+        
+        for i in range(self.nv):
+          c_arr[i] = data[i]
+
+        cassie_sim_set_dof_damping(self.c, c_arr)
+
+    def set_body_mass(self, data):
+        c_arr = (ctypes.c_double * self.nbody)()
+
+        if len(data) != self.nbody:
+          print("SIZE MISMATCH SET_BODY_MASS()")
+          exit(1)
+        
+        for i in range(self.nbody):
+          c_arr[i] = data[i]
+
+        cassie_sim_set_body_mass(self.c, c_arr)
+
+    def set_body_ipos(self, data):
+        nbody = self.nbody * 3
+        c_arr = (ctypes.c_double * nbody)()
+
+        if len(data) != nbody:
+          print("SIZE MISMATCH SET_BODY_IPOS()")
+          exit(1)
+        
+        for i in range(nbody):
+          c_arr[i] = data[i]
+
+        cassie_sim_set_body_ipos(self.c, c_arr)
+
+    def set_ground_friction(self, data):
+        c_arr = (ctypes.c_double * 3)()
+
+        if len(data) != 3:
+           print("SIZE MISMATCH SET_GROUND_FRICTION()")
+           exit(1)
+
+        for i in range(3):
+          c_arr[i] = data[i]
+
+        cassie_sim_set_ground_friction(self.c, c_arr)
 
     def __del__(self):
         cassie_sim_free(self.c)

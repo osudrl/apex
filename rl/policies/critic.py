@@ -2,15 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from rl.policies.base import Net, normc_fn
+
 # The base class for a critic. Includes functions for normalizing reward and state (optional)
-class Critic(nn.Module):
+class Critic(Net):
   def __init__(self):
     super(Critic, self).__init__()
-    self.is_recurrent = False
-
-    self.welford_state_mean = 0.0
-    self.welford_state_mean_diff = 1.0
-    self.welford_state_n = 1
 
     self.welford_reward_mean = 0.0
     self.welford_reward_mean_diff = 1.0
@@ -36,14 +33,6 @@ class Critic(nn.Module):
         raise NotImplementedError
 
     return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
-
-  def normalize_state(self, state, update=True):
-    if update:
-      state_old = self.welford_state_mean
-      self.welford_state_mean += (state - state_old) / self.welford_state_n
-      self.welford_state_mean_diff += (state - state_old) * (state - state_old)
-      self.welford_state_n += 1
-    return (state - self.welford_state_mean) / torch.sqrt(self.welford_state_mean_diff / self.welford_state_n)
 
 class GaussianMLP_Critic(Critic):
   def __init__(self, state_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=torch.tanh, init_std=1, learn_std=True, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
@@ -96,14 +85,13 @@ class FF_Critic(Critic):
     self.critic_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
     for _ in range(hidden_layers-1):
         self.critic_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.network_out = nn.Linear(hidden_size, 1)
 
     self.env_name = env_name
+    self.initialize_parameters()
 
   def forward(self, state, action):
 
-    #print(state.size(), state)
-    #print(action.size(), action)
     if len(state.size()) > 2:
       x = torch.cat([state, action], 2)
     elif len(state.size()) > 1:
@@ -116,6 +104,66 @@ class FF_Critic(Critic):
 
     return self.network_out(x)
 
+class Dual_Q_Critic(Critic):
+  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET'):
+    super(Dual_Q_Critic, self).__init__()
+
+    # Q1 architecture
+    self.q1_layers = nn.ModuleList()
+    self.q1_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.q1_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.q1_out = nn.Linear(hidden_size, 1)
+
+    # Q2 architecture
+    self.q2_layers = nn.ModuleList()
+    self.q2_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.q2_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.q2_out = nn.Linear(hidden_size, 1)
+
+    self.env_name = env_name
+
+  def forward(self, state, action):
+
+    # print(state.size(), state)
+    #print(action.size(), action)
+    if len(state.size()) > 2:
+      x1 = torch.cat([state, action], 2)
+    elif len(state.size()) > 1:
+      x1 = torch.cat([state, action], 1)
+    else:
+      x1 = torch.cat([state, action])
+
+    x2 = x1
+
+    # Q1 forward
+    for idx, layer in enumerate(self.q1_layers):
+      x1 = F.relu(layer(x1))
+
+    # Q2 forward
+    for idx, layer in enumerate(self.q2_layers):
+      x2 = F.relu(layer(x2))
+
+    return self.q1_out(x1), self.q2_out(x2)
+
+  def Q1(self, state, action):
+    #print(state.size(), state)
+    #print(action.size(), action)
+    if len(state.size()) > 2:
+      x1 = torch.cat([state, action], 2)
+    elif len(state.size()) > 1:
+      x1 = torch.cat([state, action], 1)
+    else:
+      x1 = torch.cat([state, action])
+    
+    # Q1 forward
+    for idx, layer in enumerate(self.q1_layers):
+      x1 = F.relu(layer(x1))
+
+    return self.q1_out(x1)
+
+
 class LSTM_Critic(Critic):
   def __init__(self, input_dim, action_dim, hidden_size=64, hidden_layers=1, env_name='NOT SET'):
     super(LSTM_Critic, self).__init__()
@@ -124,7 +172,7 @@ class LSTM_Critic(Critic):
     self.critic_layers += [nn.LSTMCell(input_dim + action_dim, hidden_size)]
     for _ in range(hidden_layers-1):
         self.critic_layers += [nn.LSTMCell(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.network_out = nn.Linear(hidden_size, 1)
 
     self.init_hidden_state()
 
@@ -194,13 +242,3 @@ class LSTM_Critic(Critic):
       exit(1)
     return x
 
-## Initialization scheme for gaussian mlp (from ppo paper)
-# NOTE: the fact that this has the same name as a parameter caused a NASTY bug
-# apparently "if <function_name>" evaluates to True in python...
-def normc_fn(m):
-    classname = m.__class__.__name__
-    if classname.find('Linear') != -1:
-        m.weight.data.normal_(0, 1)
-        m.weight.data *= 1 / torch.sqrt(m.weight.data.pow(2).sum(1, keepdim=True))
-        if m.bias is not None:
-            m.bias.data.fill_(0)

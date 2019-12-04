@@ -11,6 +11,8 @@ from rl.policies.actor import GaussianMLP_Actor
 from rl.policies.critic import GaussianMLP_Critic
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
+from rl.envs.wrappers import SymmetricEnv
+
 import functools
 
 # TODO:
@@ -66,11 +68,12 @@ class MirrorPPO(PPO):
                     #      advantage_batch]
                     # ).detach()
 
-                    values, pdf = policy.evaluate(obs_batch)
+                    values = critic.act(obs_batch)
+                    pdf = policy.evaluate(obs_batch)
 
                     # TODO, move this outside loop?
                     with torch.no_grad():
-                        _, old_pdf = old_policy.evaluate(obs_batch)
+                        old_pdf = old_policy.evaluate(obs_batch)
                         old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
                     
                     log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
@@ -84,12 +87,12 @@ class MirrorPPO(PPO):
                     critic_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                     # Mirror Symmetry Loss
-                    _, deterministic_actions = policy(obs_batch)
+                    deterministic_actions = policy(obs_batch)
                     if env.clock_based:
                         mir_obs = mirror_observation(obs_batch, env.clock_inds)
-                        _, mirror_actions = policy(mir_obs)
+                        mirror_actions = policy(mir_obs)
                     else: 
-                        _, mirror_actions = policy(mirror_observation(obs_batch))
+                        mirror_actions = policy(mirror_observation(obs_batch))
                     mirror_actions = mirror_action(mirror_actions)
 
                     mirror_loss = 4 * (deterministic_actions - mirror_actions).pow(2).mean()
@@ -175,21 +178,20 @@ class MirrorPPO(PPO):
                 test = self.sample_parallel(env_fn, policy, critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
+                avg_eval_reward = np.mean(test.ep_returns)
+
                 pdf     = policy.evaluate(observations)
                 old_pdf = old_policy.evaluate(observations)
 
                 entropy = pdf.entropy().mean().item()
                 kl = kl_divergence(pdf, old_pdf).mean().item()
 
-                logger.record('Return (test)', np.mean(test.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='test')
-                logger.record('Return (batch)', np.mean(batch.ep_returns), itr, 'Return', x_var_name='Iterations', split_name='batch')
-                logger.record('Mean Eplen', np.mean(batch.ep_lens), itr, 'Mean Eplen', x_var_name='Iterations', split_name='batch')
-
-                logger.record('Mean KL Div', kl, itr, 'Mean KL Div', x_var_name='Iterations', split_name='batch')
-                logger.record('Mean Entropy', entropy, itr, 'Mean Entropy', x_var_name='Iterations', split_name='batch')
-                logger.record('Timesteps', self.total_steps, itr, 'Timesteps', x_var_name='Iterations', split_name=None)
-
-                logger.dump()
+                logger.add_scalar("Test/Return", avg_eval_reward, itr)
+                logger.add_scalar("Train/Return", np.mean(batch.ep_returns), itr)
+                logger.add_scalar("Train/Mean Eplen", np.mean(batch.ep_lens), itr)
+                logger.add_scalar("Train/Mean KL Div", kl, itr)
+                logger.add_scalar("Train/Mean Entropy", entropy, itr)
+                logger.add_scalar("Misc/Timesteps", self.total_steps, itr)
 
             # TODO: add option for how often to save model
             if np.mean(test.ep_returns) > self.max_return:
@@ -241,7 +243,7 @@ def run_experiment(args):
     #     max_episode_steps = 1000
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -301,9 +303,10 @@ def run_experiment(args):
     # create a tensorboard logging object
     logger = create_logger(args)
 
-
+    print()
     print("Synchronous Distributed Proximal Policy Optimization:")
     print("\tenv:            {}".format(args.env_name))
+    print("\tmax traj len:   {}".format(args.max_traj_len))
     print("\tseed:           {}".format(args.seed))
     print("\tmirror:         {}".format(args.mirror))
     print("\tnum procs:      {}".format(args.num_procs))
