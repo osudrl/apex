@@ -7,7 +7,7 @@ from torch.distributions import kl_divergence
 
 import numpy as np
 from rl.algos import PPO
-from rl.policies.actor import GaussianMLP_Actor
+from rl.policies import GaussianMLP_Actor
 from rl.policies.critic import GaussianMLP_Critic
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
