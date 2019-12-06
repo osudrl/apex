@@ -26,7 +26,7 @@ def print_logo(subtitle="", option=2):
   print(subtitle)
   print("\n")
 
-def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=True, **kwargs):
+def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=False, **kwargs):
     from functools import partial
 
     """
@@ -125,12 +125,12 @@ def create_logger(args):
   logger.dir = output_dir
   return logger
 
-def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0):
+def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0, state_est=True, clock_based=False):
 
   if env_name is None:
-    env = env_factory(policy.env_name, speed=speed)()
+    env = env_factory(policy.env_name, speed=speed, state_est=state_est, clock_based=clock_based)()
   else:
-    env = env_factory(env_name, speed=speed)()
+    env = env_factory(env_name, speed=speed, state_est=state_est, clock_based=clock_based)()
 
   while True:
     state = env.reset()
@@ -385,18 +385,15 @@ if __name__ == "__main__":
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
     parser.add_argument("--env_name", default=None, type=str)
     parser.add_argument("--traj_len", default=400, type=str)
-<<<<<<< HEAD
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
-=======
-    parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
+    parser.add_argument("--state_est", default=False, action='store_true')           # use state estimator or not
     parser.add_argument("--clock_based", default=False, action='store_true')
->>>>>>> 428f1118ee8a9a2bc2c4aa2e918dc3ccccac6cd4
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
 
 
-    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed)
+    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed, state_est=args.state_est, clock_based=args.clock_based)
 
     
   else:

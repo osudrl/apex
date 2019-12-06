@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from rl.distributions import DiagonalGaussian
+#from rl.distributions import DiagonalGaussian
 
 from torch import sqrt
 
@@ -50,7 +50,12 @@ class GaussianMLP_Actor(Actor):
         self.actor_layers += [nn.Linear(hidden_size, hidden_size)]
     self.network_out = nn.Linear(hidden_size, action_dim)
 
-    self.dist = DiagonalGaussian(action_dim, init_std, learn_std)
+    if learn_std == True: # probably don't want to use this for ppo, always use fixed std
+      self.log_stds = nn.Linear(layers[-1], action_dim)
+      self.learn_std = True
+    else:
+      self.fixed_std = init_std
+      self.learn_std = False
 
     self.action = None
     self.action_dim = action_dim
@@ -72,10 +77,32 @@ class GaussianMLP_Actor(Actor):
     if self.normc_init:
         self.apply(normc_fn)
 
-        if self.dist.__class__.__name__ == "DiagGaussian":
-            self.network_out.weight.data.mul_(0.01)
+        #if self.dist.__class__.__name__ == "DiagGaussian":
+        self.network_out.weight.data.mul_(0.01)
+
+  def _get_dist_params(self, state):
+    if self.training == False:
+        state = (state - self.obs_mean) / self.obs_std
+
+    x = state
+    for l in self.actor_layers:
+        x = self.nonlinearity(l(x))
+    x = self.network_out(x)
+
+    if self.bounded:
+        mean = torch.tanh(x) 
+    else:
+        mean = x
+
+    if self.learn_std:
+      sd = torch.clamp(self.log_stds(x), -20, 2).exp() # TODO: make these a constant or something
+    else:
+      sd = self.fixed_std
+
+    return mean, sd
 
   def forward(self, inputs):
+    """
     if self.training == False:
         inputs = (inputs - self.obs_mean) / self.obs_std
 
@@ -90,18 +117,30 @@ class GaussianMLP_Actor(Actor):
         mean = x
 
     self.action = mean
+    """
+    mean, _ = self._get_dist_params(inputs)
+    self.action = mean
+
     return mean
 
   def get_action(self):
     return self.action
 
-  def act(self, inputs, deterministic=False):
-    action = self.dist.sample(self(inputs), deterministic=deterministic)
-    return action.detach()
+  def act(self, inputs, deterministic=True): # make true by default for evaluation purposes
+    #action = self.dist.sample(self(inputs), deterministic=deterministic)
+
+    mu, sd = self._get_dist_params(inputs)
+    if not deterministic:
+      self.action = torch.distributions.Normal(mu, sd).sample()
+    else:
+      self.action = mu
+
+    return self.action.detach()
 
   def evaluate(self, inputs):
-    x = self(inputs)
-    return self.dist.evaluate(x)
+    mu, sd = self._get_dist_params(inputs)
+    return torch.distributions.Normal(mu, sd)
+    #return self.dist.evaluate(x)
 
 class FF_Actor(Actor):
   def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=F.relu, max_action=1):
