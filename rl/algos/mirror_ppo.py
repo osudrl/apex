@@ -276,10 +276,7 @@ def run_experiment(args):
         critic = GaussianMLP_Critic(
             obs_dim, 
             env_name=args.env_name,
-            nonlinearity=torch.nn.functional.relu, 
-            bounded=True, 
-            init_std=np.exp(-2), 
-            learn_std=False,
+            nonlinearity=torch.nn.functional.relu,
             normc_init=False
         )
 

@@ -77,7 +77,7 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
   def init_parameters(self):
     if self.normc_init:
         self.apply(normc_fn)
-        self.network_out.weight.data.mul_(0.01)
+        self.means.weight.data.mul_(0.01)
 
   def _get_dist_params(self, state):
     if self.training == False:
@@ -86,7 +86,7 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
     x = state
     for l in self.actor_layers:
         x = self.nonlinearity(l(x))
-    x = self.network_out(x)
+    x = self.means(x)
 
     if self.bounded:
         mean = torch.tanh(x) 

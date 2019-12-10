@@ -35,7 +35,7 @@ class Critic(Net):
     return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
 
 class FF_V(Critic):
-  def __init__(self, state_dim, layers=(256, 256), env_name='NOT SET', normc_init=True, obs_std=None, obs_mean=None):
+  def __init__(self, state_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=torch.nn.functional.relu, normc_init=True, obs_std=None, obs_mean=None):
     super(FF_V, self).__init__()
 
     self.critic_layers = nn.ModuleList()
@@ -45,6 +45,8 @@ class FF_V(Critic):
     self.network_out = nn.Linear(layers[-1], 1)
 
     self.env_name = env_name
+
+    self.nonlinearity = nonlinearity
 
     self.obs_std = obs_std
     self.obs_mean = obs_mean
