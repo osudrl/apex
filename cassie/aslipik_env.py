@@ -45,10 +45,12 @@ class CassieIKEnv:
         self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsImprovedCost/walkCycle_{}.pkl".format(self.speed))
-        # print("loaded trajectory file: " + "aslipTrajsTaller/walkCycle_{}.pkl".format(speed))
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsImprovedCost_0.2/walkCycle_{}.pkl".format(self.speed))
+        print("loaded trajectory file: " + "aslipTrajsTaller_0.2/walkCycle_{}.pkl".format(speed))
 
         self.trajectory = CassieIKTrajectory(traj_path)
+
+        # self.clock_inc = self.trajectory.clock_inc
 
         self.P = np.array([100,  100,  88,  96,  50]) 
         self.D = np.array([10.0, 10.0, 8.0, 9.6, 5.0])
@@ -67,7 +69,8 @@ class CassieIKEnv:
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(self.trajectory.length / self.simrate) - 1
+        # self.phaselen = floor(self.trajectory.length / self.simrate) - 1
+        self.phaselen = self.trajectory.length - 1
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
@@ -142,6 +145,8 @@ class CassieIKEnv:
             self.step_simulation(action)
 
         height = self.sim.qpos()[2]
+
+        print(self.phase)
 
         self.time  += 1
         self.phase += 1
@@ -310,7 +315,8 @@ class CassieIKEnv:
         if phase > self.phaselen:
             phase = 0
 
-        pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        # pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        pos = np.copy(self.trajectory.qpos[phase])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
@@ -324,7 +330,8 @@ class CassieIKEnv:
         # regardless of reference trajectory?
         pos[1] = 0
 
-        vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        # vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        vel = np.copy(self.trajectory.qvel[phase])
 
         return pos, vel
 
@@ -336,8 +343,10 @@ class CassieIKEnv:
         if phase > self.phaselen:
             phase = 0
 
-        rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
-        lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
+        # rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
+        # lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
+        rfoot = np.copy(self.trajectory.rfoot[phase])
+        lfoot = np.copy(self.trajectory.lfoot[phase])
 
         return rfoot, lfoot
 

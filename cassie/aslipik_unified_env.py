@@ -35,7 +35,7 @@ class CassieIKTrajectory:
 
 # simrate used to be 60
 class UnifiedCassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, training=True):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -77,12 +77,15 @@ class UnifiedCassieIKEnv:
         self.current_traj_speed = self.speeds[0]
         self.trajectory = self.trajectories[0]
 
+        self.training = training
+
         # NOTE: a reference trajectory represents ONE phase cycle
 
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(self.trajectory.length / self.simrate) - 1
+        # self.phaselen = floor(self.trajectory.length / self.simrate) - 1
+        self.phaselen = self.trajectory.length - 1
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
@@ -263,7 +266,7 @@ class UnifiedCassieIKEnv:
             print(footpos_error)
 
         # speed reward component
-        speed_diff = (qvel[0] - self.current_traj_speed) ** 2
+        speed_diff = np.abs(qvel[0] - self.current_traj_speed)
 
         # each joint pos, skipping feet
         for i, j in enumerate(self.pos_idx):
@@ -303,12 +306,14 @@ class UnifiedCassieIKEnv:
         #          0.3 * np.exp(-com_error) +         \
         #          0.1 * np.exp(-orientation_error) + \
         #          0.0 * np.exp(-spring_error)
-        reward = 0.2 * np.exp(-footpos_error) +       \
+        reward = 0.1 * np.exp(-footpos_error) +       \
                  0.5 * np.exp(-joint_error) +       \
                  0.2 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
                  0.1 * np.exp(-speed_diff)
         #reward = np.exp(-joint_error)
+
+        print("{}\t{}\t{}\t{}".format(self.current_traj_speed, self.sim.qvel()[0], 0.2 * np.exp(-com_error), reward))
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
@@ -332,7 +337,8 @@ class UnifiedCassieIKEnv:
         if phase > self.phaselen:
             phase = 0
 
-        pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        # pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        pos = np.copy(self.trajectory.qpos[phase])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
@@ -346,7 +352,8 @@ class UnifiedCassieIKEnv:
         # regardless of reference trajectory?
         pos[1] = 0
 
-        vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        # vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        vel = np.copy(self.trajectory.qvel[phase])
 
         return pos, vel
 
@@ -358,8 +365,10 @@ class UnifiedCassieIKEnv:
         if phase > self.phaselen:
             phase = 0
 
-        rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
-        lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
+        # rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
+        # lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
+        rfoot = np.copy(self.trajectory.rfoot[phase])
+        lfoot = np.copy(self.trajectory.lfoot[phase])
 
         return rfoot, lfoot
 
