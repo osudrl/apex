@@ -33,7 +33,7 @@ class CassieIKTrajectory:
         self.lfoot = np.copy(trajectory["lfoot"])
 
 # simrate used to be 60
-class UnifiedCassieIKEnv:
+class UnifiedCassieIKEnvNoDelta:
     def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, training=True):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
@@ -110,31 +110,32 @@ class UnifiedCassieIKEnv:
 
     def step_simulation(self, action):
 
-        # maybe make ref traj only send relevant idxs?
-        if(self.phase == self.phaselen - 1):
-            ref_pos, ref_vel = self.get_ref_state(0)
-        else:
-            ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
+        # # maybe make ref traj only send relevant idxs?
+        # if(self.phase == self.phaselen - 1):
+        #     ref_pos, ref_vel = self.get_ref_state(0)
+        # else:
+        #     ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
 
-        target = action + ref_pos[self.pos_idx]
+        # target = action + ref_pos[self.pos_idx]
 
-        # h = 0.0005
-        # Tf = 1.0 / 300.0
-        # alpha = h / (Tf + h)
-        # real_action = (1-alpha)*self.prev_action + alpha*target
+        # # h = 0.0005
+        # # Tf = 1.0 / 300.0
+        # # alpha = h / (Tf + h)
+        # # real_action = (1-alpha)*self.prev_action + alpha*target
 
-        real_action = target
-
-        # diff = real_action - self.prev_action
-        # max_diff = np.ones(10)*0.1
-        # for i in range(10):
-        #     if diff[i] < -max_diff[i]:
-        #         target[i] = self.prev_action[i] - max_diff[i]
-        #     elif diff[i] > max_diff[i]:
-        #         target[i] = self.prev_action[i] + max_diff[i]
-
-        self.prev_action = real_action
         # real_action = target
+
+        # # diff = real_action - self.prev_action
+        # # max_diff = np.ones(10)*0.1
+        # # for i in range(10):
+        # #     if diff[i] < -max_diff[i]:
+        # #         target[i] = self.prev_action[i] - max_diff[i]
+        # #     elif diff[i] > max_diff[i]:
+        # #         target[i] = self.prev_action[i] + max_diff[i]
+
+        # self.prev_action = real_action
+
+        real_action = action
 
         self.u = pd_in_t()
         for i in range(5):
@@ -149,8 +150,8 @@ class UnifiedCassieIKEnv:
             self.u.leftLeg.motorPd.torque[i]  = 0 # Feedforward torque
             self.u.rightLeg.motorPd.torque[i] = 0 
 
-            self.u.leftLeg.motorPd.pTarget[i]  = target[i]
-            self.u.rightLeg.motorPd.pTarget[i] = target[i + 5]
+            self.u.leftLeg.motorPd.pTarget[i]  = real_action[i]
+            self.u.rightLeg.motorPd.pTarget[i] = real_action[i + 5]
 
             self.u.leftLeg.motorPd.dTarget[i]  = 0
             self.u.rightLeg.motorPd.dTarget[i] = 0

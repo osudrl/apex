@@ -9,14 +9,16 @@ env = UnifiedCassieIKEnv("walking", clock_based=True, state_est=True)
 
 
 env.reset()
-env.render()
+# env.render()
 
 qposes = []
 qvels = []
 
 # manually set the environment's speed
 
-env.speed = 0.3
+env.speed = 2.0
+
+print("\nTesting Stuff\n")
 
 print(env.phaselen)
 
@@ -33,8 +35,6 @@ for i in range(env.phaselen):
     # extract qpos, qvel
     qposes.append(pos)
     qvels.append(vel)
-
-print(len(qposes))
 
 # plot the qpos
 fig = plt.figure(figsize=(10,10))

@@ -1,5 +1,6 @@
 from cassie.cassiemujoco.cassieUDP import *
 from cassie.cassiemujoco.cassiemujoco_ctypes import *
+from cassie.trajectory import CassieTrajectory
 # from cassie.speed_env import CassieEnv_speed
 # from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
 # from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
@@ -16,6 +17,109 @@ from quaternion_function import *
 #import signal 
 import atexit
 
+
+"""
+We need to include the trajectory library for the right offset information, as well as the right phaselen and speed
+"""
+
+def getAllTrajectories(speeds):
+    trajectories = []
+
+    for i, speed in enumerate(speeds):
+        dirname = os.path.dirname(__file__)
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsImprovedCost_freq_correction", "walkCycle_{}.pkl".format(speed))
+        trajectories.append(CassieIKTrajectory(traj_path))
+
+    # print("Got all trajectories")
+    return trajectories
+
+class CassieIKTrajectory:
+    def __init__(self, filepath):
+        with open(filepath, "rb") as f:
+            trajectory = pickle.load(f)
+
+        self.qpos = np.copy(trajectory["qpos"])
+        self.length = self.qpos.shape[0]
+        self.qvel = np.copy(trajectory["qvel"])
+        self.rfoot = np.copy(trajectory["rfoot"])
+        self.lfoot = np.copy(trajectory["lfoot"])
+
+# simrate used to be 60
+class TrajectoryInfo:
+    def __init__(self):
+        
+        self.speeds = [x / 10 for x in range(0, 21)]
+        self.trajectories = getAllTrajectories(self.speeds)
+        self.num_speeds = len(self.trajectories)
+
+        self.time    = 0 # number of time steps in current episode
+        self.phase   = 0 # portion of the phase the robot is in
+        self.counter = 0 # number of phase cycles completed in episode
+
+        # NOTE: each trajectory in trajectories should have the same length
+        self.speed = self.speeds[0]
+        self.trajectory = self.trajectories[0]
+
+        # NOTE: a reference trajectory represents ONE phase cycle
+
+        # should be floor(len(traj) / simrate) - 1
+        # should be VERY cautious here because wrapping around trajectory
+        # badly can cause assymetrical/bad gaits
+        # self.phaselen = floor(self.trajectory.length / self.simrate) - 1
+        self.phaselen = self.trajectory.length - 1
+
+        # see include/cassiemujoco.h for meaning of these indices
+        self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
+        self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
+
+        # maybe make ref traj only send relevant idxs?
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.prev_action = ref_pos[self.pos_idx]
+        self.phase_add = 1
+
+    # get the corresponding state from the reference trajectory for the current phase
+    def get_ref_state(self, phase=None):
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        # pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        pos = np.copy(self.trajectory.qpos[phase])
+
+        # this is just setting the x to where it "should" be given the number
+        # of cycles
+        #pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
+        pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
+        
+        # ^ should only matter for COM error calculation,
+        # gets dropped out of state variable for input reasons
+
+        # setting lateral distance target to 0?
+        # regardless of reference trajectory?
+        pos[1] = 0
+
+        # vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        vel = np.copy(self.trajectory.qvel[phase])
+
+        return pos, vel
+
+    def update_info(self, new_speed):
+
+        # new speed and trajectory
+        self.speed = new_speed
+        self.trajectory = self.trajectories[ (np.abs(self.speeds - self.speed)).argmin() ]
+
+        # new offset
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.prev_action = ref_pos[self.pos_idx]
+
+        # phaselen
+        self.phaselen = self.trajectory.length - 1
+
+traj = TrajectoryInfo()
+
 time_log   = [] # time stamp
 input_log  = [] # network inputs
 output_log = [] # network outputs 
@@ -24,9 +128,6 @@ target_log = [] #PD target log
 
 filename = "test.p"
 filep = open(filename, "wb")
-
-max_speed = 1.5
-min_speed = 0.0
 
 def log():
     data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log}
@@ -40,17 +141,16 @@ torch.set_num_threads(1)
 # Prepare model
 # env = CassieEnv_speed_no_delta_neutral_foot("walking", clock_based=True, state_est=True)
 # env.reset_for_test()
-phase = 0
-counter = 0
-phase_add = 1
+#
 speed = 0
 
 # policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
-policy = torch.load("./trained_models/aslip_v3_speed/aslip_1.0_speed.pt")
+policy = torch.load("./trained_models/aslip_unified_freq_correction.pt")
 policy.eval()
 
 max_speed = 3.0
-min_speed = -1.0
+# min_speed = -1.0
+min_speed = 0.0
 max_y_speed = 0.0
 min_y_speed = 0.0
 symmetry = True
@@ -69,7 +169,8 @@ pos_index = np.array([2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
 vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 pos_mirror_index = np.array([2,3,4,5,6,21,22,23,28,29,30,34,7,8,9,14,15,16,20])
 vel_mirror_index = np.array([0,1,2,3,4,5,19,20,21,25,26,27,31,6,7,8,12,13,14,18])
-offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+offset = traj.prev_action
+# offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
 # Determine whether running in simulation or on the robot
 if platform.node() == 'cassie':
@@ -97,8 +198,6 @@ orient_add = 0
 while True:
     # Wait until next cycle time
     while time.monotonic() - t < 60/2000:
-    # while time.monotonic() - t < 1/2000:
-        # time.sleep(0.0001)
         time.sleep(0.001)
     t = time.monotonic()
     tt = time.monotonic() - t0
@@ -120,7 +219,7 @@ while True:
         speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
         
         print("speed: ", speed)
-        phase_add = 1+state.radio.channel[5]
+        traj.phase_add = 1+state.radio.channel[5]
         # env.y_speed = max(min_y_speed, -state.radio.channel[1] * max_y_speed)
         # env.y_speed = min(max_y_speed, -state.radio.channel[1] * max_y_speed)
     else:
@@ -167,8 +266,11 @@ while True:
     # 	ref_pos[3:7] = euler2quat(z=euler[2],y=euler[1],x=euler[0])
     # 	RL_state = np.concatenate([cassie_state, ref_pos[pos_mirror_index], ref_vel[vel_mirror_index]])
 
+    traj.update_info(speed)
 
-    clock = [np.sin(2 * np.pi *  phase / 27), np.cos(2 * np.pi *  phase / 27)]
+    # phaselen = 11 # used to be 27
+
+    clock = [np.sin(2 * np.pi *  traj.phase / traj.phaselen), np.cos(2 * np.pi *  traj.phase / traj.phaselen)]
     # clock = [np.sin(2 * np.pi *  phase / 27 * (2000 / 30)), np.cos(2 * np.pi *  phase / 27 * (2000 / 30))]
     # euler_orient = quaternion2euler(state.pelvis.orientation[:]) 
     # print("euler orient: ", euler_orient + np.array([orient_add, 0, 0]))
@@ -236,8 +338,8 @@ while True:
 
     # Track phase
     
-    phase += phase_add
-    if phase >= 28:
+    traj.phase += traj.phase_add
+    if traj.phase >= traj.phaselen + 1:
     # if phase >= 28 * (2000 / 30):
-        phase = 0
-        counter += 1
+        traj.phase = 0
+        traj.counter += 1
