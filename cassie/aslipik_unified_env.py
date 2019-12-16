@@ -448,8 +448,6 @@ class UnifiedCassieIKEnv:
             #qpos[self.pos_idx] -= ref_pos[self.pos_idx]
             #qvel[self.vel_idx] -= ref_vel[self.vel_idx]
 
-            print("Clock inc: {}".format(2 * np.pi *  1 / self.phaselen))
-
             clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                      np.cos(2 * np.pi *  self.phase / self.phaselen)]
 
