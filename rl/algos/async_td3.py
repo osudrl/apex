@@ -1,6 +1,6 @@
 from rl.utils import ReplayBuffer_remote
 from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_parameters
-from rl.policies.actor import FF_Actor as O_Actor
+from rl.policies.actor import Scaled_FF_Actor as O_Actor
 from rl.policies.critic import Dual_Q_Critic as Critic
 
 # Plot results
@@ -170,7 +170,7 @@ class Actor():
         # Initialize param noise (or set to none)
         self.noise_scale = noise_scale
         self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
-        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, env_name=env_name, max_action=self.max_action).to(self.device)
+        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
 
         # Termination condition: max episode length
         self.max_traj_len = 400
@@ -363,13 +363,13 @@ class Learner():
         self.max_traj_len = 400
 
         # models and optimizers
-        self.actor = O_Actor(self.state_dim, self.action_dim, env_name=env_name, max_action=self.max_action).to(self.device)
-        self.actor_target = O_Actor(self.state_dim, self.action_dim, env_name=env_name, max_action=self.max_action).to(self.device)
+        self.actor = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
+        self.actor_target = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
-        self.critic = Critic(self.state_dim, self.action_dim, env_name=env_name).to(self.device)
-        self.critic_target = Critic(self.state_dim, self.action_dim, env_name=env_name).to(self.device)
+        self.critic = Critic(self.state_dim, self.action_dim, hidden_size=hidden_size, env_name=env_name).to(self.device)
+        self.critic_target = Critic(self.state_dim, self.action_dim, hidden_size=hidden_size, env_name=env_name).to(self.device)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=c_lr)
 

@@ -131,13 +131,6 @@ class CassieSim:
           ret[i] = ptr[i]
         return ret
 
-    def get_ground_friction(self):
-        ptr = cassie_sim_ground_friction(self.c)
-        ret = np.zeros(3)
-        for i in range(3):
-          ret[i] = ptr[i]
-        return ret
-
     def set_dof_damping(self, data):
         c_arr = (ctypes.c_double * self.nv)()
 
@@ -174,18 +167,6 @@ class CassieSim:
           c_arr[i] = data[i]
 
         cassie_sim_set_body_ipos(self.c, c_arr)
-
-    def set_ground_friction(self, data):
-        c_arr = (ctypes.c_double * 3)()
-
-        if len(data) != 3:
-           print("SIZE MISMATCH SET_GROUND_FRICTION()")
-           exit(1)
-
-        for i in range(3):
-          c_arr[i] = data[i]
-
-        cassie_sim_set_ground_friction(self.c, c_arr)
 
     def __del__(self):
         cassie_sim_free(self.c)

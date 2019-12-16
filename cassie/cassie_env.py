@@ -31,15 +31,13 @@ class CassieEnv:
 
         if clock_based:
             self.observation_space = np.zeros(42)
-            self.clock_inds = [40, 41]
             if self.state_est:
                 self.observation_space = np.zeros(48)       # Size for use with state est
-                self.clock_inds = [46, 47]
         else:
             self.observation_space = np.zeros(80)
             if self.state_est:
-                self.observation_space = np.zeros(86)       # Size for use without state est
-        self.action_space = np.zeros(10)
+                self.observation_space = np.zeros(86)       # Size for use with state est
+        self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
         if traj == "walking":

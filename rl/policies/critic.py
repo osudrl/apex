@@ -34,20 +34,19 @@ class Critic(Net):
 
     return (r - self.welford_reward_mean) / torch.sqrt(self.welford_reward_mean_diff / self.welford_reward_n)
 
-class FF_V(Critic):
-  def __init__(self, state_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=torch.nn.functional.relu, normc_init=True, obs_std=None, obs_mean=None):
-    super(FF_V, self).__init__()
+class GaussianMLP_Critic(Critic):
+  def __init__(self, state_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=torch.tanh, init_std=1, learn_std=True, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
+    super(GaussianMLP_Critic, self).__init__()
 
     self.critic_layers = nn.ModuleList()
-    self.critic_layers += [nn.Linear(state_dim, layers[0])]
-    for i in range(len(layers)-1):
-        self.critic_layers += [nn.Linear(layers[i], layers[i+1])]
-    self.network_out = nn.Linear(layers[-1], 1)
+    self.critic_layers += [nn.Linear(state_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.critic_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.network_out = nn.Linear(hidden_size, 1)
 
     self.env_name = env_name
-
     self.nonlinearity = nonlinearity
-
+    
     self.obs_std = obs_std
     self.obs_mean = obs_mean
 
@@ -73,47 +72,37 @@ class FF_V(Critic):
 
     return value
 
-  def act(self, inputs): # not needed, deprecated
-    return self(inputs)
+  def act(self, inputs):
+    value = self(inputs)
+    return value
 
 
-class FF_Q(Critic):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', normc_init=True, obs_std=None, obs_mean=None):
-    super(FF_Q, self).__init__()
+class FF_Critic(Critic):
+  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET'):
+    super(FF_Critic, self).__init__()
 
     self.critic_layers = nn.ModuleList()
-    self.critic_layers += [nn.Linear(state_dim + action_dim, layers[0])]
-    for i in range(len(layers)-1):
-        self.critic_layers += [nn.Linear(layers[i], layers[i+1])]
-    self.network_out = nn.Linear(layers[-1], 1)
+    self.critic_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.critic_layers += [nn.Linear(hidden_size, hidden_size)]
+    self.network_out = nn.Linear(hidden_size, action_dim)
 
     self.env_name = env_name
-
-    self.obs_std = obs_std
-    self.obs_mean = obs_mean
-
-    # weight initialization scheme used in PPO paper experiments
-    self.normc_init = normc_init
-    
-    self.init_parameters()
-    self.train()
-
-  def init_parameters(self):
-    if self.normc_init:
-        print("Doing norm column initialization.")
-        self.apply(normc_fn)
+    self.initialize_parameters()
 
   def forward(self, state, action):
-    if self.training == False:
-        state = (state - self.obs_mean) / self.obs_std
 
-    x = torch.cat([state, action], len(state.size())-1)
+    if len(state.size()) > 2:
+      x = torch.cat([state, action], 2)
+    elif len(state.size()) > 1:
+      x = torch.cat([state, action], 1)
+    else:
+      x = torch.cat([state, action])
 
-    for l in self.critic_layers:
-        x = F.relu(l(x))
-    value = self.network_out(x)
+    for idx, layer in enumerate(self.critic_layers):
+      x = F.relu(layer(x))
 
-    return value
+    return self.network_out(x)
 
 class Dual_Q_Critic(Critic):
   def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET'):
@@ -124,20 +113,27 @@ class Dual_Q_Critic(Critic):
     self.q1_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
     for _ in range(hidden_layers-1):
         self.q1_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.q1_out = nn.Linear(hidden_size, 1)
+    self.q1_out = nn.Linear(hidden_size, action_dim)
 
     # Q2 architecture
     self.q2_layers = nn.ModuleList()
     self.q2_layers += [nn.Linear(state_dim + action_dim, hidden_size)]
     for _ in range(hidden_layers-1):
         self.q2_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.q2_out = nn.Linear(hidden_size, 1)
+    self.q2_out = nn.Linear(hidden_size, action_dim)
 
     self.env_name = env_name
 
   def forward(self, state, action):
 
-    x1 = torch.cat([state, action], len(state.size())-1)
+    # print(state.size(), state)
+    #print(action.size(), action)
+    if len(state.size()) > 2:
+      x1 = torch.cat([state, action], 2)
+    elif len(state.size()) > 1:
+      x1 = torch.cat([state, action], 1)
+    else:
+      x1 = torch.cat([state, action])
 
     x2 = x1
 
@@ -167,23 +163,21 @@ class Dual_Q_Critic(Critic):
 
     return self.q1_out(x1)
 
-class LSTM_Q(Critic):
-  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', normc_init=True):
-    super(LSTM_Q, self).__init__()
+
+class LSTM_Critic(Critic):
+  def __init__(self, input_dim, action_dim, hidden_size=64, hidden_layers=1, env_name='NOT SET'):
+    super(LSTM_Critic, self).__init__()
 
     self.critic_layers = nn.ModuleList()
-    self.critic_layers += [nn.LSTMCell(input_dim + action_dim, layers[0])]
-    for i in range(len(layers)-1):
-        self.critic_layers += [nn.LSTMCell(layers[i], layers[i+1])]
-    self.network_out = nn.Linear(layers[-1], 1)
+    self.critic_layers += [nn.LSTMCell(input_dim + action_dim, hidden_size)]
+    for _ in range(hidden_layers-1):
+        self.critic_layers += [nn.LSTMCell(hidden_size, hidden_size)]
+    self.network_out = nn.Linear(hidden_size, action_dim)
 
     self.init_hidden_state()
 
     self.is_recurrent = True
     self.env_name = env_name
-
-    if normc_init:
-      self.initialize_parameters()
 
   def get_hidden_state(self):
     return self.hidden, self.cells
@@ -193,16 +187,15 @@ class LSTM_Q(Critic):
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.critic_layers]
   
   def forward(self, state, action):
-    dims = len(state.size())
-
     if len(state.size()) != len(action.size()):
       print("state and action must have same number of dimensions: {} vs {}", state.size(), action.size())
       exit(1)
 
-    if dims == 3: # if we get a batch of trajectories
+    if len(state.size()) == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=state.size(1))
       value = []
       for t, (state_batch_t, action_batch_t) in enumerate(zip(state, action)):
+        #print(state_batch_t.size(), action_batch_t.size())
         x_t = torch.cat([state_batch_t, action_batch_t], 1)
 
         for idx, layer in enumerate(self.critic_layers):
@@ -214,80 +207,38 @@ class LSTM_Q(Critic):
 
       x = torch.stack([a.float() for a in value])
 
-    else:
+    elif len(state.size()) == 2: # if we get a trajectory
+      self.init_hidden_state()
 
-      x = torch.cat([state, action], len(state_t.size()))
-      if dims == 1:
-        x = x.view(1, -1)
-
-      for idx, layer in enumerate(self.critic_layers):
-        c, h = self.cells[idx], self.hidden[idx]
-        self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
-        x = self.hidden[idx]
-      x = self.network_out(x)
-      
-      if dims == 1:
-        x = x.view(-1)
-
-    return x
-
-class LSTM_V(Critic):
-  def __init__(self, input_dim, layers=(128, 128), env_name='NOT SET', normc_init=True):
-    super(LSTM_V, self).__init__()
-
-    self.critic_layers = nn.ModuleList()
-    self.critic_layers += [nn.LSTMCell(input_dim, layers[0])]
-    for i in range(len(layers)-1):
-        self.critic_layers += [nn.LSTMCell(layers[i], layers[i+1])]
-    self.network_out = nn.Linear(layers[-1], 1)
-
-    self.init_hidden_state()
-
-    self.is_recurrent = True
-    self.env_name = env_name
-
-    if normc_init:
-      self.initialize_parameters()
-
-  def get_hidden_state(self):
-    return self.hidden, self.cells
-
-  def init_hidden_state(self, batch_size=1):
-    self.hidden = [torch.zeros(batch_size, l.hidden_size) for l in self.critic_layers]
-    self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.critic_layers]
-  
-  def forward(self, state):
-    dims = len(state.size())
-
-    if dims == 3: # if we get a batch of trajectories
-      self.init_hidden_state(batch_size=state.size(1))
       value = []
-      for t, state_batch_t in enumerate(state):
-        x_t = state_batch_t
+      for t, (state_t, action_t) in enumerate(zip(state, action)):
+        x_t = torch.cat([state_t, action_t])
+        x_t = x_t.view(1, -1)
+
         for idx, layer in enumerate(self.critic_layers):
           c, h = self.cells[idx], self.hidden[idx]
+          #self.cells[idx], self.hidden[idx] = layer(x_t, (c, h))
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
         x_t = self.network_out(x_t)
         value.append(x_t)
 
-      x = torch.stack([a.float() for a in value])
+      x = torch.cat([a.float() for a in value])
 
-    else:
-      x = state
-      if dims == 1:
-        x = x.view(1, -1)
+    elif len(state.size()) == 1: # if we get a single timestep
+      print("MAKE SURE THIS WORKS.")
+      x = torch.cat([state_t, action_t], 1)
+      x = x.view(1, -1)
 
       for idx, layer in enumerate(self.critic_layers):
         c, h = self.cells[idx], self.hidden[idx]
-        self.hidden[idx], self.cells[idx] = layer(x, (h, c))
+        #self.cells[idx], self.hidden[idx] = layer(x, (c, h))
+        self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
         x = self.hidden[idx]
       x = self.network_out(x)
 
-      if dims == 1:
-        x = x.view(-1)
-
+    else:
+      print("Invalid input dimensions.")
+      exit(1)
     return x
 
-
-GaussianMLP_Critic = FF_V

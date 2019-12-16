@@ -7,7 +7,7 @@ from torch.distributions import kl_divergence
 
 import numpy as np
 from rl.algos import PPO
-from rl.policies import GaussianMLP_Actor
+from rl.policies.actor import GaussianMLP_Actor
 from rl.policies.critic import GaussianMLP_Critic
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
@@ -68,12 +68,11 @@ class MirrorPPO(PPO):
                     #      advantage_batch]
                     # ).detach()
 
-                    values = critic.act(obs_batch)
-                    pdf = policy.evaluate(obs_batch)
+                    values, pdf = policy.evaluate(obs_batch)
 
                     # TODO, move this outside loop?
                     with torch.no_grad():
-                        old_pdf = old_policy.evaluate(obs_batch)
+                        _, old_pdf = old_policy.evaluate(obs_batch)
                         old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
                     
                     log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
@@ -87,12 +86,12 @@ class MirrorPPO(PPO):
                     critic_loss = 0.5 * (return_batch - values).pow(2).mean()
 
                     # Mirror Symmetry Loss
-                    deterministic_actions = policy(obs_batch)
+                    _, deterministic_actions = policy(obs_batch)
                     if env.clock_based:
                         mir_obs = mirror_observation(obs_batch, env.clock_inds)
-                        mirror_actions = policy(mir_obs)
+                        _, mirror_actions = policy(mir_obs)
                     else: 
-                        mirror_actions = policy(mirror_observation(obs_batch))
+                        _, mirror_actions = policy(mirror_observation(obs_batch))
                     mirror_actions = mirror_action(mirror_actions)
 
                     mirror_loss = 4 * (deterministic_actions - mirror_actions).pow(2).mean()
@@ -178,8 +177,6 @@ class MirrorPPO(PPO):
                 test = self.sample_parallel(env_fn, policy, critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
-                avg_eval_reward = np.mean(test.ep_returns)
-
                 pdf     = policy.evaluate(observations)
                 old_pdf = old_policy.evaluate(observations)
 
@@ -192,6 +189,8 @@ class MirrorPPO(PPO):
                 logger.add_scalar("Train/Mean KL Div", kl, itr)
                 logger.add_scalar("Train/Mean Entropy", entropy, itr)
                 logger.add_scalar("Misc/Timesteps", self.total_steps, itr)
+
+                logger.dump()
 
             # TODO: add option for how often to save model
             if np.mean(test.ep_returns) > self.max_return:
@@ -276,7 +275,10 @@ def run_experiment(args):
         critic = GaussianMLP_Critic(
             obs_dim, 
             env_name=args.env_name,
-            nonlinearity=torch.nn.functional.relu,
+            nonlinearity=torch.nn.functional.relu, 
+            bounded=True, 
+            init_std=np.exp(-2), 
+            learn_std=False,
             normc_init=False
         )
 
