@@ -185,7 +185,8 @@ class UnifiedCassieIKEnv:
     def reset(self):
         random_speed_idx = random.randint(0, self.num_speeds-1)
         self.speed = self.speeds[random_speed_idx]
-        # print("current speed: {}".format(self.speed))
+        self.speed = 1.0
+        print("current speed: {}".format(self.speed))
         self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
         self.phase = random.randint(0, self.phaselen - 1)
         # self.phase = 0
@@ -316,7 +317,7 @@ class UnifiedCassieIKEnv:
                  0.1 * np.exp(-speed_diff)
         #reward = np.exp(-joint_error)
 
-        # print("{}\t{}\t{}\t{}".format(self.speed, self.sim.qvel()[0], 0.2 * np.exp(-com_error), reward))
+        print("{}\t{}\t{}\t{}".format(self.speed, self.sim.qvel()[0], 0.2 * np.exp(-com_error), reward))
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
@@ -449,7 +450,7 @@ class UnifiedCassieIKEnv:
 
             clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                      np.cos(2 * np.pi *  self.phase / self.phaselen)]
-            
+
             ext_state = ext_state = np.concatenate((clock, [self.speed]))
 
         else:

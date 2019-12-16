@@ -245,12 +245,12 @@ try:
                 # elif c == 'd':
                 #     y_speed -= .1
                 #     print("Decreasing y speed to: ", y_speed)
-                elif c == 'j':
-                    traj.phase_add += .1
-                    print("Increasing frequency to: ", traj.phase_add)
-                elif c == 'h':
-                    traj.phase_add -= .1
-                    print("Decreasing frequency to: ", traj.phase_add)
+                # elif c == 'j':
+                #     traj.phase_add += .1
+                #     print("Increasing frequency to: ", traj.phase_add)
+                # elif c == 'h':
+                #     traj.phase_add -= .1
+                #     print("Decreasing frequency to: ", traj.phase_add)
                 elif c == 'l':
                     orient_add += .1
                     print("Increasing orient_add to: ", orient_add)
@@ -272,7 +272,7 @@ try:
             # y_speed = min(max_y_speed, y_speed)
             print("speed: ", traj.speed)
             # print("y_speed: ", y_speed)
-            print("frequency: ", traj.phase_add)
+            # print("frequency: ", traj.phase_add)
 
         traj.update_info(traj.speed)
 
@@ -310,7 +310,7 @@ try:
 
         
         #pretending the height is always 1.0
-        RL_state[0] = 1.0
+        # RL_state[0] = 1.0
         
         # Construct input vector
         torch_state = torch.Tensor(RL_state)
