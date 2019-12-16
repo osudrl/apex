@@ -387,11 +387,11 @@ if __name__ == "__main__":
     sys.argv.remove(sys.argv[1])
 
     parser.add_argument("--policy", default="./trained_models/ddpg/ddpg_actor.pt", type=str)
-    parser.add_argument("--env_name", default=None, type=str)
+    parser.add_argument("--env_name", default="CassieIK-v0", type=str)
     parser.add_argument("--traj_len", default=400, type=str)
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
-    parser.add_argument("--state_est", default=False, action='store_true')           # use state estimator or not
-    parser.add_argument("--clock_based", default=False, action='store_true')
+    parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
+    parser.add_argument("--clock_based", default=True, action='store_true')
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
