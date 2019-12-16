@@ -26,7 +26,7 @@ def print_logo(subtitle="", option=2):
   print(subtitle)
   print("\n")
 
-def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
+def env_factory(path, state_est=True, mirror=False, speed=None, clock_based=False, **kwargs):
     from functools import partial
 
     """
@@ -43,9 +43,9 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
       from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, UnifiedCassieIKEnv, UnifiedCassieIKEnvNoDelta, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
-        env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieEnv, "walking", clock_based=clock_based, state_est=state_est)
       elif path == 'CassieRandomDynamics-v0':
-        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
+        env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=clock_based, state_est=state_est)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
       elif path == 'CassieIK-v0':
@@ -129,12 +129,12 @@ def create_logger(args):
   logger.dir = output_dir
   return logger
 
-def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0):
+def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0, state_est=True, clock_based=False):
 
   if env_name is None:
-    env = env_factory(policy.env_name, speed=speed)()
+    env = env_factory(policy.env_name, speed=speed, state_est=state_est, clock_based=clock_based)()
   else:
-    env = env_factory(env_name, speed=speed)()
+    env = env_factory(env_name, speed=speed, state_est=state_est, clock_based=clock_based)()
 
   while True:
     state = env.reset()
@@ -376,6 +376,9 @@ if __name__ == "__main__":
     # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
 
+    # arg for training on ground_friction_env
+    parser.add_argument("--torsional_friction", type=float, default=0.005)              # change torsional friction
+
     args = parser.parse_args()
     args.num_steps = args.num_steps // args.num_procs
     run_experiment(args)
@@ -387,12 +390,14 @@ if __name__ == "__main__":
     parser.add_argument("--env_name", default=None, type=str)
     parser.add_argument("--traj_len", default=400, type=str)
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
+    parser.add_argument("--state_est", default=False, action='store_true')           # use state estimator or not
+    parser.add_argument("--clock_based", default=False, action='store_true')
     args = parser.parse_args()
 
     policy = torch.load(args.policy)
 
 
-    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed)
+    eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed, state_est=args.state_est, clock_based=args.clock_based)
 
     
   else:
