@@ -380,9 +380,6 @@ if __name__ == "__main__":
     # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
 
-    # arg for training on ground_friction_env
-    parser.add_argument("--torsional_friction", type=float, default=0.005)              # change torsional friction
-
     args = parser.parse_args()
     args.num_steps = args.num_steps // args.num_procs
     run_experiment(args)
