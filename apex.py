@@ -343,7 +343,7 @@ if __name__ == "__main__":
 
     # general args
     parser.add_argument("--policy_name", type=str, default="PPO")
-    parser.add_argument("--env_name", "-e",   default="CassieIK-v0")
+    parser.add_argument("--env_name", "-e",   default="Cassie-v0")
     parser.add_argument("--logdir", type=str, default="./logs/ppo/experiments/")        # Where to log diagnostics to
     parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
     parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
@@ -368,6 +368,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_procs", type=int, default=30, help="Number of threads to train on")
     parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
     parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
+    parser.add_argument("--recurrent",   action='store_true')
 
     # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")

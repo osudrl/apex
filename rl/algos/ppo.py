@@ -44,6 +44,7 @@ class PPOBuffer:
         self.gamma, self.lam = gamma, lam
 
         self.ptr, self.path_idx = 0, 0
+        self.traj_idx = [0]
     
     def __len__(self):
         return len(self.states)
@@ -64,6 +65,8 @@ class PPOBuffer:
         self.ptr += 1
     
     def finish_path(self, last_val=None):
+        self.traj_idx += [self.ptr]
+
         if last_val is None:
             last_val = np.zeros(shape=(1,))
 
@@ -125,6 +128,8 @@ class PPO:
         self.n_proc = args['num_procs']
 
         self.grad_clip = args['max_grad_norm']
+
+        self.recurrent = args['recurrent']
 
         self.max_return = 0
 
@@ -249,6 +254,7 @@ class PPO:
         def merge(buffers):
             merged = PPOBuffer(self.gamma, self.lam)
             for buf in buffers:
+                offset = len(merged)
                 merged.states  += buf.states
                 merged.actions += buf.actions
                 merged.rewards += buf.rewards
@@ -258,10 +264,10 @@ class PPO:
                 merged.ep_returns += buf.ep_returns
                 merged.ep_lens    += buf.ep_lens
 
+                merged.traj_idx += [offset + i for i in buf.traj_idx[1:]]
+                merged.ptr      += buf.ptr
+
             return merged
-
-        
-
         return merge(result)
 
     def train(self,
@@ -305,20 +311,36 @@ class PPO:
             
             for _ in range(self.epochs):
                 losses = []
-                sampler = BatchSampler(
-                    SubsetRandomSampler(range(advantages.numel())),
-                    minibatch_size,
-                    drop_last=True
-                )
+                if self.recurrent:
+                  random_indices = SubsetRandomSampler(range(advantages.numel()))
+                else:
+                  random_indices = SubsetRandomSampler(range(len(batch.traj_idx)))
+
+                sampler = BatchSampler(random_indices, minibatch_size, drop_last=True)
 
                 for indices in sampler:
-                    indices = torch.LongTensor(indices)
+                    #indices = torch.LongTensor(indices)
+                    if self.recurrent:
+                      print("recurrent sample")
+                      obs_batch       = [observations[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
+                      action_batch    = [actions[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
+                      return_batch    = [returns[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
+                      advantage_batch = [advantages[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
+                      traj_mask       = [torch.ones_like(r) for r in return_batch]
 
-                    obs_batch = observations[indices]
-                    action_batch = actions[indices]
+                      obs_batch       = pad_sequence(obs_batch, batch_first=False)
+                      action_batch    = pad_sequence(action_batch, batch_first=False)
+                      return_batch    = pad_sequence(return_batch, batch_first=False)
+                      advantage_batch = pad_sequence(advantage_batch, batch_first=False)
+                      traj_mask       = pad_sequence(traj_mask, batch_first=False)
 
-                    return_batch = returns[indices]
-                    advantage_batch = advantages[indices]
+                    else:
+                      print("nonrecurrent sample")
+                      obs_batch = observations[indices]
+                      action_batch = actions[indices]
+
+                      return_batch = returns[indices]
+                      advantage_batch = advantages[indices]
 
                     values = critic.act(obs_batch)
                     pdf = policy.evaluate(obs_batch)
@@ -346,7 +368,7 @@ class PPO:
                     (actor_loss + entropy_penalty).backward()
 
                     # Clip the gradient norm to prevent "unlucky" minibatches from 
-                    # causing pathalogical updates
+                    # causing pathological updates
                     torch.nn.utils.clip_grad_norm_(policy.parameters(), self.grad_clip)
                     optimizer.step()
 
@@ -354,7 +376,7 @@ class PPO:
                     critic_loss.backward()
 
                     # Clip the gradient norm to prevent "unlucky" minibatches from 
-                    # causing pathalogical updates
+                    # causing pathological updates
                     torch.nn.utils.clip_grad_norm_(critic.parameters(), self.grad_clip)
                     critic_optimizer.step()
 
@@ -401,5 +423,3 @@ class PPO:
                 self.highest_reward = avg_eval_reward
                 self.save(policy)
 
-
-            
