@@ -7,8 +7,8 @@ from torch.distributions import kl_divergence
 
 import numpy as np
 from rl.algos import PPO
-from rl.policies import GaussianMLP_Actor
-from rl.policies.critic import GaussianMLP_Critic
+from rl.policies.actor import Gaussian_FF_Actor, Gaussian_LSTM_Actor
+from rl.policies.critic import FF_V, LSTM_V
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
 from rl.envs.wrappers import SymmetricEnv
@@ -205,43 +205,6 @@ def run_experiment(args):
 
     from apex import env_factory, create_logger
 
-    # # Environment
-    # if(args.env in ["Cassie-v0", "Cassie-mimic-v0", "Cassie-mimic-walking-v0"]):
-    #     # NOTE: importing cassie for some reason breaks openai gym, BUG ?
-    #     from cassie import CassieEnv, CassieTSEnv, CassieIKEnv
-    #     from cassie.no_delta_env import CassieEnv_nodelta
-    #     from cassie.speed_env import CassieEnv_speed
-    #     from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
-    #     from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
-    #     # set up cassie environment
-    #     # import gym_cassie
-    #     # env_fn = gym_factory(args.env_name)
-    #     #env_fn = make_env_fn(state_est=args.state_est)
-    #     #env_fn = functools.partial(CassieEnv_speed_dfreq, "walking", clock_based = True, state_est=args.state_est)
-    #     env_fn = functools.partial(CassieIKEnv, clock_based=True, state_est=args.state_est)
-    #     print(env_fn().clock_inds)
-    #     obs_dim = env_fn().observation_space.shape[0]
-    #     action_dim = env_fn().action_space.shape[0]
-
-    #     # Mirror Loss
-    #     if args.mirror:
-    #         if args.state_est:
-    #             # with state estimator
-    #             env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48], mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-    #         else:
-    #             # without state estimator
-    #             env_fn = functools.partial(SymmetricEnv, env_fn, mirrored_obs=[0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17,
-    #                                             18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33,
-    #                                             -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42],
-    #                                             mirrored_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-    # else:
-    #     import gym
-    #     env_fn = gym_factory(args.env_name)
-    #     #max_episode_steps = env_fn()._max_episode_steps
-    #     obs_dim = env_fn().observation_space.shape[0]
-    #     action_dim = env_fn().action_space.shape[0]
-    #     max_episode_steps = 1000
-
     # wrapper function for creating parallelized envs
     env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed)
     obs_dim = env_fn().observation_space.shape[0]
@@ -255,30 +218,34 @@ def run_experiment(args):
         policy = torch.load(args.previous)
         print("loaded model from {}".format(args.previous))
     else:
-        policy = GaussianMLP_Actor(
-            obs_dim, action_dim,
-            env_name=args.env_name,
-            nonlinearity=torch.nn.functional.relu, 
-            bounded=True, 
-            init_std=np.exp(-2), 
-            learn_std=False,
-            normc_init=False
-        )
-        policy_copy = GaussianMLP_Actor(
-            obs_dim, action_dim, 
-            env_name=args.env_name,
-            nonlinearity=torch.nn.functional.relu, 
-            bounded=True, 
-            init_std=np.exp(-2), 
-            learn_std=False,
-            normc_init=False
-        )
-        critic = GaussianMLP_Critic(
-            obs_dim, 
-            env_name=args.env_name,
-            nonlinearity=torch.nn.functional.relu,
-            normc_init=False
-        )
+        if args.recurrent:
+          policy = Gaussian_LSTM_Actor(obs_dim,
+                                       action_dim,
+                                       fixed_std=np.exp(-2),
+                                       env_name=args.env_name
+          )
+          policy_copy = Gaussian_LSTM_Actor(obs_dim,
+                                            action_dim,
+                                            fixed_std=np.exp(-2),
+                                            env_name=args.env_name
+          )
+          critic = LSTM_V(obs_dim)
+        else:
+          policy = Gaussian_FF_Actor(
+              obs_dim, action_dim,
+              env_name=args.env_name,
+              nonlinearity=torch.nn.functional.relu, 
+              bounded=True, 
+              init_std=np.exp(-2), 
+              learn_std=False,
+              normc_init=False
+          )
+          critic = FF_V(
+              obs_dim, 
+              env_name=args.env_name,
+              nonlinearity=torch.nn.functional.relu,
+              normc_init=False
+          )
 
         policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
         critic.obs_mean = policy.obs_mean
@@ -286,16 +253,13 @@ def run_experiment(args):
         critic.obs_std = policy.obs_std
         policy_copy.obs_std = policy.obs_std
 
-    policy.train(0)
-    policy_copy.train(0)
-    critic.train(0)
-
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
 
-    if args.mirror:
-        algo = MirrorPPO(args=vars(args))
-    else:
-        algo = PPO(args=vars(args))
+    #if args.mirror:
+    #    algo = MirrorPPO(args=vars(args))
+    #else:
+    #    algo = PPO(args=vars(args))
+    algo = PPO(args=vars(args))
 
     # create a tensorboard logging object
     logger = create_logger(args)

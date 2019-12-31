@@ -118,7 +118,7 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
 
     return self.action.detach()
 
-  def evaluate(self, inputs):
+  def distribution(self, inputs):
     mu, sd = self._get_dist_params(inputs)
     return torch.distributions.Normal(mu, sd)
 
@@ -252,7 +252,12 @@ class Gaussian_LSTM_Actor(Actor):
     if normc_init:
       self.initialize_parameters()
 
+    self.act = self.forward
+
   def _get_dist_params(self, state):
+    if self.training == False:
+        state = (state - self.obs_mean) / self.obs_std
+
     dims = len(state.size())
 
     x = state
@@ -265,7 +270,6 @@ class Gaussian_LSTM_Actor(Actor):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-        #x_t = self.nonlinearity(self.network_out(x_t))
         x_t = self.network_out(x_t)
         action.append(x_t)
 
@@ -279,7 +283,6 @@ class Gaussian_LSTM_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      #x = self.nonlinearity(self.network_out(x))[0]
       x = self.network_out(x)
 
       if dims == 1:
@@ -307,8 +310,8 @@ class Gaussian_LSTM_Actor(Actor):
 
     return self.action
 
-  def pdf(self, state):
-    mu, sd = self._get_dist_params(state)
+  def distribution(self, inputs):
+    mu, sd = self._get_dist_params(inputs)
     return torch.distributions.Normal(mu, sd)
 
   def get_action(self):

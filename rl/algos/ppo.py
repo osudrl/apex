@@ -6,6 +6,8 @@ import torch.optim as optim
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.distributions import kl_divergence
 
+from torch.nn.utils.rnn import pad_sequence
+
 import time
 
 import numpy as np
@@ -141,6 +143,7 @@ class PPO:
         else:
             ray.init()
 
+    """
     @staticmethod
     def add_arguments(parser):
         parser.add_argument("--n_itr", type=int, default=10000,
@@ -185,6 +188,7 @@ class PPO:
         parser.add_argument("--max_traj_len", type=int, default=1000,
                             help="Max episode horizon")
 
+    """
     def save(self, policy):
 
         save_path = os.path.join("./trained_models", "ppo")
@@ -222,9 +226,15 @@ class PPO:
             value = 0
             traj_len = 0
 
+            if hasattr(policy, 'init_hidden_state'):
+                policy.init_hidden_state()
+
+            if hasattr(critic, 'init_hidden_state'):
+                critic.init_hidden_state()
+
             while not done and traj_len < max_traj_len:
-                action = policy.act(state, deterministic)
-                value = critic.act(state)
+                action = policy(state, deterministic=False)
+                value = critic(state)
 
                 next_state, reward, done, _ = env.step(action.numpy())
 
@@ -235,7 +245,7 @@ class PPO:
                 traj_len += 1
                 num_steps += 1
 
-            value = critic.act(state)
+            value = critic(state)
             memory.finish_path(last_val=(not done) * value.numpy())
 
         return memory
@@ -273,13 +283,12 @@ class PPO:
     def train(self,
               env_fn,
               policy,
-              policy_copy,
+              old_policy,
               critic,
               n_itr,
               logger=None):
 
-        # old_policy = deepcopy(policy)
-        old_policy = policy_copy
+        #old_policy = deepcopy(policy)
 
         optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
         critic_optimizer = optim.Adam(critic.parameters(), lr=self.lr, eps=self.eps)
@@ -311,56 +320,53 @@ class PPO:
             
             for _ in range(self.epochs):
                 losses = []
+                entropies = []
+                kls = []
                 if self.recurrent:
-                  random_indices = SubsetRandomSampler(range(advantages.numel()))
+                    random_indices = SubsetRandomSampler(range(len(batch.traj_idx)-1))
                 else:
-                  random_indices = SubsetRandomSampler(range(len(batch.traj_idx)))
+                    random_indices = SubsetRandomSampler(range(advantages.numel()))
 
                 sampler = BatchSampler(random_indices, minibatch_size, drop_last=True)
-
                 for indices in sampler:
-                    #indices = torch.LongTensor(indices)
                     if self.recurrent:
-                      print("recurrent sample")
-                      obs_batch       = [observations[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
-                      action_batch    = [actions[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
-                      return_batch    = [returns[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
-                      advantage_batch = [advantages[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
-                      traj_mask       = [torch.ones_like(r) for r in return_batch]
+                        obs_batch       = [observations[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
+                        action_batch    = [actions[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
+                        return_batch    = [returns[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
+                        advantage_batch = [advantages[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
+                        mask            = [torch.ones_like(r) for r in return_batch]
 
-                      obs_batch       = pad_sequence(obs_batch, batch_first=False)
-                      action_batch    = pad_sequence(action_batch, batch_first=False)
-                      return_batch    = pad_sequence(return_batch, batch_first=False)
-                      advantage_batch = pad_sequence(advantage_batch, batch_first=False)
-                      traj_mask       = pad_sequence(traj_mask, batch_first=False)
-
+                        obs_batch       = pad_sequence(obs_batch, batch_first=False)
+                        action_batch    = pad_sequence(action_batch, batch_first=False)
+                        return_batch    = pad_sequence(return_batch, batch_first=False)
+                        advantage_batch = pad_sequence(advantage_batch, batch_first=False)
+                        mask            = pad_sequence(mask, batch_first=False)
                     else:
-                      print("nonrecurrent sample")
-                      obs_batch = observations[indices]
-                      action_batch = actions[indices]
+                        obs_batch       = observations[indices]
+                        action_batch    = actions[indices]
+                        return_batch    = returns[indices]
+                        advantage_batch = advantages[indices]
+                        mask            = 1
 
-                      return_batch = returns[indices]
-                      advantage_batch = advantages[indices]
-
-                    values = critic.act(obs_batch)
-                    pdf = policy.evaluate(obs_batch)
+                    values = critic(obs_batch)
+                    pdf = policy.distribution(obs_batch)
 
                     # TODO, move this outside loop?
                     with torch.no_grad():
-                        old_pdf = old_policy.evaluate(obs_batch)
+                        old_pdf = old_policy.distribution(obs_batch)
                         old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
                     
                     log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
                     
                     ratio = (log_probs - old_log_probs).exp()
 
-                    cpi_loss = ratio * advantage_batch
-                    clip_loss = ratio.clamp(1.0 - self.clip, 1.0 + self.clip) * advantage_batch
+                    cpi_loss = ratio * advantage_batch * mask
+                    clip_loss = ratio.clamp(1.0 - self.clip, 1.0 + self.clip) * advantage_batch * mask
                     actor_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-                    critic_loss = 0.5 * (return_batch - values).pow(2).mean()
+                    critic_loss = 0.5 * ((return_batch - values) * mask).pow(2).mean()
 
-                    entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
+                    entropy_penalty = -(self.entropy_coeff * pdf.entropy() * mask).mean()
 
                     # TODO: add ability to optimize critic and actor seperately, with different learning rates
 
@@ -380,6 +386,8 @@ class PPO:
                     torch.nn.utils.clip_grad_norm_(critic.parameters(), self.grad_clip)
                     critic_optimizer.step()
 
+                    entropies.append(pdf.entropy().mean().item())
+                    kls.append(kl_divergence(pdf, old_pdf).mean().item())
 
                     losses.append([actor_loss.item(),
                                    pdf.entropy().mean().item(),
@@ -405,11 +413,8 @@ class PPO:
                 avg_eval_reward = np.mean(test.ep_returns)
                 print("avg eval reward: {:.2f}".format(avg_eval_reward))
 
-                pdf     = policy.evaluate(observations)
-                old_pdf = old_policy.evaluate(observations)
-
-                entropy = pdf.entropy().mean().item()
-                kl = kl_divergence(pdf, old_pdf).mean().item()
+                entropy = np.mean(entropies)
+                kl = np.mean(kls)
 
                 logger.add_scalar("Test/Return", avg_eval_reward, itr)
                 logger.add_scalar("Train/Return", np.mean(batch.ep_returns), itr)
