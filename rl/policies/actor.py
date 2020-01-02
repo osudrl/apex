@@ -100,11 +100,15 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
 
     return mean, sd
 
-  def forward(self, inputs):
-    mean, _ = self._get_dist_params(inputs)
-    self.action = mean
+  def forward(self, state, deterministic=True):
+    mu, sd = self._get_dist_params(state)
 
-    return mean
+    if not deterministic:
+      self.action = torch.distributions.Normal(mu, sd).sample()
+    else:
+      self.action = mu
+
+    return self.action
 
   def get_action(self):
     return self.action

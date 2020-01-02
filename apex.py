@@ -339,7 +339,7 @@ if __name__ == "__main__":
       Utility for running Proximal Policy Optimization.
 
     """
-    from rl.algos.mirror_ppo import run_experiment
+    from rl.algos.ppo import run_experiment
 
     # general args
     parser.add_argument("--policy_name", type=str, default="PPO")
