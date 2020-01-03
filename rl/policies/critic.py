@@ -193,6 +193,8 @@ class LSTM_Q(Critic):
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.critic_layers]
   
   def forward(self, state, action):
+    if self.training == False:
+        inputs = (inputs - self.obs_mean) / self.obs_std
     dims = len(state.size())
 
     if len(state.size()) != len(action.size()):
@@ -257,6 +259,8 @@ class LSTM_V(Critic):
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.critic_layers]
   
   def forward(self, state):
+    if self.training == False:
+        inputs = (inputs - self.obs_mean) / self.obs_std
     dims = len(state.size())
 
     if dims == 3: # if we get a batch of trajectories
