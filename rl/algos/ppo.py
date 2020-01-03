@@ -397,7 +397,8 @@ class PPO:
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:
                 self.highest_reward = avg_eval_reward
-                self.save(policy)
+                torch.save(policy, os.path.join(logger.dir, 'actor.pt'))
+                #self.save(policy)
 
 def run_experiment(args):
     from apex import env_factory, create_logger
