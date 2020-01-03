@@ -405,7 +405,7 @@ def run_experiment(args):
     torch.set_num_threads(1)
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed)
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed, clock_based=args.clock_based)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 

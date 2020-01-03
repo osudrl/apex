@@ -356,6 +356,7 @@ if __name__ == "__main__":
     parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
     parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
     parser.add_argument("--state_est", type=bool, default=True)                         # use state estimator or not
+    parser.add_argument("--clock_based", default=True, action='store_true')
     parser.add_argument("--mirror", default=False, action='store_true')                 # mirror actions or not   
     parser.add_argument("--redis_address", type=str, default=None)                      # address of redis server (for cluster setups)
     parser.add_argument("--viz_port", default=8097)                                     # (deprecated) visdom server port
