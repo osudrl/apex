@@ -42,7 +42,7 @@ class Linear_Actor(Actor):
 # Actor network for gaussian mlp
 #class GaussianMLP_Actor(Actor):
 class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conventions
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=torch.tanh, init_std=1, learn_std=True, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=torch.nn.functional.relu, fixed_std=None, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
     super(Gaussian_FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -51,11 +51,11 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
         self.actor_layers += [nn.Linear(layers[i], layers[i+1])]
     self.means = nn.Linear(layers[-1], action_dim)
 
-    if learn_std == True: # probably don't want to use this for ppo, always use fixed std
+    if fixed_std is None: # probably don't want to use this for ppo, always use fixed std
       self.log_stds = nn.Linear(layers[-1], action_dim)
       self.learn_std = True
     else:
-      self.fixed_std = init_std
+      self.fixed_std = fixed_std
       self.learn_std = False
 
     self.action = None
@@ -112,15 +112,6 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
 
   def get_action(self):
     return self.action
-
-  def act(self, inputs, deterministic=True): # make true by default for evaluation purposes
-    mu, sd = self._get_dist_params(inputs)
-    if not deterministic:
-      self.action = torch.distributions.Normal(mu, sd).sample()
-    else:
-      self.action = mu
-
-    return self.action.detach()
 
   def distribution(self, inputs):
     mu, sd = self._get_dist_params(inputs)

@@ -364,15 +364,13 @@ class PPO:
 
                     entropies.append(entropy)
                     kls.append(kl)
-
                     losses.append([actor_loss, entropy, critic_loss, ratio, kl])
-
                     
                 # TODO: add verbosity arguments to suppress this
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
                 # Early stopping 
-                if kl > 0.02:
+                if np.mean(kl) > 0.02:
                     print("Max kl reached, stopping optimization early.")
                     break
 
@@ -402,9 +400,9 @@ class PPO:
                 self.save(policy)
 
 def run_experiment(args):
-    torch.set_num_threads(1)
-
     from apex import env_factory, create_logger
+
+    torch.set_num_threads(1)
 
     # wrapper function for creating parallelized envs
     env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed)
@@ -420,21 +418,10 @@ def run_experiment(args):
         print("loaded model from {}".format(args.previous))
     else:
         if args.recurrent:
-            policy = Gaussian_LSTM_Actor(obs_dim,
-                                         action_dim,
-                                         fixed_std=np.exp(-2),
-                                         env_name=args.env_name
-            )
+            policy = Gaussian_LSTM_Actor(obs_dim, action_dim, fixed_std=np.exp(-2), env_name=args.env_name)
             critic = LSTM_V(obs_dim)
         else:
-            policy = Gaussian_FF_Actor(
-                obs_dim, action_dim,
-                env_name=args.env_name,
-                nonlinearity=torch.nn.functional.relu, 
-                bounded=True, 
-                init_std=np.exp(-2), 
-                learn_std=False
-            )
+            policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(-2), env_name=args.env_name)
             critic = FF_V(obs_dim)
 
         with torch.no_grad():
@@ -471,3 +458,4 @@ def run_experiment(args):
     print()
 
     algo.train(env_fn, policy, critic, args.n_itr, logger=logger)
+
