@@ -1,4 +1,5 @@
 from rl.utils import renderpolicy, rendermultipolicy, renderpolicy_speedinput, rendermultipolicy_speedinput
+from rl.distributions.gaussian import GaussianMLP
 from cassie import CassieEnv
 # from rl.policies import GaussianMLP, BetaMLP
 
