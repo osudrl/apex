@@ -50,6 +50,8 @@ class CassieIKTrajectory:
 # simrate used to be 60
 class TrajectoryInfo:
     def __init__(self):
+
+        self.freq_adjust = 1
         
         self.speeds = [x / 10 for x in range(0, 31)]
         self.trajectories = getAllTrajectories(self.speeds)
@@ -245,12 +247,12 @@ try:
                 # elif c == 'd':
                 #     y_speed -= .1
                 #     print("Decreasing y speed to: ", y_speed)
-                # elif c == 'j':
-                #     traj.phase_add += .1
-                #     print("Increasing frequency to: ", traj.phase_add)
-                # elif c == 'h':
-                #     traj.phase_add -= .1
-                #     print("Decreasing frequency to: ", traj.phase_add)
+                elif c == 'j':
+                    traj.freq_adjust += .1
+                    print("Increasing frequency to: ", traj.freq_adjust)
+                elif c == 'h':
+                    traj.freq_adjust -= .1
+                    print("Decreasing frequency to: ", traj.freq_adjust)
                 elif c == 'l':
                     orient_add += .1
                     print("Increasing orient_add to: ", orient_add)
@@ -270,13 +272,13 @@ try:
             traj.speed = min(max_speed, traj.speed)
             # y_speed = max(min_y_speed, y_speed)
             # y_speed = min(max_y_speed, y_speed)
-            print("speed: ", traj.speed)
+            print("speed: {}\tfreq: {}".format(traj.speed, traj.freq_adjust))
             # print("y_speed: ", y_speed)
             # print("frequency: ", traj.phase_add)
 
         traj.update_info(traj.speed)
 
-        clock = [np.sin(2 * np.pi *  traj.phase / traj.phaselen), np.cos(2 * np.pi *  traj.phase / traj.phaselen)]
+        clock = [np.sin(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen), np.cos(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen)]
         # euler_orient = quaternion2euler(state.pelvis.orientation[:]) 
         # print("euler orient: ", euler_orient + np.array([orient_add, 0, 0]))
         # new_orient = euler2quat(euler_orient + np.array([orient_add, 0, 0]))
