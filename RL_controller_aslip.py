@@ -272,7 +272,6 @@ try:
             traj.speed = min(max_speed, traj.speed)
             # y_speed = max(min_y_speed, y_speed)
             # y_speed = min(max_y_speed, y_speed)
-            print("speed: {}\tfreq: {}".format(traj.speed, traj.freq_adjust))
             # print("y_speed: ", y_speed)
             # print("frequency: ", traj.phase_add)
 
@@ -310,7 +309,9 @@ try:
         ])
         RL_state = np.concatenate([robot_state, ext_state])
 
-        
+        actual_speed = state.pelvis.translationalVelocity[0]
+        print("target speed: {:.2f}\tactual speed: {:.2f}\tfreq: {}".format(traj.speed, actual_speed, traj.freq_adjust))
+
         #pretending the height is always 1.0
         # RL_state[0] = 1.0
         
