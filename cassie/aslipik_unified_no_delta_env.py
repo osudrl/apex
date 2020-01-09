@@ -137,6 +137,8 @@ class UnifiedCassieIKEnvNoDelta:
         # self.prev_action = real_action
 
         real_action = action
+        offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+        real_action = real_action + offset
 
         self.u = pd_in_t()
         for i in range(5):

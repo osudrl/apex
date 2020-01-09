@@ -157,7 +157,7 @@ torch.set_num_threads(1)
 traj = TrajectoryInfo()
 
 # policy = torch.load("./trained_models/aslip_unified_freq_correction.pt")
-policy = torch.load("./trained_models/aslip_unified.pt")
+policy = torch.load("./trained_models/aslip_unified_no_delta.pt")
 policy.eval()
 
 max_speed = 3.0
@@ -324,7 +324,8 @@ try:
         # Get action
         action = policy.act(torch_state, True)
         env_action = action.data.numpy()
-        target = env_action + traj.offset
+        target = env_action
+        # target = env_action + traj.offset
 
         #print(state.pelvis.position[2] - state.terrain.height)
 
