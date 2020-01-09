@@ -88,13 +88,14 @@ class UnifiedCassieIKEnvNoDelta:
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
-        # params for changing the trajectory
-        # self.speed = 2 # how fast (m/s) do we go
-        # self.gait = [1,0,0,0]   # one-hot vector of gaits:
-                                # [1, 0, 0, 0] -> walking/running (left single stance, right single stance)
-                                # [0, 1, 0, 0] -> hopping (double stance, flight phase)
-                                # [0, 0, 1, 0] -> skipping (double stance, right single stance, flight phase, right single stance)
-                                # [0, 0, 0, 1] -> galloping (double stance, right single stance, flight, left single stance)
+        ## THIS IS JUST AN IDEA, instead of doing this we are having one ref trajectory per speed
+            # params for changing the trajectory
+            # self.speed = 2 # how fast (m/s) do we go
+            # self.gait = [1,0,0,0]   # one-hot vector of gaits:
+                                    # [1, 0, 0, 0] -> walking/running (left single stance, right single stance)
+                                    # [0, 1, 0, 0] -> hopping (double stance, flight phase)
+                                    # [0, 0, 1, 0] -> skipping (double stance, right single stance, flight phase, right single stance)
+                                    # [0, 0, 0, 1] -> galloping (double stance, right single stance, flight, left single stance)
 
 
         # maybe make ref traj only send relevant idxs?
@@ -188,8 +189,8 @@ class UnifiedCassieIKEnvNoDelta:
         self.speed = self.speeds[random_speed_idx]
         # print("current speed: {}".format(self.speed))
         self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
-        self.phase = random.randint(0, self.phaselen - 1)
-        # self.phase = 0
+        self.phaselen = self.trajectory.length - 1
+        self.phase = random.randint(0, self.phaselen)
         self.time = 0
         self.counter = 0
 
@@ -214,6 +215,7 @@ class UnifiedCassieIKEnvNoDelta:
         random_speed_idx = random.randint(0, self.num_speeds)
         self.speed = self.speeds[random_speed_idx]
         self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
+        self.phaselen = self.trajectory.length - 1
         self.phase = 0
         self.time = 0
         self.counter = 0
@@ -337,11 +339,16 @@ class UnifiedCassieIKEnvNoDelta:
     # get the corresponding state from the reference trajectory for the current phase
     def get_ref_state(self, phase=None):
 
+        # print("phase: {}\t (phaselen = {})".format(phase, self.phaselen))
+
         if phase is None:
             phase = self.phase
 
         if phase > self.phaselen:
             phase = 0
+
+        # print("looped phase: {}".format(phase))
+        # print()
 
         # pos = np.copy(self.trajectory.qpos[phase * self.simrate])
         pos = np.copy(self.trajectory.qpos[phase])

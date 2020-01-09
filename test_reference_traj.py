@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
-from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, UnifiedCassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
+from cassie import CassieEnv, CassieTSEnv, UnifiedCassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
 # env_fn = partial(CassieIKEnv, "walking", clock_based=True, state_est=state_est, speed=speed)
 env = UnifiedCassieIKEnv("walking", clock_based=True, state_est=True)

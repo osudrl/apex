@@ -40,7 +40,7 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
     if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', 'CassieIK-v0', 'CassieIKNoDelta-v0']:
-      from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, UnifiedCassieIKEnv, UnifiedCassieIKEnvNoDelta, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
+      from cassie import CassieEnv, CassieTSEnv, UnifiedCassieIKEnv, UnifiedCassieIKEnvNoDelta, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
         env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=False)
@@ -49,7 +49,6 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=False)
       elif path == 'CassieIK-v0':
-        # env_fn = partial(CassieIKEnv, "walking", clock_based=True, state_est=state_est, speed=speed)
         env_fn = partial(UnifiedCassieIKEnv, "walking", clock_based=True, state_est=state_est)
       elif path == 'CassieIKNoDelta-v0':
         env_fn = partial(UnifiedCassieIKEnvNoDelta, "walking", clock_based=True, state_est=state_est)
