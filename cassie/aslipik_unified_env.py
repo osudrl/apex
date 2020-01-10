@@ -53,7 +53,7 @@ class UnifiedCassieIKEnv:
                 self.observation_space = np.zeros(86)       # Size for use without state est
         self.action_space      = np.zeros(10)
 
-        self.speeds = [x / 10 for x in range(0, 31)]
+        self.speeds = [x / 10 for x in range(0, 21)]
         self.trajectories = getAllTrajectories(self.speeds)
         self.num_speeds = len(self.trajectories)
 
