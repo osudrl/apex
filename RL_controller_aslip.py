@@ -54,7 +54,7 @@ class TrajectoryInfo:
 
         self.freq_adjust = 1
         
-        self.speeds = [x / 10 for x in range(0, 31)]
+        self.speeds = [x / 10 for x in range(0, 21)]
         self.trajectories = getAllTrajectories(self.speeds)
         self.num_speeds = len(self.trajectories)
 
