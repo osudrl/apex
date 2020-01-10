@@ -316,6 +316,14 @@ class UnifiedCassieIKEnv:
                  0.2 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
                  0.1 * np.exp(-speed_diff)
+
+        """ ALTERNATE REWARD?
+        reward = 0.1 * np.exp(-footpos_error) +       \
+                 0.5 * np.exp(-joint_error) +       \
+                 0.05 * np.exp(-com_error) +         \
+                 0.05 * np.exp(-orientation_error) + \
+                 0.3 * np.exp(-speed_diff)
+        """
         #reward = np.exp(-joint_error)
 
         # print("{}\t{}\t{}\t{}".format(self.speed, self.sim.qvel()[0], 0.2 * np.exp(-com_error), reward))
