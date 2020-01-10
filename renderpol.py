@@ -30,6 +30,6 @@ cassie_env = UnifiedCassieIKEnv("walking", clock_based=True, state_est=True)
 
 # policy = torch.load("./trained_models/stiff_spring/stiff_StateEst_speed2.pt")
 # policy = torch.load("./trained_models/sidestep_StateEst_footxypenaltysmall_forcepenalty_hipyaw_limittargs_pelaccel3_speed-05-1_side03_freq1.pt")
-policy = torch.load("./trained_models/aslip_unified_freq_correction.pt")
+policy = torch.load("./trained_models/aslip_unified.pt")
 policy.eval()
 renderpolicy_speedinput(cassie_env, policy, deterministic=True, dt=0.05, speedup = 2)

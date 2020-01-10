@@ -106,7 +106,7 @@ class UnifiedCassieIKEnv:
         self.cassie_state = state_out_t()
 
         # for print statements
-        self.debug = False
+        self.debug = True
 
     def step_simulation(self, action):
 
@@ -265,10 +265,10 @@ class UnifiedCassieIKEnv:
         for j in [0, 1, 2]:
             footpos_error += np.linalg.norm(lfoot[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot[j] - ref_rfoot[j])
         
-        if self.debug:
-            print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
-            print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
-            print(footpos_error)
+        # if self.debug:
+        #     print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
+        #     print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
+        #     print(footpos_error)
 
         # speed reward component
         speed_diff = np.abs(qvel[0] - self.speed)
