@@ -1,4 +1,5 @@
 from .cassie_env import CassieEnv
+from .speed_env import CassieEnv_speed
 from .taskspace_env import CassieTSEnv
 from .aslip_ik_single_speed_env import CassieIKEnv
 from .aslipik_unified_env import UnifiedCassieIKEnv

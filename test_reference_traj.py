@@ -16,7 +16,7 @@ qvels = []
 
 # manually set the environment's speed
 
-env.speed = 2.0
+env.speed = 0.0
 
 print("\nTesting Stuff\n")
 

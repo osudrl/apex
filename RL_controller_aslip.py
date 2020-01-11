@@ -156,8 +156,8 @@ torch.set_num_threads(1)
 # env.reset_for_test()
 traj = TrajectoryInfo()
 
-# policy = torch.load("./trained_models/aslip_unified_freq_correction.pt")
-policy = torch.load("./trained_models/aslip_unified.pt")
+# policy = torch.load("./trained_models/old_aslip/final_v1/aslip_unified_freq_correction.pt")
+policy = torch.load("./trained_models/aslip_unified_10_v2.pt")
 policy.eval()
 
 max_speed = 3.0
