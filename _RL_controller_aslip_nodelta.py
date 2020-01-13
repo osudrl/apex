@@ -136,7 +136,7 @@ target_log = [] #PD target log
 filename = "test.p"
 filep = open(filename, "wb")
 
-max_speed = 2.0
+max_speed = 3.0
 min_speed = 0.0
 
 def log():
@@ -156,14 +156,15 @@ torch.set_num_threads(1)
 # env.reset_for_test()
 traj = TrajectoryInfo()
 
-# policy = torch.load("./trained_models/old_aslip/final_v1/aslip_unified_freq_correction.pt")
-policy = torch.load("./trained_models/aslip_unified_0_v2.pt")
+# policy = torch.load("./trained_models/aslip_unified_freq_correction.pt")
+policy = torch.load("./trained_models/aslip_unified_no_delta.pt")
 policy.eval()
 
-max_speed = 2.0
+max_speed = 3.0
 min_speed = 0.0
 max_y_speed = 0.5
 min_y_speed = -0.5
+symmetry = True
 
 # Initialize control structure with gains
 P = np.array([100, 100, 88, 96, 50, 100, 100, 88, 96, 50])
@@ -227,7 +228,7 @@ try:
             orient_add -= state.radio.channel[3] / 60.0
             traj.speed = max(min_speed, state.radio.channel[0] * max_speed)
             traj.speed = min(max_speed, state.radio.channel[0] * max_speed)
-            # traj.phase_add = state.radio.channel[5] + 1
+            traj.phase_add = state.radio.channel[5] + 1
             # env.y_speed = max(min_y_speed, -state.radio.channel[1] * max_y_speed)
             # env.y_speed = min(max_y_speed, -state.radio.channel[1] * max_y_speed)
         else:
@@ -279,7 +280,6 @@ try:
         traj.update_info(traj.speed)
 
         clock = [np.sin(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen), np.cos(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen)]
-
         # euler_orient = quaternion2euler(state.pelvis.orientation[:]) 
         # print("euler orient: ", euler_orient + np.array([orient_add, 0, 0]))
         # new_orient = euler2quat(euler_orient + np.array([orient_add, 0, 0]))
@@ -299,8 +299,8 @@ try:
                 # state.pelvis.orientation[:],                                 # pelvis orientation
                 state.motor.position[:],                                     # actuated joint positions
 
-                # state.pelvis.translationalVelocity[:],                       # pelvis translational velocity
-                new_translationalVelocity[:],
+                state.pelvis.translationalVelocity[:],                       # pelvis translational velocity
+                # new_translationalVelocity[:],
                 state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
                 state.motor.velocity[:],                                     # actuated joint velocities
 
@@ -324,9 +324,10 @@ try:
         # Get action
         action = policy.act(torch_state, True)
         env_action = action.data.numpy()
-        target = env_action + traj.offset
+        target = env_action
+        # target = env_action + traj.offset
 
-        print(state.pelvis.position[2] - state.terrain.height)
+        #print(state.pelvis.position[2] - state.terrain.height)
 
         # Send action
         for i in range(5):
