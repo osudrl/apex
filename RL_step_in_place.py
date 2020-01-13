@@ -280,9 +280,6 @@ try:
         traj.update_info(traj.speed)
 
         clock = [np.sin(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen), np.cos(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen)]
-
-        print(traj.phase)
-
         # euler_orient = quaternion2euler(state.pelvis.orientation[:]) 
         # print("euler orient: ", euler_orient + np.array([orient_add, 0, 0]))
         # new_orient = euler2quat(euler_orient + np.array([orient_add, 0, 0]))
@@ -330,7 +327,7 @@ try:
         env_action = action.data.numpy()
         target = env_action + traj.offset
 
-        # print(state.pelvis.position[2] - state.terrain.height)
+        print(state.pelvis.position[2] - state.terrain.height)
 
         # Send action
         for i in range(5):
