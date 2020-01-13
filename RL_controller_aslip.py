@@ -300,8 +300,8 @@ try:
                 # state.pelvis.orientation[:],                                 # pelvis orientation
                 state.motor.position[:],                                     # actuated joint positions
 
-                state.pelvis.translationalVelocity[:],                       # pelvis translational velocity
-                # new_translationalVelocity[:],
+                # state.pelvis.translationalVelocity[:],                       # pelvis translational velocity
+                new_translationalVelocity[:],
                 state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
                 state.motor.velocity[:],                                     # actuated joint velocities
 
