@@ -281,7 +281,7 @@ class UnifiedCassieIKEnv:
             if j == 20 or j == 34:
                 joint_error += 0
             else:
-                joint_error += (target - actual) ** 2
+                joint_error += 30 * weight[i] * (target - actual) ** 2
 
         # center of mass: x, y, z
         for j in [0, 1, 2]:
@@ -324,6 +324,16 @@ class UnifiedCassieIKEnv:
                  0.05 * np.exp(-orientation_error) + \
                  0.3 * np.exp(-speed_diff)
         """
+
+        """ ANOTHER ALTERNATE REWARD? Taskspace reward
+        reward = 0.25 * np.exp(-footpos_error) +       \
+                 0.25 * np.exp(-joint_error) +       \
+                 0.25 * np.exp(-com_error) +         \
+                 0.05 * np.exp(-orientation_error) + \
+                 0.2 * np.exp(-speed_diff)
+        """
+
+
         #reward = np.exp(-joint_error)
 
         # print("{}\t{}\t{}\t{}".format(self.speed, self.sim.qvel()[0], 0.2 * np.exp(-com_error), reward))

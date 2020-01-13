@@ -157,10 +157,10 @@ torch.set_num_threads(1)
 traj = TrajectoryInfo()
 
 # policy = torch.load("./trained_models/old_aslip/final_v1/aslip_unified_freq_correction.pt")
-policy = torch.load("./trained_models/aslip_unified_0_v2.pt")
+policy = torch.load("./trained_models/aslip_single_0.0_v2.pt")
 policy.eval()
 
-max_speed = 3.0
+max_speed = 2.0
 min_speed = 0.0
 max_y_speed = 0.5
 min_y_speed = -0.5
@@ -295,7 +295,7 @@ try:
         # print('new_orientation: {}'.format(new_orient))
             
         # ext_state = np.concatenate((clock, [speed, y_speed]))
-        ext_state = np.concatenate((clock, [traj.speed] ))
+        # ext_state = np.concatenate((clock, [traj.speed] ))
         robot_state = np.concatenate([
                 [state.pelvis.position[2] - state.terrain.height], # pelvis height
                 new_orient,
@@ -312,7 +312,8 @@ try:
                 state.joint.position[:],                                     # unactuated joint positions
                 state.joint.velocity[:]                                      # unactuated joint velocities
         ])
-        RL_state = np.concatenate([robot_state, ext_state])
+        # RL_state = np.concatenate([robot_state, ext_state])
+        RL_state = np.concatenate([robot_state, clock])
 
         actual_speed = state.pelvis.translationalVelocity[0]
         print("target speed: {:.2f}\tactual speed: {:.2f}\tfreq: {}".format(traj.speed, actual_speed, traj.freq_adjust))

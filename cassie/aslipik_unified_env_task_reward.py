@@ -311,11 +311,11 @@ class UnifiedCassieIKEnvAltReward:
         #          0.3 * np.exp(-com_error) +         \
         #          0.1 * np.exp(-orientation_error) + \
         #          0.0 * np.exp(-spring_error)
-        reward = 0.1 * np.exp(-footpos_error) +       \
-                 0.5 * np.exp(-joint_error) +       \
-                 0.05 * np.exp(-com_error) +         \
+        reward = 0.25 * np.exp(-footpos_error) +       \
+                 0.25 * np.exp(-joint_error) +       \
+                 0.25 * np.exp(-com_error) +         \
                  0.05 * np.exp(-orientation_error) + \
-                 0.3 * np.exp(-speed_diff)
+                 0.2 * np.exp(-speed_diff)
         #reward = np.exp(-joint_error)
 
         # print("{}\t{}\t{}\t{}".format(self.speed, self.sim.qvel()[0], 0.2 * np.exp(-com_error), reward))

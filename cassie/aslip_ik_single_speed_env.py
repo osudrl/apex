@@ -259,7 +259,7 @@ class CassieIKEnv:
             if j == 20 or j == 34:
                 joint_error += 0
             else:
-                joint_error += (target - actual) ** 2
+                joint_error += 30 * weight[i] * (target - actual) ** 2
 
         # center of mass: x, y, z
         for j in [0, 1, 2]:
