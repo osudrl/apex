@@ -1,6 +1,14 @@
 import torch
 from torch.autograd import Variable
+from cassie.quaternion_function import *
+
 import time
+import numpy as np
+import sys
+import select
+import tty
+import termios
+import copy
 
 def isData():
     return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
@@ -12,6 +20,7 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
     env.side_speed = 0
     env.phase_add = 1
     orient_add = 0
+    prev_foot = None
 
     # Check if using StateEst or not
     if env.observation_space.shape[0] >= 48:
@@ -53,8 +62,8 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                     print("Decreasing orient_add to: ", orient_add)
                 elif c == 'p':
                     print("Applying force")
-                    push = 200
-                    push_dir = 0
+                    push = 100
+                    push_dir = 2
                     force_arr = np.zeros(6)
                     force_arr[push_dir] = push
                     env.sim.apply_force(force_arr)
@@ -93,9 +102,18 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 foot_pos = np.zeros(6)
                 env.sim.foot_pos(foot_pos)
                 foot_forces = env.sim.get_foot_forces()
+                lfoot_vel = 0     
+                rfoot_vel = 0
+                if prev_foot is not None:
+                    lfoot_vel = (foot_pos[2] - prev_foot[2]) / 0.03
+                    rfoot_vel = (foot_pos[5] - prev_foot[5]) / 0.03
+                # print("Foot speed: ", lfoot_vel)#, rfoot_vel)
+                prev_foot = copy.copy(foot_pos)
                 # print("Foot force norm: ", foot_forces[0])
-                # print("foot distance: ", np.linalg.norm(foot_pos[0:3]-foot_pos[3:6]))
+                # print("foot distance: ", np.linalg.norm(foot_pos[0:2]-foot_pos[3:5]))
                 # print("speed: ", env.sim.qvel()[0])
+                # print("Frequency: ", env.phase_add)
+                # print("Speed: ", env.speed)
                 # print("desired speed: ", env.speed)
                 # print("pelvis accel: ", np.linalg.norm(env.cassie_state.pelvis.translationalAcceleration))
 
