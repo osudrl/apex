@@ -240,8 +240,8 @@ class PPO:
         if self.n_proc > 1:
             real_proc = self.n_proc
             if self.limit_cores:
-                print("limit cores active")
-                real_proc = 50
+                real_proc = 50 - 16*int(np.log2(60 / env_fn().simrate))
+                print("limit cores active, using {} cores".format(real_proc))
                 args = (self, env_fn, policy, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
             result_ids = [worker.remote(*args) for _ in range(real_proc)]
             result = ray.get(result_ids)

@@ -96,7 +96,7 @@ class GaussianMLP(FFPolicy):
         x = self.mean(x)
 
         if self.bounded:
-            mean = torch.tanh(x) 
+            mean = torch.tanh(x) * 1.7
         else:
             mean = x
 

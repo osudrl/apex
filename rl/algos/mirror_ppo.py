@@ -26,8 +26,8 @@ class MirrorPPO(PPO):
         if env.clock_based:
             mirror_observation = env.mirror_clock_observation
         mirror_action = env.mirror_action
-        sym_tuples = True
-        mir_loss = False
+        sym_tuples = False
+        mir_loss = True
         print("minibatch_size / 2: ", self.minibatch_size)
         if sym_tuples:
             # Use only half of minibatch_size since mirror states will double the minibatch size
@@ -38,122 +38,130 @@ class MirrorPPO(PPO):
         max_act = -np.inf
 
         for _ in range(self.epochs):
-                losses = []
-                sampler = BatchSampler(
-                    SubsetRandomSampler(range(advantages.numel())),
-                    minibatch_size,
-                    drop_last=True
-                )
-                for indices in sampler:
-                    indices = torch.LongTensor(indices)
+            losses = []
+            sampler = BatchSampler(
+                SubsetRandomSampler(range(advantages.numel())),
+                minibatch_size,
+                drop_last=True
+            )
+            for indices in sampler:
+                indices = torch.LongTensor(indices)
 
-                    # obs_batch = observations[indices]
-                    orig_obs = observations[indices]
-                    # obs_batch = torch.cat(
-                    #     [obs_batch,
-                    #      obs_batch @ torch.Tensor(env.obs_symmetry_matrix)]
-                    # ).detach()
+                # obs_batch = observations[indices]
+                orig_obs = observations[indices]
+                # obs_batch = torch.cat(
+                #     [obs_batch,
+                #      obs_batch @ torch.Tensor(env.obs_symmetry_matrix)]
+                # ).detach()
 
-                    # action_batch = actions[indices]
-                    orig_act = actions[indices]
-                    # action_batch = torch.cat(
-                    #     [action_batch,
-                    #      action_batch @ torch.Tensor(env.action_symmetry_matrix)]
-                    # ).detach()
+                # action_batch = actions[indices]
+                orig_act = actions[indices]
+                # action_batch = torch.cat(
+                #     [action_batch,
+                #      action_batch @ torch.Tensor(env.action_symmetry_matrix)]
+                # ).detach()
 
-                    return_batch = returns[indices]
-                    # return_batch = torch.cat(
-                    #     [return_batch,
-                    #      return_batch]
-                    # ).detach()
+                return_batch = returns[indices]
+                # return_batch = torch.cat(
+                #     [return_batch,
+                #      return_batch]
+                # ).detach()
 
-                    advantage_batch = advantages[indices]
-                    # advantage_batch = torch.cat(
-                    #     [advantage_batch,
-                    #      advantage_batch]
-                    # ).detach()
+                advantage_batch = advantages[indices]
+                # advantage_batch = torch.cat(
+                #     [advantage_batch,
+                #      advantage_batch]
+                # ).detach()
 
-                    if env.clock_based:
-                        mir_obs = mirror_observation(orig_obs, env.clock_inds)
-                    else:
-                        mir_obs = mirror_observation(orig_obs)
-                    if sym_tuples:
-                        mir_actions = mirror_action(orig_act)
-                        obs_batch = torch.cat([orig_obs, mir_obs])
-                        action_batch = torch.cat([orig_act, mir_actions])
-                        # obs_noise = 0.5*torch.rand(orig_obs.shape) - 0.25
-                        # obs_batch = torch.cat([orig_obs, obs_noise])
-                        # action_noise = 0.5*torch.rand(orig_act.shape) - 0.25
-                        # action_batch = torch.cat([orig_act, action_noise])
-                        return_batch = torch.cat([return_batch, return_batch])
-                        advantage_batch = torch.cat([advantage_batch, advantage_batch])
-                    else:
-                        obs_batch = orig_obs
-                        action_batch = orig_act
+                if env.clock_based:
+                    mir_obs = mirror_observation(orig_obs, env.clock_inds)
+                else:
+                    mir_obs = mirror_observation(orig_obs)
+                if sym_tuples:
+                    mir_actions = mirror_action(orig_act)
+                    obs_batch = torch.cat([orig_obs, mir_obs])
+                    action_batch = torch.cat([orig_act, mir_actions])
+                    # obs_noise = 0.5*torch.rand(orig_obs.shape) - 0.25
+                    # obs_batch = torch.cat([orig_obs, obs_noise])
+                    # action_noise = 0.5*torch.rand(orig_act.shape) - 0.25
+                    # action_batch = torch.cat([orig_act, action_noise])
+                    return_batch = torch.cat([return_batch, return_batch])
+                    advantage_batch = torch.cat([advantage_batch, advantage_batch])
+                else:
+                    obs_batch = orig_obs
+                    action_batch = orig_act
 
-                    # print("mirror act mean: {0:.3f}\t orig act mean: {1:.3f}".format(torch.mean(torch.abs(mir_actions)), torch.mean(torch.abs(orig_act))))
-                    if max_act < np.max(torch.abs(orig_act).numpy()):
-                        max_act = np.max(torch.abs(orig_act).numpy())
+                # print("mirror act mean: {0:.3f}\t orig act mean: {1:.3f}".format(torch.mean(torch.abs(mir_actions)), torch.mean(torch.abs(orig_act))))
+                # if max_act < np.max(torch.abs(orig_act).numpy()):
+                #     max_act = np.max(torch.abs(orig_act).numpy())
 
-                    values, pdf = policy.evaluate(obs_batch)
+                values, pdf = policy.evaluate(obs_batch)
 
-                    # TODO, move this outside loop?
-                    with torch.no_grad():
-                        _, old_pdf = old_policy.evaluate(obs_batch)
-                        old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
-                    
-                    log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
-                    
-                    ratio = (log_probs - old_log_probs).exp()
+                # TODO, move this outside loop?
+                with torch.no_grad():
+                    _, old_pdf = old_policy.evaluate(obs_batch)
+                    old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
+                
+                log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
+                if torch.any(torch.isnan(log_probs)) or torch.max(log_probs) > 20:
+                    print("log prob is large or nan, skipping batch")
+                    continue
+                
+                ratio = (log_probs - old_log_probs).exp()
 
-                    cpi_loss = ratio * advantage_batch
-                    clip_loss = ratio.clamp(1.0 - self.clip, 1.0 + self.clip) * advantage_batch
-                    actor_loss = -torch.min(cpi_loss, clip_loss).mean()
+                cpi_loss = ratio * advantage_batch
+                clip_loss = ratio.clamp(1.0 - self.clip, 1.0 + self.clip) * advantage_batch
+                actor_loss = -torch.min(cpi_loss, clip_loss).mean()
 
-                    critic_loss = 0.5 * (return_batch - values).pow(2).mean()
+                critic_loss = 0.5 * (return_batch - values).pow(2).mean()
 
-                    # Mirror Symmetry Loss
-                    # _, deterministic_actions = policy(obs_batch)
-                    _, deterministic_actions = policy(orig_obs)
-                    _, mirror_actions = policy(mir_obs)
-                    # if env.clock_based:
-                    #     mir_obs = mirror_observation(obs_batch, env.clock_inds)
-                        # _, mirror_actions = policy(mir_obs)
-                    # else: 
-                        # _, mirror_actions = policy(mirror_observation(obs_batch))
-                    mirror_actions = mirror_action(mirror_actions)
+                # Mirror Symmetry Loss
+                # _, deterministic_actions = policy(obs_batch)
+                _, deterministic_actions = policy(orig_obs)
+                _, mirror_actions = policy(mir_obs)
+                # if env.clock_based:
+                #     mir_obs = mirror_observation(obs_batch, env.clock_inds)
+                    # _, mirror_actions = policy(mir_obs)
+                # else: 
+                    # _, mirror_actions = policy(mirror_observation(obs_batch))
+                mirror_actions = mirror_action(mirror_actions)
 
-                    mirror_loss = 5 * (deterministic_actions - mirror_actions).pow(2).mean()
+                mirror_loss = 5 * (deterministic_actions - mirror_actions).pow(2).mean()
 
-                    entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
+                entropy_penalty = -self.entropy_coeff * pdf.entropy().mean()
 
-                    # TODO: add ability to optimize critic and actor seperately, with different learning rates
+                # TODO: add ability to optimize critic and actor seperately, with different learning rates
 
-                    optimizer.zero_grad()
-                    if mir_loss:
-                        (actor_loss + critic_loss + mirror_loss + entropy_penalty).backward()
-                    else:
-                        # print('no mirror loss')
-                        (actor_loss + critic_loss + entropy_penalty).backward()
+                optimizer.zero_grad()
+                if mir_loss:
+                    (actor_loss + critic_loss + mirror_loss + entropy_penalty).backward()
+                else:
+                    # print('no mirror loss')
+                    (actor_loss + critic_loss + entropy_penalty).backward()
 
-                    # Clip the gradient norm to prevent "unlucky" minibatches from 
-                    # causing pathalogical updates
-                    torch.nn.utils.clip_grad_norm_(policy.parameters(), self.grad_clip)
-                    optimizer.step()
+                # Clip the gradient norm to prevent "unlucky" minibatches from 
+                # causing pathalogical updates
+                torch.nn.utils.clip_grad_norm_(policy.parameters(), self.grad_clip)
+                optimizer.step()
 
-                    losses.append([actor_loss.item(),
-                                   pdf.entropy().mean().item(),
-                                   critic_loss.item(),
-                                   ratio.mean().item(),
-                                   mirror_loss.item()])
+                losses.append([actor_loss.item(),
+                                pdf.entropy().mean().item(),
+                                critic_loss.item(),
+                                ratio.mean().item(),
+                                mirror_loss.item()])
 
-                # TODO: add verbosity arguments to suppress this
+            # TODO: add verbosity arguments to suppress this
+            if not losses:
+                print("no updates made")
+            else:
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
+            grads = np.concatenate([p.grad.data.numpy().flatten() for p in policy.parameters() if p.grad is not None])
+            print("grad norm: ", np.sqrt(np.mean(np.square(grads))))
 
-                # Early stopping 
-                if kl_divergence(pdf, old_pdf).mean() > 0.02:
-                    print("Max kl reached, stopping optimization early.")
-                    break
+            # Early stopping 
+            if kl_divergence(pdf, old_pdf).mean() > 0.02:
+                print("Max kl reached, stopping optimization early.")
+                break
         return np.mean(losses, axis=0), max_act
 
     def train(self,
@@ -164,14 +172,15 @@ class MirrorPPO(PPO):
 
         old_policy = deepcopy(policy)
 
-        # optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
-        optimizer = optim.SGD(policy.parameters(), lr=self.lr)
+        optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
+        # optimizer = optim.SGD(policy.parameters(), lr=self.lr, momentum=0.99, nesterov=False)
 
         opt_time = np.zeros(n_itr)
         samp_time = np.zeros(n_itr)
         eval_time = np.zeros(n_itr)
 
         start_time = time.time()
+        curr_lr = self.lr
 
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
@@ -198,6 +207,12 @@ class MirrorPPO(PPO):
             optimizer_start = time.time()
 
             losses, max_act = self.update(policy, old_policy, optimizer, observations, actions, returns, advantages, env_fn) 
+            # Update learning rate
+            # if not curr_lr <= 1e-3:
+            #     curr_lr -= (self.lr - 1e-3) / 3000
+            #     for param_group in optimizer.param_groups:
+            #         param_group['lr'] = curr_lr
+            # print("Current learning rate: ", curr_lr)
            
             opt_time[itr] = time.time() - optimizer_start
             print("optimizer time elapsed: {:.2f} s".format(opt_time[itr]))        
