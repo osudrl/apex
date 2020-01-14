@@ -225,6 +225,7 @@ try:
         if platform.node() == 'cassie':
             # Radio control
             orient_add -= state.radio.channel[3] / 60.0
+            print("orient add: ", orient_add)
             traj.speed = max(min_speed, state.radio.channel[0] * max_speed)
             traj.speed = min(max_speed, state.radio.channel[0] * max_speed)
             # traj.phase_add = state.radio.channel[5] + 1
@@ -289,7 +290,8 @@ try:
         if new_orient[0] < 0:
             new_orient = -new_orient
         new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
-        # print('new_orientation: {}'.format(new_orient))
+        print("orig orientation: ", state.pelvis.orientation[:])
+        print('new_orientation: {}'.format(new_orient))
             
         # ext_state = np.concatenate((clock, [speed, y_speed]))
         ext_state = np.concatenate((clock, [traj.speed] ))
@@ -326,7 +328,7 @@ try:
         env_action = action.data.numpy()
         target = env_action + traj.offset
 
-        print(state.pelvis.position[2] - state.terrain.height)
+        # print(state.pelvis.position[2] - state.terrain.height)
 
         # Send action
         for i in range(5):
