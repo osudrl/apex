@@ -131,16 +131,18 @@ time_log   = [] # time stamp
 input_log  = [] # network inputs
 output_log = [] # network outputs 
 state_log  = [] # cassie state
-target_log = [] #PD target log
+target_log = [] # PD target log
+traj_log   = [] # reference trajectory log
 
-filename = "test.p"
-filep = open(filename, "wb")
-
-max_speed = 2.0
-min_speed = 0.0
+policy_name = "aslip_unified_0_v2"
+filename = "logdata"
+directory = "./hardware_logs/" + policy_name + "/"
+if not os.path.exists(directory):
+    os.makedirs(directory)
+filep = open("./hardware_logs/" + policy_name + "/" + filename + ".pkl", "wb")
 
 def log():
-    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log}
+    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log, "trajectory": traj_log}
     pickle.dump(data, filep)
 
 def isData():
@@ -157,7 +159,7 @@ torch.set_num_threads(1)
 traj = TrajectoryInfo()
 
 # policy = torch.load("./trained_models/old_aslip/final_v1/aslip_unified_freq_correction.pt")
-policy = torch.load("./trained_models/aslip_unified_0_v2.pt")
+policy = torch.load("./trained_models/" + policy_name + ".pt")
 policy.eval()
 
 max_speed = 2.0
@@ -346,6 +348,7 @@ try:
         input_log.append(RL_state)
         output_log.append(env_action)
         target_log.append(target)
+        traj_log.append(traj.offset)
 
         # Track phase
         traj.phase += traj.phase_add
