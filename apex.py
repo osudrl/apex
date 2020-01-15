@@ -39,8 +39,8 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', 'CassieIKSingleSpeed-v0', 'CassieIK-v0', 'CassieIKAltReward-v0', 'CassieIKNoDelta-v0']:
-      from cassie import CassieEnv, CassieEnv_speed, CassieTSEnv, CassieIKEnv, UnifiedCassieIKEnv, UnifiedCassieIKEnvAltReward, UnifiedCassieIKEnvNoDelta, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
+    if path in ['Cassie-v0', 'CassieMimic-v0', 'CassieRandomDynamics-v0', 'CassieIKSingleSpeed-v0', 'CassieIK-v0', 'CassieIKAltReward-v0', 'CassieIKTaskReward-v0', 'CassieIKNoDelta-v0']:
+      from cassie import CassieEnv, CassieEnv_speed, CassieTSEnv, CassieIKEnv, UnifiedCassieIKEnv, UnifiedCassieIKEnvAltReward, UnifiedCassieIKEnvTaskReward, UnifiedCassieIKEnvNoDelta, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
       if path == 'Cassie-v0':
         env_fn = partial(CassieEnv, "walking", clock_based=True, state_est=state_est)
@@ -50,14 +50,17 @@ def env_factory(path, state_est=True, mirror=False, speed=None, **kwargs):
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=state_est)
       elif path == 'CassieRandomDynamics-v0':
         env_fn = partial(CassieEnv_rand_dyn, "walking", clock_based=True, state_est=state_est)
+      # NOTE: clock_based=False for slipik envs
       elif path == 'CassieIKSingleSpeed-v0':
-        env_fn = partial(CassieIKEnv, "walking", clock_based=True, state_est=state_est, speed=speed)
+        env_fn = partial(CassieIKEnv, "walking", clock_based=False, state_est=state_est, speed=speed)
       elif path == 'CassieIK-v0':
-        env_fn = partial(UnifiedCassieIKEnv, "walking", clock_based=True, state_est=state_est)
+        env_fn = partial(UnifiedCassieIKEnv, "walking", clock_based=False, state_est=state_est)
       elif path == 'CassieIKAltReward-v0':
-        env_fn = partial(UnifiedCassieIKEnvAltReward, "walking", clock_based=True, state_est=state_est)
+        env_fn = partial(UnifiedCassieIKEnvAltReward, "walking", clock_based=False, state_est=state_est)
+      elif path == 'CassieIKTaskReward-v0':
+        env_fn = partial(UnifiedCassieIKEnvTaskReward, "walking", clock_based=False, state_est=state_est)
       elif path == 'CassieIKNoDelta-v0':
-        env_fn = partial(UnifiedCassieIKEnvNoDelta, "walking", clock_based=True, state_est=state_est)
+        env_fn = partial(UnifiedCassieIKEnvNoDelta, "walking", clock_based=False, state_est=state_est)
 
 
       if mirror:
