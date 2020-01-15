@@ -101,7 +101,7 @@ class UnifiedCassieIKEnvAltReward:
         self.cassie_state = state_out_t()
 
         # for print statements
-        self.debug = True
+        self.debug = False
 
     def step_simulation(self, action):
 
