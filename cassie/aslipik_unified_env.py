@@ -43,12 +43,12 @@ class UnifiedCassieIKEnv:
         self.vis = None
 
         # robot state estimation included here
-        self.observation_space = np.zeros(45 + 19)
+        self.observation_space = np.zeros(46 + 18)
 
         # motor PD targets
         self.action_space      = np.zeros(10)
 
-        self.speeds = [x / 10 for x in range(0, 21)]
+        self.speeds = np.array([x / 10 for x in range(0, 21)])
         self.trajectories = getAllTrajectories(self.speeds)
         self.num_speeds = len(self.trajectories)
 
@@ -207,8 +207,8 @@ class UnifiedCassieIKEnv:
     # used for plotting against the reference trajectory
     def reset_for_test(self):
         random_speed_idx = random.randint(0, self.num_speeds)
-        self.speed = self.speeds[random_speed_idx]
-        self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
+        self.speed = 0
+        self.trajectory = self.trajectories[0] # switch the current trajectory
         self.phaselen = self.trajectory.length - 1
         self.phase = 0
         self.time = 0
@@ -227,6 +227,11 @@ class UnifiedCassieIKEnv:
         self.cassie_state = self.sim.step_pd(self.u)
 
         return self.get_full_state()
+
+    def update_selected_trajectory(self, new_speed):
+        self.speed = new_speed
+        self.trajectory = self.trajectories[(np.abs(self.speeds - self.speed)).argmin()]
+        self.phaselen = self.trajectory.length - 1
 
     # NOTE: this reward is slightly different from the one in Xie et al
     # see notes for details

@@ -1,6 +1,5 @@
 from cassie.cassiemujoco.cassieUDP import *
 from cassie.cassiemujoco.cassiemujoco_ctypes import *
-from cassie.trajectory import CassieTrajectory
 
 
 import time
@@ -176,20 +175,16 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-# Prepare model
-traj = TrajectoryInfo()
-
-policy = torch.load("./trained_models/PPO.pt")
+policy = torch.load("./trained_models/aslip_unified_10_v3.pt")
 policy.eval()
 
 max_speed = 2.0
-min_speed = -0.5
+min_speed = 0.50
 max_y_speed = 0.0
 min_y_speed = 0.0
 
-# Load trajectory
-traj_path = os.path.join("cassie", "trajectory", "stepdata.bin")
-trajectory = CassieTrajectory(traj_path)
+# Load trajectories
+traj = TrajectoryInfo()
 
 # Initialize control structure with gains
 P = np.array([100, 100, 88, 96, 50, 100, 100, 88, 96, 50])
@@ -204,7 +199,7 @@ for i in range(5):
 act_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 pos_index = np.array([1, 2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
 vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
-offset = traj.offset
+_, offset = traj.update_info(0.0)
 # offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
 # Determine whether running in simulation or on the robot
@@ -343,8 +338,6 @@ while True:
         new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
         print('new_orientation: {}'.format(new_orient))
 
-        ext_state = np.concatenate(traj.get_ref_ext_state(traj.phase))
-
         ref_pos, ref_vel = traj.get_ref_state(traj.phase)
         ext_state = np.concatenate(traj.get_ref_ext_state(traj.phase))
         robot_state = np.concatenate([
@@ -376,8 +369,8 @@ while True:
         # Get action
         action = policy.act(torch_state, True)
         env_action = action.data.numpy()
-        ref_action = ref_pos[act_idx]
-        target = env_action + ref_action
+        # ref_action = ref_pos[act_idx]
+        target = env_action + traj.offset
 
         # Send action
         for i in range(5):

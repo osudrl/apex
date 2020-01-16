@@ -1,4 +1,3 @@
-
 from cassie.cassiemujoco.cassieUDP import *
 from cassie.cassiemujoco.cassiemujoco_ctypes import *
 # from cassie.speed_env import CassieEnv_speed
@@ -16,6 +15,7 @@ from cassie.quaternion_function import *
 #import signal 
 import atexit
 import sys
+import datetime
 import select
 import tty
 import termios
@@ -29,7 +29,7 @@ def getAllTrajectories(speeds):
 
     for i, speed in enumerate(speeds):
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "cassie", "trajectory", "aslipTrajsSweep", "walkCycle_{}.pkl".format(speed))
+        traj_path = os.path.join(dirname, "cassie", "trajectory", "aslipTrajsTaskSpace", "walkCycle_{}.pkl".format(speed))
         trajectories.append(CassieIKTrajectory(traj_path))
 
     # print("Got all trajectories")
@@ -43,8 +43,12 @@ class CassieIKTrajectory:
         self.qpos = np.copy(trajectory["qpos"])
         self.length = self.qpos.shape[0]
         self.qvel = np.copy(trajectory["qvel"])
-        self.rfoot = np.copy(trajectory["rfoot"])
-        self.lfoot = np.copy(trajectory["lfoot"])
+        self.rpos = np.copy(trajectory["rpos"])
+        self.rvel = np.copy(trajectory["rvel"])
+        self.lpos = np.copy(trajectory["lpos"])
+        self.lvel = np.copy(trajectory["lvel"])
+        self.cpos = np.copy(trajectory["cpos"])
+        self.cvel = np.copy(trajectory["cvel"])
 
 # simrate used to be 60
 class TrajectoryInfo:
@@ -109,12 +113,30 @@ class TrajectoryInfo:
 
         return pos, vel
 
+    def get_ref_ext_state(self, phase=None):
+
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        rpos = np.copy(self.trajectory.rpos[phase])
+        rvel = np.copy(self.trajectory.rvel[phase])
+        lpos = np.copy(self.trajectory.lpos[phase])
+        lvel = np.copy(self.trajectory.lvel[phase])
+        cpos = np.copy(self.trajectory.cpos[phase])
+        cvel = np.copy(self.trajectory.cvel[phase])
+
+        return rpos, rvel, lpos, lvel, cpos, cvel
+
     def update_info(self, new_speed):
 
         self.speed = new_speed
 
         # find closest speed in [0.0, 0.1, ... 3.0]. use this to find new trajectory
         self.trajectory = self.trajectories[ (np.abs([speed_i - self.speed for speed_i in self.speeds])).argmin() ]
+        print("changed trajectory!")
 
         # new offset
         ref_pos, ref_vel = self.get_ref_state(self.phase)
@@ -129,18 +151,33 @@ time_log   = [] # time stamp
 input_log  = [] # network inputs
 output_log = [] # network outputs 
 state_log  = [] # cassie state
-target_log = [] # PD target log
+target_log = [] #PD target log
 traj_log   = [] # reference trajectory log
 
-policy_name = "aslip_unified_0_v2"
-filename = "logdata"
-directory = "./hardware_logs/" + policy_name + "/"
-if not os.path.exists(directory):
-    os.makedirs(directory)
-filep = open("./hardware_logs/" + policy_name + "/" + filename + ".pkl", "wb")
+filename = "test.p"
+filep = open(filename, "wb")
+
+# PREFIX = "/home/drl/jdao/jdao_cassie-rl-testing/"
+PREFIX = "./"
+
+if len(sys.argv) > 1:
+    filename = PREFIX + "logs/" + sys.argv[1]
+else:
+    filename = PREFIX + "logs/" + datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M')
+
+def log(sto="final"):
+    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log}
+
+    filep = open(filename + "_log" + str(sto) + ".pkl", "wb")
+
+    pickle.dump(data, filep)
+
+    filep.close()
+
+atexit.register(log)
 
 def log():
-    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log, "trajectory": traj_log}
+    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log}
     pickle.dump(data, filep)
 
 def isData():
@@ -151,19 +188,17 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-# Prepare model
-# env = CassieEnv_speed_no_delta_neutral_foot("walking", clock_based=True, state_est=True)
-# env.reset_for_test()
-traj = TrajectoryInfo()
-
-# policy = torch.load("./trained_models/old_aslip/final_v1/aslip_unified_freq_correction.pt")
-policy = torch.load("./trained_models/" + policy_name + ".pt")
+policy = torch.load("./trained_models/aslip_unified_task10_v3.pt")
 policy.eval()
 
 max_speed = 2.0
 min_speed = 0.0
-max_y_speed = 0.5
-min_y_speed = -0.5
+max_y_speed = 0.0
+min_y_speed = 0.0
+
+# Load trajectories
+traj = TrajectoryInfo()
+
 
 # Initialize control structure with gains
 P = np.array([100, 100, 88, 96, 50, 100, 100, 88, 96, 50])
@@ -179,8 +214,7 @@ pos_index = np.array([2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
 vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 pos_mirror_index = np.array([2,3,4,5,6,21,22,23,28,29,30,34,7,8,9,14,15,16,20])
 vel_mirror_index = np.array([0,1,2,3,4,5,19,20,21,25,26,27,31,6,7,8,12,13,14,18])
-offset = traj.offset
-# offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+_, offset = traj.update_info(0.0)
 
 # Determine whether running in simulation or on the robot
 if platform.node() == 'cassie':
@@ -225,10 +259,9 @@ try:
         if platform.node() == 'cassie':
             # Radio control
             orient_add -= state.radio.channel[3] / 60.0
-            print("orient add: ", orient_add)
-            traj.speed = max(min_speed, state.radio.channel[0] * max_speed)
-            traj.speed = min(max_speed, state.radio.channel[0] * max_speed)
-            # traj.phase_add = state.radio.channel[5] + 1
+            speed = max(min_speed, state.radio.channel[0] * max_speed)
+            speed = min(max_speed, state.radio.channel[0] * max_speed)
+            phase_add = state.radio.channel[5] + 1
             # env.y_speed = max(min_y_speed, -state.radio.channel[1] * max_y_speed)
             # env.y_speed = min(max_y_speed, -state.radio.channel[1] * max_y_speed)
         else:
@@ -275,12 +308,10 @@ try:
             # y_speed = max(min_y_speed, y_speed)
             # y_speed = min(max_y_speed, y_speed)
             # print("y_speed: ", y_speed)
-            # print("frequency: ", traj.phase_add)
+            # print("frequency: ", phase_add)
 
-        traj.update_info(traj.speed)
 
         clock = [np.sin(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen), np.cos(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen)]
-
         # euler_orient = quaternion2euler(state.pelvis.orientation[:]) 
         # print("euler orient: ", euler_orient + np.array([orient_add, 0, 0]))
         # new_orient = euler2quat(euler_orient + np.array([orient_add, 0, 0]))
@@ -290,18 +321,15 @@ try:
         if new_orient[0] < 0:
             new_orient = -new_orient
         new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
-        print("orig orientation: ", state.pelvis.orientation[:])
         print('new_orientation: {}'.format(new_orient))
-            
-        # ext_state = np.concatenate((clock, [speed, y_speed]))
-        ext_state = np.concatenate((clock, [traj.speed] ))
+        
+        ref_pos, ref_vel = traj.get_ref_state(traj.phase)
+        ext_state = np.concatenate(traj.get_ref_ext_state(traj.phase))
         robot_state = np.concatenate([
-                [state.pelvis.position[2] - state.terrain.height], # pelvis height
-                new_orient,
-                # state.pelvis.orientation[:],                                 # pelvis orientation
+                [state.pelvis.position[2] - state.terrain.height],           # pelvis height
+                new_orient,                                                  # pelvis orientation
                 state.motor.position[:],                                     # actuated joint positions
 
-                # state.pelvis.translationalVelocity[:],                       # pelvis translational velocity
                 new_translationalVelocity[:],
                 state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
                 state.motor.velocity[:],                                     # actuated joint velocities
@@ -311,14 +339,15 @@ try:
                 state.joint.position[:],                                     # unactuated joint positions
                 state.joint.velocity[:]                                      # unactuated joint velocities
         ])
+
         RL_state = np.concatenate([robot_state, ext_state])
+
+        #pretending the height is always 1.0
+        # RL_state[0] = 1.0
 
         actual_speed = state.pelvis.translationalVelocity[0]
         print("target speed: {:.2f}\tactual speed: {:.2f}\tfreq: {}".format(traj.speed, actual_speed, traj.freq_adjust))
 
-        #pretending the height is always 1.0
-        # RL_state[0] = 1.0
-        
         # Construct input vector
         torch_state = torch.Tensor(RL_state)
         # torch_state = shared_obs_stats.normalize(torch_state)
@@ -326,9 +355,10 @@ try:
         # Get action
         action = policy.act(torch_state, True)
         env_action = action.data.numpy()
+        # ref_action = ref_pos[act_idx]
         target = env_action + traj.offset
 
-        # print(state.pelvis.position[2] - state.terrain.height)
+        #print(state.pelvis.position[2] - state.terrain.height)
 
         # Send action
         for i in range(5):
@@ -350,7 +380,7 @@ try:
 
         # Track phase
         traj.phase += traj.phase_add
-        if traj.phase >= traj.phaselen:
+        if traj.phase >= 28:
             traj.phase = 0
             traj.counter += 1
 
