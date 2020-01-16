@@ -146,11 +146,13 @@ class CassieGroundFrictionEnv:
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
 
-        # Need to reset u? Or better way to reset cassie_state than taking step
-        self.cassie_state = self.sim.step_pd(self.u)
-
         new_fric = [self.default_fric[0], np.random.uniform(0.0005, 0.05), self.default_fric[2]]
         self.sim.set_ground_friction(new_fric)
+
+        self.sim.set_const()
+
+        # Need to reset u? Or better way to reset cassie_state than taking step
+        self.cassie_state = self.sim.step_pd(self.u)
 
         self.speed = (random.randint(0, 10)) / 10
         # maybe make ref traj only send relevant idxs?
