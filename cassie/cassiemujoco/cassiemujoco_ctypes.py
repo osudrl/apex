@@ -462,6 +462,10 @@ cassie_sim_set_ground_friction = _libraries['./libcassiemujoco.so'].cassie_sim_s
 cassie_sim_set_ground_friction.restype = None
 cassie_sim_set_ground_friction.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
 
+cassie_sim_set_const = _libraries['./libcassiemujoco.so'].cassie_sim_set_const
+cassie_sim_set_const.restype = None
+cassie_sim_set_const.argtypes = [POINTER_T(struct_cassie_sim)]
+
 class struct_c__SA_pd_motor_in_t(ctypes.Structure):
     _pack_ = True # source:False
     _fields_ = [
@@ -720,4 +724,5 @@ __all__ = \
     'cassie_sim_dof_damping', 'cassie_sim_set_dof_damping',
     'cassie_sim_body_mass', 'cassie_sim_set_body_mass',
     'cassie_sim_body_ipos', 'cassie_sim_set_body_ipos',
-    'cassie_sim_ground_friction', 'cassie_sim_set_ground_friction']
+    'cassie_sim_ground_friction', 'cassie_sim_set_ground_friction',
+    'cassie_sim_set_const']

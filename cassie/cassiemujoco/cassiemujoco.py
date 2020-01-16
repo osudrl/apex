@@ -186,6 +186,9 @@ class CassieSim:
           c_arr[i] = data[i]
 
         cassie_sim_set_ground_friction(self.c, c_arr)
+    
+    def set_const(self):
+        cassie_sim_set_const(self.c)
 
     def __del__(self):
         cassie_sim_free(self.c)
