@@ -179,7 +179,7 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_10_v4.pt")
+policy = torch.load("./trained_models/aslip_unified_task10_v4.pt")
 policy.eval()
 
 max_speed = 2.0
@@ -300,17 +300,19 @@ while True:
         speed_add = (max_speed / 2) * state.radio.channel[4]
         traj.speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
         traj.speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
+
+        traj.speed = 0.5
         
-        print("speed: ", speed)
+        print("speed: ", traj.speed)
         # phase_add = 1+state.radio.channel[5]
         # env.y_speed = max(min_y_speed, -state.radio.channel[1] * max_y_speed)
         # env.y_speed = min(max_y_speed, -state.radio.channel[1] * max_y_speed)
     else:
         # Automatically change orientation and speed
         tt = time.monotonic() - t0
-        orient_add += 0#math.sin(t / 8) / 400
+        orient_add += math.sin(t / 8) / 400
         #env.speed = 0.2
-        speed = 0.4#((math.sin(tt / 2)) * max_speed)
+        speed = ((math.sin(tt / 2)) * max_speed)
         # speed = ((math.sin(tt / 2)) * max_speed)
         print("speed: ", speed)
         #if env.phase % 14 == 0:
@@ -384,13 +386,19 @@ while True:
         cassie.send_pd(u)
 
         # Logging
-        if sto == False:
-            time_log.append(time.time())
-            state_log.append(state)
-            input_log.append(RL_state)
-            output_log.append(env_action)
-            target_log.append(target)
-            traj_log.append(traj.offset)
+        # if sto == False:
+        #     time_log.append(time.time())
+        #     state_log.append(state)
+        #     input_log.append(RL_state)
+        #     output_log.append(env_action)
+        #     target_log.append(target)
+        #     traj_log.append(traj.offset)
+        time_log.append(time.time())
+        state_log.append(state)
+        input_log.append(RL_state)
+        output_log.append(env_action)
+        target_log.append(target)
+        traj_log.append(traj.offset)
     #------------------------------- Start Up Standing ---------------------------
     elif operation_mode == 1:
         print('Startup Standing. Height = ' + str(standing_height))

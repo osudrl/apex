@@ -136,7 +136,7 @@ class TrajectoryInfo:
 
         # find closest speed in [0.0, 0.1, ... 3.0]. use this to find new trajectory
         self.trajectory = self.trajectories[ (np.abs([speed_i - self.speed for speed_i in self.speeds])).argmin() ]
-        print("changed trajectory!")
+        # print("changed trajectory!")
 
         # new offset
         ref_pos, ref_vel = self.get_ref_state(self.phase)
@@ -192,7 +192,7 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_10_v4.pt")
+policy = torch.load("./trained_models/aslip_unified_0_v4.pt")
 policy.eval()
 
 max_speed = 2.0
@@ -327,7 +327,7 @@ try:
         if new_orient[0] < 0:
             new_orient = -new_orient
         new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
-        print('new_orientation: {}'.format(new_orient))
+        # print('new_orientation: {}'.format(new_orient))
         
         ref_pos, ref_vel = traj.get_ref_state(traj.phase)
         ext_state = np.concatenate(traj.get_ref_ext_state(traj.phase))
@@ -349,7 +349,7 @@ try:
         RL_state = np.concatenate([robot_state, ext_state])
 
         #pretending the height is always 1.0
-        # RL_state[0] = 1.0
+        RL_state[0] = 1.0
 
         actual_speed = state.pelvis.translationalVelocity[0]
         print("target speed: {:.2f}\tactual speed: {:.2f}\tfreq: {}".format(traj.speed, actual_speed, traj.freq_adjust))

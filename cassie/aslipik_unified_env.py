@@ -38,7 +38,7 @@ class CassieIKTrajectory:
 
 # simrate used to be 60
 class UnifiedCassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=False, state_est=True, training=True):
+    def __init__(self, traj="stepping", simrate=60, clock_based=False, state_est=True, training=True, debug=False):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -101,7 +101,7 @@ class UnifiedCassieIKEnv:
         self.cassie_state = state_out_t()
 
         # for print statements
-        self.debug = False
+        self.debug = debug
 
     def step_simulation(self, action):
 
