@@ -143,7 +143,11 @@ class TrajectoryInfo:
         self.offset = ref_pos[self.pos_idx]
 
         # phaselen
+        old_phaselen = self.phaselen
         self.phaselen = self.trajectory.length - 1
+
+        # update phase
+        self.phase = int(self.phaselen * self.phase / old_phaselen)
 
         return self.phaselen, self.offset
 
@@ -188,7 +192,7 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_task10_v3.pt")
+policy = torch.load("./trained_models/aslip_unified_10_v4.pt")
 policy.eval()
 
 max_speed = 2.0
@@ -310,6 +314,8 @@ try:
             # print("y_speed: ", y_speed)
             # print("frequency: ", phase_add)
 
+            traj.update_info(traj.speed)
+
 
         clock = [np.sin(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen), np.cos(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen)]
         # euler_orient = quaternion2euler(state.pelvis.orientation[:]) 
@@ -380,7 +386,7 @@ try:
 
         # Track phase
         traj.phase += traj.phase_add
-        if traj.phase >= 28:
+        if traj.phase >= traj.phaselen:
             traj.phase = 0
             traj.counter += 1
 

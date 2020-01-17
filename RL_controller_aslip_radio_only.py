@@ -123,7 +123,11 @@ class TrajectoryInfo:
         self.offset = ref_pos[self.pos_idx]
 
         # phaselen
+        old_phaselen = self.phaselen
         self.phaselen = self.trajectory.length - 1
+
+        # update phase
+        self.phase = int(self.phaselen * self.phase / old_phaselen)
 
         return self.phaselen, self.offset
 
