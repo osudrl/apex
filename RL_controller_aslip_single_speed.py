@@ -60,8 +60,8 @@ class TrajectoryInfo:
         self.counter = 0 # number of phase cycles completed in episode
 
         # NOTE: each trajectory in trajectories should have the same length
-        self.speed = self.speeds[5]
-        self.trajectory = self.trajectories[5]
+        self.speed = self.speeds[0]
+        self.trajectory = self.trajectories[0]
 
         # NOTE: a reference trajectory represents ONE phase cycle
 
@@ -179,13 +179,10 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_10_v5.pt")
-policy.eval()
+speed = 0.0
 
-max_speed = 2.0
-min_speed = 0.50
-max_y_speed = 0.0
-min_y_speed = 0.0
+policy = torch.load("./trained_models/aslip_single_{}_v4.pt".format(speed))
+policy.eval()
 
 # Load trajectories
 traj = TrajectoryInfo()
@@ -203,7 +200,7 @@ for i in range(5):
 act_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 pos_index = np.array([1, 2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
 vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
-_, offset = traj.update_info(min_speed)
+_, offset = traj.update_info(speed)
 # offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
 # Determine whether running in simulation or on the robot
@@ -296,12 +293,12 @@ while True:
         else:                               # Middle means normal walking 
             operation_mode = 0
         
-        # curr_max = max_speed / 2# + (max_speed / 2)*state.radio.channel[4]
-        curr_max = max_speed
-        # speed_add = (max_speed / 2) * state.radio.channel[4]
-        speed_add = 0
+        curr_max = max_speed / 2# + (max_speed / 2)*state.radio.channel[4]
+        speed_add = (max_speed / 2) * state.radio.channel[4]
         traj.speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
-        #traj.speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
+        traj.speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
+
+        traj.speed = 0.5
         
         print("speed: ", traj.speed)
         # phase_add = 1+state.radio.channel[5]

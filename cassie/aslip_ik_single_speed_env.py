@@ -18,35 +18,30 @@ class CassieIKTrajectory:
         self.qpos = np.copy(trajectory["qpos"])
         self.length = self.qpos.shape[0]
         self.qvel = np.copy(trajectory["qvel"])
-        self.rfoot = np.copy(trajectory["rfoot"])
-        self.lfoot = np.copy(trajectory["lfoot"])
+        self.rpos = np.copy(trajectory["rpos"])
+        self.rvel = np.copy(trajectory["rvel"])
+        self.lpos = np.copy(trajectory["lpos"])
+        self.lvel = np.copy(trajectory["lvel"])
+        self.cpos = np.copy(trajectory["cpos"])
+        self.cvel = np.copy(trajectory["cvel"])
 
 # simrate used to be 60
 class CassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, speed=0.0):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, speed=0.0, debug=False):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
         self.speed = speed
 
-        self.clock_based = clock_based
-        self.state_est = state_est
+        # robot state estimation included here
+        self.observation_space = np.zeros(46 + 18)
 
-        if clock_based:
-            self.observation_space = np.zeros(42)
-            self.clock_inds = [40, 41]
-            if self.state_est:
-                self.observation_space = np.zeros(48)       # Size for use with state est
-                self.clock_inds = [46, 47]
-        else:
-            self.observation_space = np.zeros(80)
-            if self.state_est:
-                self.observation_space = np.zeros(86)       # Size for use without state est
+        # motor PD targets
         self.action_space      = np.zeros(10)
 
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsSweep/walkCycle_{}.pkl".format(self.speed))
-        print("loaded trajectory file: " + "aslipTrajsSweep/walkCycle_{}.pkl".format(self.speed))
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsTaskSpace/walkCycle_{}.pkl".format(self.speed))
+        # print("loaded trajectory file: " + "aslipTrajsTaskSpace/walkCycle_{}.pkl".format(self.speed))
 
         self.trajectory = CassieIKTrajectory(traj_path)
 
@@ -94,7 +89,7 @@ class CassieIKEnv:
         self.cassie_state = state_out_t()
 
         # for print statements
-        self.debug = False
+        self.debug = debug
 
     def step_simulation(self, action):
 
@@ -149,7 +144,7 @@ class CassieIKEnv:
 
         height = self.sim.qpos()[2]
 
-        print(self.phase)
+        # print(self.phase)
 
         self.time  += 1
         self.phase += 1
@@ -164,7 +159,7 @@ class CassieIKEnv:
         reward = self.compute_reward()
 
         # TODO: make 0.3 a variable/more transparent
-        if reward < 0.5:
+        if reward < 0.3:
             done = True
 
         return self.get_full_state(), reward, done, {}
@@ -228,11 +223,9 @@ class CassieIKEnv:
 
         #weight = [.1] * 10
 
-        footpos_error     = 0
         joint_error       = 0
-        com_error         = 0
-        orientation_error = 0
-        spring_error      = 0
+        footpos_error     = 0
+        com_vel_error     = 0
 
         # enforce distance between feet and com
         ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
@@ -248,8 +241,13 @@ class CassieIKEnv:
             print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
             print(footpos_error)
 
-        # speed reward component
-        speed_diff = np.abs(qvel[0] - self.speed)
+        # try to match com velocity
+        ref_cvel = self.get_ref_com_vel(self.phase + 1)
+
+        # center of mass vel: x, y, z
+        cvel = self.cassie_state.pelvis.translationalVelocity
+        for j in [0, 1, 2]:
+            com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
 
         # each joint pos, skipping feet
         for i, j in enumerate(self.pos_idx):
@@ -261,54 +259,21 @@ class CassieIKEnv:
             else:
                 joint_error += 30 * weight[i] * (target - actual) ** 2
 
-        # center of mass: x, y, z
-        for j in [0, 1, 2]:
-            target = ref_pos[j]
-            actual = qpos[j]
+        reward = 0.5 * np.exp(-joint_error) +       \
+                 0.25 * np.exp(-footpos_error) +       \
+                 0.25 * np.exp(-com_vel_error)
 
-            # NOTE: in Xie et al y target is 0
-
-            com_error += (target - actual) ** 2
-        
-        # COM orientation: qx, qy, qz
-        for j in [4, 5, 6]:
-            target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
-            actual = qpos[j]
-
-            orientation_error += (target - actual) ** 2
-
-        # left and right shin springs
-        for i in [15, 29]:
-            target = ref_pos[i] # NOTE: in Xie et al spring target is 0
-            actual = qpos[i]
-
-            spring_error += (target - actual) ** 2      
-        
-        # reward = 0.1 * np.exp(-footpos_error) +       \
-        #          0.5 * np.exp(-joint_error) +       \
-        #          0.3 * np.exp(-com_error) +         \
-        #          0.1 * np.exp(-orientation_error) + \
-        #          0.0 * np.exp(-spring_error)
-        reward = 0.2 * np.exp(-footpos_error) +       \
-                 0.5 * np.exp(-joint_error) +       \
-                 0.2 * np.exp(-com_error) +         \
-                 0.1 * np.exp(-orientation_error) + \
-                 0.1 * np.exp(-speed_diff)
-        #reward = np.exp(-joint_error)
-
-        # orientation error does not look informative
-        # maybe because it's comparing euclidean distance on quaternions
         if self.debug:
-            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\njoint:\t{2:.2f}, % = {3:.2f}\ncom:\t{4:.2f}, % = {5:.2f}\norient:\t{6:.2f}, % = {7:.2f}\nspring:\t{8:.2f}, % = {9:.2f}\n\n".format(
-            0.3 * np.exp(-footpos_error),     0.3 * np.exp(-footpos_error) / reward * 100,
-            0.3 * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
-            0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-            0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-            0.0 * np.exp(-spring_error),      0.0 * np.exp(-spring_error) / reward * 100,
+            print("reward: {6}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\n\n".format(
+            0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
+            0.25 * np.exp(-footpos_error),    0.25 * np.exp(-footpos_error) / reward * 100,
+            0.25 * np.exp(-com_vel_error),        0.25 * np.exp(-com_vel_error) / reward * 100,
             reward
             )
             )
+            print("actual speed: {}\tdesired_speed: {}".format(qvel[0], self.speed))
         return reward
+
 
     # get the corresponding state from the reference trajectory for the current phase
     def get_ref_state(self, phase=None):
@@ -340,24 +305,50 @@ class CassieIKEnv:
 
     # get the corresponding state from the reference trajectory for the current phase
     def get_ref_footdist(self, phase=None):
+
         if phase is None:
             phase = self.phase
 
         if phase > self.phaselen:
             phase = 0
 
-        # rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
-        # lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
-        rfoot = np.copy(self.trajectory.rfoot[phase])
-        lfoot = np.copy(self.trajectory.lfoot[phase])
+        rpos = np.copy(self.trajectory.rpos[phase])
+        lpos = np.copy(self.trajectory.lpos[phase])
 
-        return rfoot, lfoot
+        return rpos, lpos
+
+    def get_ref_com_vel(self, phase=None):
+
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        cvel = np.copy(self.trajectory.cvel[phase])
+
+        return cvel
+
+    def get_ref_ext_state(self, phase=None):
+
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        rpos = np.copy(self.trajectory.rpos[phase])
+        rvel = np.copy(self.trajectory.rvel[phase])
+        lpos = np.copy(self.trajectory.lpos[phase])
+        lvel = np.copy(self.trajectory.lvel[phase])
+        cpos = np.copy(self.trajectory.cpos[phase])
+        cvel = np.copy(self.trajectory.cvel[phase])
+
+        return rpos, rvel, lpos, lvel, cpos, cvel
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel()) 
-
-        ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
 
         # TODO: maybe convert to set subtraction for clarity
         # {i for i in range(35)} - 
@@ -416,18 +407,10 @@ class CassieIKEnv:
         # [19] Right foot            (Motor [9], Joint [5])
         vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
-        if self.clock_based:
-            #qpos[self.pos_idx] -= ref_pos[self.pos_idx]
-            #qvel[self.vel_idx] -= ref_vel[self.vel_idx]
-
-            clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
-                     np.cos(2 * np.pi *  self.phase / self.phaselen)]
-            
-            ext_state = clock
-
+        if(self.phase == 0):
+            ext_state = np.concatenate(self.get_ref_ext_state(self.phaselen - 1))
         else:
-            ext_state = np.concatenate([ref_pos[pos_index], ref_vel[vel_index]])
-
+            ext_state = np.concatenate(self.get_ref_ext_state(self.phase))
 
         robot_state = np.concatenate([
             [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height], # pelvis height
@@ -444,13 +427,7 @@ class CassieIKEnv:
             self.cassie_state.joint.velocity[:]                                      # unactuated joint velocities
         ])
 
-        if self.state_est:
-            return np.concatenate([robot_state,  
-                               ext_state])
-        else:
-            return np.concatenate([qpos[pos_index], 
-                               qvel[vel_index], 
-                               ext_state])
+        return np.concatenate([robot_state, ext_state])
 
     def reset_for_normalization(self):
         return self.reset()

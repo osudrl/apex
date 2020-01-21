@@ -3,9 +3,9 @@ import pickle
 from matplotlib import pyplot as plt
 import numpy as np
 
-POLICY_NAME = "aslip_unified_0_v2"
+POLICY_NAME = "aslip_unified_10_v4_sim"
 FILE_PATH = "./hardware_logs/"
-FILE_NAME = "logdata"
+FILE_NAME = "2020-01-16_17:33_logfinal"
 SAVE_NAME = FILE_PATH + POLICY_NAME + "/" + FILE_NAME
 
 data = np.load(SAVE_NAME + '.npz')

@@ -38,7 +38,7 @@ class CassieIKTrajectory:
 
 # simrate used to be 60
 class UnifiedCassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=False, state_est=True, training=True):
+    def __init__(self, traj="stepping", simrate=60, clock_based=False, state_est=True, training=True, debug=False):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -101,7 +101,7 @@ class UnifiedCassieIKEnv:
         self.cassie_state = state_out_t()
 
         # for print statements
-        self.debug = False
+        self.debug = debug
 
     def step_simulation(self, action):
 
@@ -119,7 +119,7 @@ class UnifiedCassieIKEnv:
             # alpha = h / (Tf + h)
             # real_action = (1-alpha)*self.prev_action + alpha*target
 
-        real_action = target
+        # real_action = target
 
         # diff = real_action - self.prev_action
         # max_diff = np.ones(10)*0.1
@@ -129,7 +129,7 @@ class UnifiedCassieIKEnv:
         #     elif diff[i] > max_diff[i]:
         #         target[i] = self.prev_action[i] + max_diff[i]
 
-        self.prev_action = real_action
+        # self.prev_action = real_action
         # real_action = target
 
         self.u = pd_in_t()
@@ -170,7 +170,10 @@ class UnifiedCassieIKEnv:
         # Early termination
         done = not(height > 0.4 and height < 3.0)
 
-        reward = self.compute_reward()
+        reward = self.compute_reward(action)
+
+        # update previous action
+        self.prev_action = action
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.3:
@@ -235,7 +238,7 @@ class UnifiedCassieIKEnv:
 
     # NOTE: this reward is slightly different from the one in Xie et al
     # see notes for details
-    def compute_reward(self):
+    def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
@@ -253,6 +256,7 @@ class UnifiedCassieIKEnv:
         joint_error       = 0
         footpos_error     = 0
         com_vel_error     = 0
+        action_penalty    = 0
 
         # enforce distance between feet and com
         ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
@@ -286,15 +290,22 @@ class UnifiedCassieIKEnv:
             else:
                 joint_error += 30 * weight[i] * (target - actual) ** 2
 
-        reward = 0.5 * np.exp(-joint_error) +       \
-                 0.25 * np.exp(-footpos_error) +       \
-                 0.25 * np.exp(-com_vel_error)
+        # action penalty
+        action_penalty = np.linalg.norm(action - self.prev_action)
+        # if action_penalty < 0:
+        #     action_penalty = 0
+
+        reward = 0.3 * np.exp(-joint_error) +       \
+                 0.25 * np.exp(-footpos_error) +    \
+                 0.25 * np.exp(-com_vel_error) +    \
+                 0.2 * np.exp(-action_penalty)
 
         if self.debug:
-            print("reward: {6}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\n\n".format(
-            0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
+            print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}action_penalty:\t{6:.2f}, % = {7:.2f}\n\n".format(
+            0.3  * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
             0.25 * np.exp(-footpos_error),    0.25 * np.exp(-footpos_error) / reward * 100,
-            0.25 * np.exp(-com_vel_error),        0.25 * np.exp(-com_vel_error) / reward * 100,
+            0.25 * np.exp(-com_vel_error),    0.25 * np.exp(-com_vel_error) / reward * 100,
+            0.2  * (1 - action_penalty),       0.2 * (1 - action_penalty) / reward * 100,
             reward
             )
             )

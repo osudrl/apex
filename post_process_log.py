@@ -5,9 +5,9 @@ import cassie
 import time
 from tempfile import TemporaryFile
 
-POLICY_NAME = "aslip_unified_0_v2"
+POLICY_NAME = "aslip_unified_10_v4_sim"
 FILE_PATH = "./hardware_logs/"
-FILE_NAME = "logdata"
+FILE_NAME = "2020-01-16_17:33_logfinal"
 logs = pickle.load(open(FILE_PATH + POLICY_NAME + "/" + FILE_NAME + ".pkl", "rb")) #load in file with cassie data
 
 # data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target_torques": target_torques_log,\
@@ -38,12 +38,15 @@ for s in states:
     # right_foot_forces_log[j, :] = np.reshape(np.asarray([s.rightFoot.toeForce[:],s.rightFoot.heelForce[:]]), (6))
     left_foot_pos_log[j, :] = np.reshape(np.asarray([s.leftFoot.position[:],s.leftFoot.position[:]]), (6))
     right_foot_pos_log[j, :] = np.reshape(np.asarray([s.rightFoot.position[:],s.rightFoot.position[:]]), (6))
+    
+    trajectory_log[j, :] = trajectory_steps[j][:]
+
     j += 1
 
-j = 0
-for t in trajectory_steps:
-    trajectory_log[j, :] = t[:]
-    j += 1
+# j = 0
+# for t in trajectory_steps:
+#     trajectory_log[j, :] = t[:]
+#     j += 1
 
 SAVE_NAME = FILE_PATH + POLICY_NAME + "/" + FILE_NAME + '.npz'
 np.savez(SAVE_NAME, time = time, motor = motors_log, joint = joints_log, left_foot_pos = left_foot_pos_log, right_foot_pos = right_foot_pos_log, trajectory = trajectory_log)
