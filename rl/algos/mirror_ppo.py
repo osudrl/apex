@@ -287,9 +287,9 @@ def run_experiment(args):
         policy_copy.obs_mean = policy.obs_mean
         critic.obs_std = policy.obs_std
         policy_copy.obs_std = policy.obs_std
+        policy_copy.train(0)
 
     policy.train(0)
-    policy_copy.train(0)
     critic.train(0)
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))

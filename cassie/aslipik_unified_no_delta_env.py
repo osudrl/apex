@@ -48,7 +48,7 @@ class UnifiedCassieIKEnvNoDelta:
         # motor PD targets
         self.action_space      = np.zeros(10)
 
-        self.speeds = [x / 10 for x in range(0, 21)]
+        self.speeds = np.array([x / 10 for x in range(0, 21)])
         self.trajectories = getAllTrajectories(self.speeds)
         self.num_speeds = len(self.trajectories)
 
@@ -157,9 +157,15 @@ class UnifiedCassieIKEnvNoDelta:
 
         self.cassie_state = self.sim.step_pd(self.u)
 
+        self.joint_accel = self.cassie_state.joint.velocity[:] 
+
     def step(self, action):
+
+        self.avg_joint_accel = 0
+
         for _ in range(self.simrate):
             self.step_simulation(action)
+            # self.avg_joint_accel += self.joint_accel - self.prev_joint_accel
 
         height = self.sim.qpos()[2]
 
@@ -174,7 +180,10 @@ class UnifiedCassieIKEnvNoDelta:
         # Early termination
         done = not(height > 0.4 and height < 3.0)
 
-        reward = self.compute_reward()
+        reward = self.compute_reward(action)
+
+        # update previous action
+        self.prev_action = action
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.3:
@@ -239,7 +248,7 @@ class UnifiedCassieIKEnvNoDelta:
 
     # NOTE: this reward is slightly different from the one in Xie et al
     # see notes for details
-    def compute_reward(self):
+    def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
@@ -257,6 +266,7 @@ class UnifiedCassieIKEnvNoDelta:
         joint_error       = 0
         footpos_error     = 0
         com_vel_error     = 0
+        action_penalty    = 0
 
         # enforce distance between feet and com
         ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
@@ -290,9 +300,15 @@ class UnifiedCassieIKEnvNoDelta:
             else:
                 joint_error += 30 * weight[i] * (target - actual) ** 2
 
-        reward = 0.5 * np.exp(-joint_error) +       \
-                 0.25 * np.exp(-footpos_error) +       \
-                 0.25 * np.exp(-com_vel_error)
+        # action penalty
+        action_penalty = np.linalg.norm(action - self.prev_action) - 0.5
+        if action_penalty < 0:
+            action_penalty = 0
+
+        reward = 0.3 * np.exp(-joint_error) +       \
+                 0.25 * np.exp(-footpos_error) +    \
+                 0.25 * np.exp(-com_vel_error) +    \
+                 0.2 * (1 - action_penalty)
 
         if self.debug:
             print("reward: {6}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\n\n".format(

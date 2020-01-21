@@ -80,7 +80,10 @@ class UnifiedCassieIKEnvAltReward:
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
+        self.reward_pos_idx = [3,4,5,6,7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
+
+        self.joint_vel_idx = [13, 14, 18, 26, 27, 31]
 
         ## THIS IS JUST AN IDEA, instead of doing this we are having one ref trajectory per speed
             # params for changing the trajectory
@@ -154,7 +157,9 @@ class UnifiedCassieIKEnvAltReward:
         self.cassie_state = self.sim.step_pd(self.u)
 
     def step(self, action):
-        for _ in range(self.simrate):
+        self.motor_accel_diff = 0
+
+        for i in range(self.simrate):
             self.step_simulation(action)
 
         height = self.sim.qpos()[2]
@@ -170,7 +175,7 @@ class UnifiedCassieIKEnvAltReward:
         # Early termination
         done = not(height > 0.4 and height < 3.0)
 
-        reward = self.compute_reward()
+        reward = self.compute_reward(action)
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.3:
@@ -235,7 +240,7 @@ class UnifiedCassieIKEnvAltReward:
 
     # NOTE: this reward is slightly different from the one in Xie et al
     # see notes for details
-    def compute_reward(self):
+    def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
@@ -243,7 +248,7 @@ class UnifiedCassieIKEnvAltReward:
 
         # TODO: should be variable; where do these come from?
         # TODO: see magnitude of state variables to gauge contribution to reward
-        weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
+        # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
         # weight = [0.05, 0.05, 0.25, 0.25, 0.05, 
         #           0.05, 0.05, 0.25, 0.25, 0.05]
@@ -253,11 +258,13 @@ class UnifiedCassieIKEnvAltReward:
         joint_error       = 0
         footpos_error     = 0
         com_vel_error     = 0
-        footvel_error     = 0
+        action_penalty    = 0
+        foot_orient_penalty = 0
 
         # enforce distance between feet and com
         ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
 
+        # left foot
         lfoot = self.cassie_state.leftFoot.position[:]
         rfoot = self.cassie_state.rightFoot.position[:]
         for j in [0, 1, 2]:
@@ -277,35 +284,31 @@ class UnifiedCassieIKEnvAltReward:
             com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
 
         # each joint pos, skipping feet
-        for i, j in enumerate(self.pos_idx):
+        for i, j in enumerate(self.reward_pos_idx):
             target = ref_pos[j]
             actual = qpos[j]
 
             if j == 20 or j == 34:
                 joint_error += 0
             else:
-                joint_error += 30 * weight[i] * (target - actual) ** 2
+                joint_error += (target - actual) ** 2
 
-        # try to match foot velocity
-        ref_lvel, ref_rvel = self.get_ref_foot_vel(self.phase + 1)
-
-        # foot vel: x, y, z
-        lvel = self.cassie_state.leftFoot.footTranslationalVelocity
-        rvel = self.cassie_state.rightFoot.footTranslationalVelocity
-        for j in [0, 1, 2]:
-            footvel_error += np.linalg.norm(lvel[j] - ref_lvel[j]) + np.linalg.norm(rvel[j] - ref_rvel[j])
+        # action penalty
+        action_penalty = np.linalg.norm(action - self.prev_action) - 0.5
+        if action_penalty < 0:
+            action_penalty = 0
 
         reward = 0.4 * np.exp(-joint_error) +       \
-                 0.2 * np.exp(-footpos_error) +       \
-                 0.2 * np.exp(-com_vel_error) +         \
-                 0.2 * np.exp(-footvel_error)
+                 0.2 * np.exp(-footpos_error) +    \
+                 0.2 * np.exp(-com_vel_error) +    \
+                 0.2 * (1 - action_penalty)
 
         if self.debug:
-            print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\nfootpos:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\nfootvel:\t{6:.2f}, % = {7:.2f}\n\n".format(
-            0.4 * np.exp(-joint_error),       0.4 * np.exp(-joint_error) / reward * 100,
+            print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\n\n".format(
+            0.4  * np.exp(-joint_error),       0.4 * np.exp(-joint_error) / reward * 100,
             0.2 * np.exp(-footpos_error),    0.2 * np.exp(-footpos_error) / reward * 100,
-            0.2 * np.exp(-com_vel_error),        0.2 * np.exp(-com_vel_error) / reward * 100,
-            0.2 * np.exp(-footvel_error),    0.2 * np.exp(-footpos_error) / reward * 100,
+            0.2 * np.exp(-com_vel_error),    0.2 * np.exp(-com_vel_error) / reward * 100,
+            0.2  * (1 - action_penalty),       0.2 * (1 - action_penalty) / reward * 100,
             reward
             )
             )
@@ -405,7 +408,7 @@ class UnifiedCassieIKEnvAltReward:
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
-        qvel = np.copy(self.sim.qvel()) 
+        qvel = np.copy(self.sim.qvel())
 
         # TODO: maybe convert to set subtraction for clarity
         # {i for i in range(35)} - 
@@ -468,6 +471,8 @@ class UnifiedCassieIKEnvAltReward:
             ext_state = np.concatenate(self.get_ref_ext_state(self.phaselen - 1))
         else:
             ext_state = np.concatenate(self.get_ref_ext_state(self.phase))
+
+        # print(np.linalg.norm(self.cassie_state.motor.torque[:]))
 
         robot_state = np.concatenate([
             [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height], # pelvis height
