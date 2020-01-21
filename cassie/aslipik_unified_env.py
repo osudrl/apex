@@ -291,14 +291,14 @@ class UnifiedCassieIKEnv:
                 joint_error += 30 * weight[i] * (target - actual) ** 2
 
         # action penalty
-        action_penalty = np.linalg.norm(action - self.prev_action) - 0.5
-        if action_penalty < 0:
-            action_penalty = 0
+        action_penalty = np.linalg.norm(action - self.prev_action)
+        # if action_penalty < 0:
+        #     action_penalty = 0
 
         reward = 0.3 * np.exp(-joint_error) +       \
                  0.25 * np.exp(-footpos_error) +    \
                  0.25 * np.exp(-com_vel_error) +    \
-                 0.2 * (1 - action_penalty)
+                 0.2 * np.exp(-action_penalty)
 
         if self.debug:
             print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}action_penalty:\t{6:.2f}, % = {7:.2f}\n\n".format(
