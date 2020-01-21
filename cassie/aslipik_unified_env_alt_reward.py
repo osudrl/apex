@@ -122,7 +122,7 @@ class UnifiedCassieIKEnvAltReward:
             # alpha = h / (Tf + h)
             # real_action = (1-alpha)*self.prev_action + alpha*target
 
-        real_action = target
+        # real_action = target
 
         # diff = real_action - self.prev_action
         # max_diff = np.ones(10)*0.1
@@ -132,7 +132,7 @@ class UnifiedCassieIKEnvAltReward:
         #     elif diff[i] > max_diff[i]:
         #         target[i] = self.prev_action[i] + max_diff[i]
 
-        self.prev_action = real_action
+        # self.prev_action = real_action
         # real_action = target
 
         self.u = pd_in_t()
@@ -176,6 +176,9 @@ class UnifiedCassieIKEnvAltReward:
         done = not(height > 0.4 and height < 3.0)
 
         reward = self.compute_reward(action)
+
+        # update previous action
+        self.prev_action = action
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.3:
