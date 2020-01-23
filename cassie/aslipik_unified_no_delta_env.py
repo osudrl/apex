@@ -331,12 +331,13 @@ class UnifiedCassieIKEnvNoDelta:
                  0.1  * np.exp(-straight_diff)
 
         if self.debug:
-            print("reward: {10}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\n\n".format(
-            0.3  * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
-            0.175 * np.exp(-footpos_error),    0.175 * np.exp(-footpos_error) / reward * 100,
-            0.175 * np.exp(-com_vel_error),    0.175 * np.exp(-com_vel_error) / reward * 100,
-            0.175 * np.exp(-action_penalty),       0.175 * np.exp(-action_penalty) / reward * 100,
-            0.175 * np.exp(-foot_orient_penalty), 0.175 * np.exp(-foot_orient_penalty) / reward * 100,
+            print("reward: {11}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\straight_diff:\t{9:.2f}, % = {10:.2f}\n\n".format(
+            0.3  * np.exp(-joint_error),            0.3 * np.exp(-joint_error) / reward * 100,
+            0.15 * np.exp(-footpos_error),          0.15 * np.exp(-footpos_error) / reward * 100,
+            0.15 * np.exp(-com_vel_error),          0.15 * np.exp(-com_vel_error) / reward * 100,
+            0.15 * np.exp(-action_penalty),         0.15 * np.exp(-action_penalty) / reward * 100,
+            0.15 * np.exp(-foot_orient_penalty),    0.15 * np.exp(-foot_orient_penalty) / reward * 100,
+            0.1  * np.exp(-straight_diff),          0.1  * np.exp(-straight_diff) / reward * 100,
             reward
             )
             )
