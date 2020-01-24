@@ -3,9 +3,13 @@ import pickle
 from matplotlib import pyplot as plt
 import numpy as np
 
-POLICY_NAME = "aslip_unified_0_v5"
-FILE_PATH = "./hardware_logs/"
-FILE_NAME = "2020-01-20_16:51_log0"
+# POLICY_NAME = "aslip_unified_task0_v6"
+# FILE_PATH = "./hardware_logs/"
+# FILE_NAME = "2020-01-21_20:10_log7"
+
+POLICY_NAME = "aslip_unified_task0_v6"
+FILE_PATH = "./testTS_logs/"
+FILE_NAME = "2020-01-24_13:12_logfinal"
 
 SAVE_NAME = FILE_PATH + POLICY_NAME + "/" + FILE_NAME
 
@@ -102,27 +106,27 @@ ax4.set_title('Joint Position')
 ax5 = plt.subplot(row,col,5, sharex=ax1)
 # ax5.plot(time, ff_left[:, 0], label='left-X'  )
 # ax5.plot(time, ff_left[:, 1], label='left-Y'  )
-ax3.plot(time, ff_left[:, 2], label='left-Z'  )
-# ax3.plot(time, ff_right[:, 0], label='right-X'  )
-# ax3.plot(time, ff_right[:, 1], label='right-Y'  )
-ax3.plot(time, ff_right[:, 2], label='right-Z'  )
-# ax3.set_xlabel('Time')
-ax3.set_ylabel('Foot Force [N]')
-ax3.legend(loc='upper left')
-ax3.set_title('Foot Forces')
+ax5.plot(time, ff_left[:, 2], label='left-Z'  )
+# ax5.plot(time, ff_right[:, 0], label='right-X'  )
+# ax5.plot(time, ff_right[:, 1], label='right-Y'  )
+ax5.plot(time, ff_right[:, 2], label='right-Z'  )
+# ax5.set_xlabel('Time')
+ax5.set_ylabel('Foot Force [N]')
+ax5.legend(loc='upper left')
+ax5.set_title('Foot Forces')
 
 # foot force
-ax5 = plt.subplot(row,col,6, sharex=ax1)
-# ax5.plot(time, foot_pos_left[:, 0], label='left-X'  )
-# ax5.plot(time, foot_pos_left[:, 1], label='left-Y'  )
-ax5.plot(time, foot_pos_left[:, 2], label='left-Z'  )
-# ax5.plot(time, foot_pos_right[:, 0], label='right-X'  )
-# ax5.plot(time, foot_pos_right[:, 1], label='right-Y'  )
-ax5.plot(time, foot_pos_right[:, 2], label='right-Z'  )
-# ax5.set_xlabel('Time')
-ax5.set_ylabel('Foot Pos [m]')
-ax5.legend(loc='upper left')
-ax5.set_title('Foot Pos')
+ax6 = plt.subplot(row,col,6, sharex=ax1)
+# ax6.plot(time, foot_pos_left[:, 0], label='left-X'  )
+# ax6.plot(time, foot_pos_left[:, 1], label='left-Y'  )
+ax6.plot(time, foot_pos_left[:, 2], label='left-Z'  )
+# ax6.plot(time, foot_pos_right[:, 0], label='right-X'  )
+# ax6.plot(time, foot_pos_right[:, 1], label='right-Y'  )
+ax6.plot(time, foot_pos_right[:, 2], label='right-Z'  )
+# ax6.set_xlabel('Time')
+ax6.set_ylabel('Foot Pos [m]')
+ax6.legend(loc='upper left')
+ax6.set_title('Foot Pos')
 
 
 

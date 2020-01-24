@@ -33,7 +33,7 @@ cassie_env = UnifiedCassieIKEnvNoDelta("walking", clock_based=True, state_est=Tr
 
 # policy = torch.load("./trained_models/stiff_spring/stiff_StateEst_speed2.pt")
 # policy = torch.load("./trained_models/sidestep_StateEst_footxypenaltysmall_forcepenalty_hipyaw_limittargs_pelaccel3_speed-05-1_side03_freq1.pt")
-policy = torch.load("./trained_models/aslip_unified_no_delta_10_v6.pt")
+policy = torch.load("./trained_models/aslip_unified_no_delta_10_v7.pt")
 # policy = torch.load("./trained_models/aslip_unified_no_delta_0_v4.pt")
 policy.eval()
 renderpolicy_speedinput(cassie_env, policy, deterministic=True, dt=0.05, speedup = 2)

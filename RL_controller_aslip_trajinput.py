@@ -179,11 +179,11 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_task0_v6.pt")
+policy = torch.load("./trained_models/aslip_unified_10_v6.pt")
 policy.eval()
 
 max_speed = 2.0
-min_speed = 0.50
+min_speed = 0.0
 max_y_speed = 0.0
 min_y_speed = 0.0
 
@@ -312,8 +312,9 @@ while True:
         tt = time.monotonic() - t0
         orient_add += math.sin(t / 8) / 400
         #env.speed = 0.2
-        speed = ((math.sin(tt / 2)) * max_speed)
         # speed = ((math.sin(tt / 2)) * max_speed)
+        # speed = ((math.sin(tt / 2)) * max_speed)
+        speed = 0.5
         print("speed: ", speed)
         #if env.phase % 14 == 0:
         #	env.speed = (random.randint(-1, 1)) / 2.0

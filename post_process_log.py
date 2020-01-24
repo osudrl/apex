@@ -6,9 +6,16 @@ import time
 from tempfile import TemporaryFile
 
 
-POLICY_NAME = "aslip_unified_0_v5"
-FILE_PATH = "./hardware_logs/"
-FILE_NAME = "2020-01-20_16:51_log0"
+# POLICY_NAME = "aslip_unified_task0_v6"
+# FILE_PATH = "./hardware_logs/"
+# FILE_NAME = "2020-01-21_20:10_log7"
+
+
+POLICY_NAME = "aslip_unified_task0_v6"
+FILE_PATH = "./testTS_logs/"
+FILE_NAME = "2020-01-24_13:12_logfinal"
+
+
 
 logs = pickle.load(open(FILE_PATH + POLICY_NAME + "/" + FILE_NAME + ".pkl", "rb")) #load in file with cassie data
 
