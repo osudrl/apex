@@ -381,6 +381,7 @@ class PPO:
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
                 avg_eval_reward = np.mean(test.ep_returns)
+                print("avg eval reward: {:.2f}".format(avg_eval_reward))
 
                 pdf     = policy.evaluate(observations)
                 old_pdf = old_policy.evaluate(observations)

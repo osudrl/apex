@@ -15,11 +15,11 @@ def getAllTrajectories(speeds):
 
     for i, speed in enumerate(speeds):
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", "aslipTrajs", "walkCycle_{}.pkl".format(speed))
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsSweep", "walkCycle_{}.pkl".format(speed))
         trajectories.append(CassieIKTrajectory(traj_path))
 
+    # print("Got all trajectories")
     return trajectories
-
 
 class CassieIKTrajectory:
     def __init__(self, filepath):
@@ -34,7 +34,7 @@ class CassieIKTrajectory:
 
 # simrate used to be 60
 class UnifiedCassieIKEnv:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, training=True):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -53,9 +53,6 @@ class UnifiedCassieIKEnv:
                 self.observation_space = np.zeros(86)       # Size for use without state est
         self.action_space      = np.zeros(10)
 
-
-
-        # hashmap to map speed to index
         self.speeds = [x / 10 for x in range(0, 31)]
         self.trajectories = getAllTrajectories(self.speeds)
         self.num_speeds = len(self.trajectories)
@@ -73,15 +70,19 @@ class UnifiedCassieIKEnv:
         self.counter = 0 # number of phase cycles completed in episode
 
         # NOTE: each trajectory in trajectories should have the same length
-        self.current_traj_speed = self.speeds[0]
+        self.speed = self.speeds[0]
         self.trajectory = self.trajectories[0]
+
+        self.training = training
 
         # NOTE: a reference trajectory represents ONE phase cycle
 
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(self.trajectory.length / self.simrate) - 1
+        # self.phaselen = floor(self.trajectory.length / self.simrate) - 1
+        # self.phaselen = self.trajectory.length - 1
+        self.phaselen = self.trajectory.length - 1
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
@@ -110,14 +111,19 @@ class UnifiedCassieIKEnv:
     def step_simulation(self, action):
 
         # maybe make ref traj only send relevant idxs?
-        ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
+        if(self.phase == self.phaselen - 1):
+            ref_pos, ref_vel = self.get_ref_state(0)
+        else:
+            ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
 
         target = action + ref_pos[self.pos_idx]
 
-        h = 0.0005
-        Tf = 1.0 / 300.0
-        alpha = h / (Tf + h)
-        real_action = (1-alpha)*self.prev_action + alpha*target
+        # h = 0.0005
+        # Tf = 1.0 / 300.0
+        # alpha = h / (Tf + h)
+        # real_action = (1-alpha)*self.prev_action + alpha*target
+
+        real_action = target
 
         # diff = real_action - self.prev_action
         # max_diff = np.ones(10)*0.1
@@ -160,7 +166,8 @@ class UnifiedCassieIKEnv:
         self.time  += 1
         self.phase += 1
 
-        if self.phase > self.phaselen:
+        # if self.phase > self.phaselen:
+        if self.phase >= self.phaselen:
             self.phase = 0
             self.counter += 1
 
@@ -177,9 +184,10 @@ class UnifiedCassieIKEnv:
 
     def reset(self):
         random_speed_idx = random.randint(0, self.num_speeds-1)
-        self.current_traj_speed = self.speeds[random_speed_idx]
+        self.speed = self.speeds[random_speed_idx]
+        # print("current speed: {}".format(self.speed))
         self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
-        self.phase = random.randint(0, self.phaselen)
+        self.phase = random.randint(0, self.phaselen - 1)
         # self.phase = 0
         self.time = 0
         self.counter = 0
@@ -188,8 +196,8 @@ class UnifiedCassieIKEnv:
         # qpos[2] -= .1
 
         self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel)
-        # self.sim.set_qvel(np.zeros(qvel.shape))
+        # self.sim.set_qvel(qvel)
+        self.sim.set_qvel(np.zeros(qvel.shape))
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -203,7 +211,7 @@ class UnifiedCassieIKEnv:
     # used for plotting against the reference trajectory
     def reset_for_test(self):
         random_speed_idx = random.randint(0, self.num_speeds)
-        self.current_traj_speed = self.speeds[random_speed_idx]
+        self.speed = self.speeds[random_speed_idx]
         self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
         self.phase = 0
         self.time = 0
@@ -227,6 +235,7 @@ class UnifiedCassieIKEnv:
     # see notes for details
     def compute_reward(self):
         qpos = np.copy(self.sim.qpos())
+        qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
 
@@ -246,7 +255,7 @@ class UnifiedCassieIKEnv:
         spring_error      = 0
 
         # enforce distance between feet and com
-        ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase)
+        ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
 
         # left foot
         lfoot = self.cassie_state.leftFoot.position[:]
@@ -258,6 +267,9 @@ class UnifiedCassieIKEnv:
             print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
             print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
             print(footpos_error)
+
+        # speed reward component
+        speed_diff = np.abs(qvel[0] - self.speed)
 
         # each joint pos, skipping feet
         for i, j in enumerate(self.pos_idx):
@@ -292,36 +304,46 @@ class UnifiedCassieIKEnv:
 
             spring_error += (target - actual) ** 2      
         
+        # reward = 0.1 * np.exp(-footpos_error) +       \
+        #          0.5 * np.exp(-joint_error) +       \
+        #          0.3 * np.exp(-com_error) +         \
+        #          0.1 * np.exp(-orientation_error) + \
+        #          0.0 * np.exp(-spring_error)
         reward = 0.1 * np.exp(-footpos_error) +       \
                  0.5 * np.exp(-joint_error) +       \
-                 0.3 * np.exp(-com_error) +         \
+                 0.2 * np.exp(-com_error) +         \
                  0.1 * np.exp(-orientation_error) + \
-                 0.0 * np.exp(-spring_error)
+                 0.1 * np.exp(-speed_diff)
         #reward = np.exp(-joint_error)
+
+        # print("{}\t{}\t{}\t{}".format(self.speed, self.sim.qvel()[0], 0.2 * np.exp(-com_error), reward))
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
         if self.debug:
-            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\njoint:\t{2:.2f}, % = {3:.2f}\ncom:\t{4:.2f}, % = {5:.2f}\norient:\t{6:.2f}, % = {7:.2f}\nspring:\t{8:.2f}, % = {9:.2f}\n\n".format(
-            0.3 * np.exp(-footpos_error),     0.3 * np.exp(-footpos_error) / reward * 100,
-            0.3 * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
-            0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
+            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\njoint:\t{2:.2f}, % = {3:.2f}\ncom:\t{4:.2f}, % = {5:.2f}\norient:\t{6:.2f}, % = {7:.2f}\nspeed:\t{8:.2f}, % = {9:.2f}\n\n".format(
+            0.1 * np.exp(-footpos_error),     0.1 * np.exp(-footpos_error) / reward * 100,
+            0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
+            0.2 * np.exp(-com_error),         0.2 * np.exp(-com_error) / reward * 100,
             0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-            0.0 * np.exp(-spring_error),      0.0 * np.exp(-spring_error) / reward * 100,
+            0.1 * np.exp(-speed_diff),      0.1 * np.exp(-speed_diff) / reward * 100,
             reward
             )
             )
+            print("desired_speed: {}".format(self.speed))
         return reward
 
     # get the corresponding state from the reference trajectory for the current phase
     def get_ref_state(self, phase=None):
+
         if phase is None:
             phase = self.phase
 
         if phase > self.phaselen:
             phase = 0
 
-        pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        # pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        pos = np.copy(self.trajectory.qpos[phase])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
@@ -335,7 +357,8 @@ class UnifiedCassieIKEnv:
         # regardless of reference trajectory?
         pos[1] = 0
 
-        vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        # vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        vel = np.copy(self.trajectory.qvel[phase])
 
         return pos, vel
 
@@ -347,8 +370,10 @@ class UnifiedCassieIKEnv:
         if phase > self.phaselen:
             phase = 0
 
-        rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
-        lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
+        # rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
+        # lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
+        rfoot = np.copy(self.trajectory.rfoot[phase])
+        lfoot = np.copy(self.trajectory.lfoot[phase])
 
         return rfoot, lfoot
 
@@ -356,7 +381,10 @@ class UnifiedCassieIKEnv:
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel()) 
 
-        ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
+        if(self.phase == 0):
+            ref_pos, ref_vel = self.get_ref_state(self.phaselen - 1)
+        else:
+            ref_pos, ref_vel = self.get_ref_state(self.phase)
 
         # TODO: maybe convert to set subtraction for clarity
         # {i for i in range(35)} - 
@@ -421,8 +449,8 @@ class UnifiedCassieIKEnv:
 
             clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                      np.cos(2 * np.pi *  self.phase / self.phaselen)]
-            
-            ext_state = ext_state = np.concatenate((clock, [self.current_traj_speed]))
+
+            ext_state = ext_state = np.concatenate((clock, [self.speed]))
 
         else:
             ext_state = np.concatenate([ref_pos[pos_index], ref_vel[vel_index]])

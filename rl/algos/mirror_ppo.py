@@ -7,7 +7,7 @@ from torch.distributions import kl_divergence
 
 import numpy as np
 from rl.algos import PPO
-from rl.policies.actor import GaussianMLP_Actor
+from rl.policies import GaussianMLP_Actor
 from rl.policies.critic import GaussianMLP_Critic
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
@@ -276,10 +276,7 @@ def run_experiment(args):
         critic = GaussianMLP_Critic(
             obs_dim, 
             env_name=args.env_name,
-            nonlinearity=torch.nn.functional.relu, 
-            bounded=True, 
-            init_std=np.exp(-2), 
-            learn_std=False,
+            nonlinearity=torch.nn.functional.relu,
             normc_init=False
         )
 
