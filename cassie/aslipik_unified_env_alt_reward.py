@@ -273,6 +273,7 @@ class UnifiedCassieIKEnvAltReward:
 
         #weight = [.1] * 10
 
+        compos_error      = 0
         footpos_error     = 0
         com_vel_error     = 0
         action_penalty    = 0
@@ -293,9 +294,15 @@ class UnifiedCassieIKEnvAltReward:
             print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
             print(footpos_error)
 
-        # try to match com velocity
-        ref_cvel = self.get_ref_com_vel(self.phase + 1)
+        
 
+        # try to match com position and velocity
+        ref_cpos, ref_cvel = self.get_ref_com(self.phase + 1)
+        
+        cpos = self.cassie_state.pelvis.position
+        for j in [0, 1, 2]:
+            compos_error += np.linalg.norm(cpos[j] - ref_cpos[j])
+        
         # center of mass vel: x, y, z
         cvel = self.cassie_state.pelvis.translationalVelocity
         for j in [0, 1, 2]:
@@ -322,16 +329,18 @@ class UnifiedCassieIKEnvAltReward:
         if straight_diff < 0.05:
             straight_diff = 0
 
-        reward = 0.35 * np.exp(-footpos_error) +    \
-                 0.35 * np.exp(-com_vel_error) +    \
+        reward = 0.2 * np.exp(-compos_error) +    \
+                 0.2 * np.exp(-footpos_error) +    \
+                 0.3 * np.exp(-com_vel_error) +    \
                  0.1 * np.exp(-action_penalty) +     \
                  0.1 * np.exp(-foot_orient_penalty) + \
                  0.1 * np.exp(-straight_diff)
 
         if self.debug:
-            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_vel:\t{2:.2f}, % = {3:.2f}\naction_penalty:\t{4:.2f}, % = {5:.2f}\nfoot_orient_penalty:\t{6:.2f}, % = {7:.2f}\nstraight_diff:\t{8:.2f}, % = {9:.2f}\n\n".format(
-            0.35 * np.exp(-footpos_error),          0.35 * np.exp(-footpos_error) / reward * 100,
-            0.35 * np.exp(-com_vel_error),          0.35 * np.exp(-com_vel_error) / reward * 100,
+            print("reward: {12}\com:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\nstraight_diff:\t{10:.2f}, % = {11:.2f}\n\n".format(
+            0.2 * np.exp(-compos_error),          0.2 * np.exp(-compos_error) / reward * 100,
+            0.2 * np.exp(-footpos_error),          0.2 * np.exp(-footpos_error) / reward * 100,
+            0.3 * np.exp(-com_vel_error),          0.3 * np.exp(-com_vel_error) / reward * 100,
             0.1 * np.exp(-action_penalty),         0.1 * np.exp(-action_penalty) / reward * 100,
             0.1 * np.exp(-foot_orient_penalty),    0.1 * np.exp(-foot_orient_penalty) / reward * 100,
             0.1  * np.exp(-straight_diff),         0.1  * np.exp(-straight_diff) / reward * 100,
@@ -389,7 +398,7 @@ class UnifiedCassieIKEnvAltReward:
 
         return rpos, lpos
 
-    def get_ref_com_vel(self, phase=None):
+    def get_ref_com(self, phase=None):
 
         if phase is None:
             phase = self.phase
@@ -398,8 +407,9 @@ class UnifiedCassieIKEnvAltReward:
             phase = 0
 
         cvel = np.copy(self.trajectory.cvel[phase])
+        cpos = np.copy(self.trajectory.cpos[phase])
 
-        return cvel
+        return cpos, cvel
 
     def get_ref_ext_state(self, phase=None):
 
