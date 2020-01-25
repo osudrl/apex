@@ -80,7 +80,7 @@ class UnifiedCassieIKEnv:
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
-        self.reward_pos_idx = [3,4,5,6,7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
+        self.reward_pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
         # for enforcing the correct foot orientation
@@ -273,6 +273,7 @@ class UnifiedCassieIKEnv:
         com_vel_error     = 0
         action_penalty    = 0
         foot_orient_penalty = 0
+        straight_diff = 0
 
         # enforce distance between feet and com
         ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
@@ -307,26 +308,31 @@ class UnifiedCassieIKEnv:
                 joint_error += (target - actual) ** 2
 
         # action penalty
-        action_penalty = np.linalg.norm(action - self.prev_action) - 0.5
-        if action_penalty < 0:
-            action_penalty = 0
+        action_penalty = np.linalg.norm(action - self.prev_action)
 
         # foot orientation penalty
         foot_orient_penalty = np.linalg.norm(self.avg_rfoot_quat - self.global_initial_foot_orient) + np.linalg.norm(self.avg_lfoot_quat - self.global_initial_foot_orient)
 
+        # straight difference penalty
+        straight_diff = np.abs(qpos[1])
+        if straight_diff < 0.05:
+            straight_diff = 0
+
         reward = 0.3 * np.exp(-joint_error) +       \
-                 0.175 * np.exp(-footpos_error) +    \
-                 0.175 * np.exp(-com_vel_error) +    \
-                 0.175 * (1 - action_penalty) +     \
-                 0.175 * np.exp(-foot_orient_penalty)
+                 0.15 * np.exp(-footpos_error) +    \
+                 0.15 * np.exp(-com_vel_error) +    \
+                 0.15 * np.exp(-action_penalty) +     \
+                 0.15 * np.exp(-foot_orient_penalty) + \
+                 0.1  * np.exp(-straight_diff)
 
         if self.debug:
-            print("reward: {10}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\n\n".format(
-            0.3  * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
-            0.175 * np.exp(-footpos_error),    0.175 * np.exp(-footpos_error) / reward * 100,
-            0.175 * np.exp(-com_vel_error),    0.175 * np.exp(-com_vel_error) / reward * 100,
-            0.175  * (1 - action_penalty),       0.175 * (1 - action_penalty) / reward * 100,
-            0.175 * np.exp(-foot_orient_penalty), 0.175 * np.exp(-foot_orient_penalty) / reward * 100,
+            print("reward: {12}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\nstraight_diff:\t{10:.2f}, % = {11:.2f}\n\n".format(
+            0.3  * np.exp(-joint_error),            0.3 * np.exp(-joint_error) / reward * 100,
+            0.15 * np.exp(-footpos_error),          0.15 * np.exp(-footpos_error) / reward * 100,
+            0.15 * np.exp(-com_vel_error),          0.15 * np.exp(-com_vel_error) / reward * 100,
+            0.15 * np.exp(-action_penalty),         0.15 * np.exp(-action_penalty) / reward * 100,
+            0.15 * np.exp(-foot_orient_penalty),    0.15 * np.exp(-foot_orient_penalty) / reward * 100,
+            0.1  * np.exp(-straight_diff),          0.1  * np.exp(-straight_diff) / reward * 100,
             reward
             )
             )
