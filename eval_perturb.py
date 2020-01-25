@@ -40,7 +40,7 @@ def compute_perturbs(cassie_env, policy, wait_time, perturb_duration, perturb_si
 
     eval_start = time.time()
     for i in range(num_angles):
-        for j in range(1):
+        for j in range(num_steps):
             print("Testing angle {} ({} out of {}) for phase {}".format(-perturb_dir[i], i+1, num_angles, j))
             # reset_to_phase(cassie_env, policy, j)
             curr_size = perturb_size - perturb_incr
@@ -92,7 +92,7 @@ def perturb_worker(env_fn, qpos_phase, qvel_phase, policy, angles, wait_time, pe
     eval_start = time.time()
     sim_times = np.zeros((num_angles, 2))
     for i in range(num_angles):
-        for j in range(2):
+        for j in range(num_steps):
             sim_start = time.time()
             # print("Testing angle {} ({} out of {}) for phase {}".format(-angles[i], i+1, num_angles, j))
             curr_size = perturb_size - perturb_incr
@@ -165,7 +165,7 @@ def compute_perturbs_multi(env_fn, policy, wait_time, perturb_duration, perturb_
         qvel_phase[:, i+1] = cassie_env.sim.qvel()
 
     start_t = time.time()
-    ray.init(num_cpus=4)
+    ray.init(num_cpus=num_procs)
     result_ids = []
     angle_split = (num_angles) // num_procs
     for i in range(num_procs):
@@ -246,6 +246,7 @@ perturb_size = 100
 perturb_incr = 10
 perturb_body = "cassie-pelvis"
 num_angles = 4
+num_procs = num_angles
 
 compute_perturbs(cassie_env, policy, wait_time, perturb_duration, perturb_size, perturb_incr, perturb_body, num_angles)
-# compute_perturbs_multi(env_fn, policy, wait_time, perturb_duration, perturb_size, perturb_incr, perturb_body, num_angles, 4)
+# compute_perturbs_multi(env_fn, policy, wait_time, perturb_duration, perturb_size, perturb_incr, perturb_body, num_angles, num_procs)
