@@ -146,13 +146,14 @@ class TrajectoryInfo:
         return self.phaselen, self.offset
 
 
-
 time_log   = [] # time stamp
 input_log  = [] # network inputs
 output_log = [] # network outputs 
 state_log  = [] # cassie state
-target_log = [] #PD target log
+target_log = [] # PD target log
 traj_log   = [] # reference trajectory log
+
+speed_log  = [] # speed input to reference trajectory library log
 
 simrate = 60
 
@@ -161,12 +162,12 @@ PREFIX = "./"
 # PREFIX = "/home/robot/Desktop/Testing/jdao_cassie-rl-testing/" #Dylan's Prefix
 
 if len(sys.argv) > 1:
-    filename = PREFIX + "logs/" + sys.argv[1]
+    filename = PREFIX + "testVaryVel_logs/" + sys.argv[1]
 else:
-    filename = PREFIX + "logs/" + datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M')
+    filename = PREFIX + "testVaryVel_logs/" + "various_speeds"
 
 def log(sto="final"):
-    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log, "trajectory": traj_log}
+    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log, "trajectory": traj_log, "speed": speed_log}
 
     filep = open(filename + "_log" + str(sto) + ".pkl", "wb")
 
@@ -174,12 +175,10 @@ def log(sto="final"):
 
     filep.close()
 
-atexit.register(log)
-
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_no_delta_0_TS_only.pt")
+policy = torch.load("./trained_models/aslip_unified_10_v7.pt")
 policy.eval()
 
 max_speed = 2.0
@@ -203,8 +202,8 @@ for i in range(5):
 act_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 pos_index = np.array([1, 2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
 vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
-# _, offset = traj.update_info(min_speed)
-offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+_, offset = traj.update_info(min_speed)
+# offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
 # Determine whether running in simulation or on the robot
 if platform.node() == 'cassie':
@@ -247,7 +246,12 @@ MIN_HEIGHT = 0.4
 D_mult = 1  # Reaaaaaally bad stability problems if this is pushed higher as a multiplier
             # Might be worth tuning by joint but something else if probably needed
 
-while True:
+
+SPEED_SCHEDULE = [0.0, 0.8, 1.9, 0.4, 1.3, 0.5, 0.0]
+SPEED_HOLD_TIME = 4
+SECONDS_TO_TEST = SPEED_HOLD_TIME * (len(SPEED_SCHEDULE) - 1)
+
+while time.monotonic() < t0 + SECONDS_TO_TEST:
     # Wait until next cycle time
     while time.monotonic() - t < 60/2000:
         time.sleep(0.001)
@@ -280,6 +284,7 @@ while True:
                 output_log = [] # network outputs 
                 state_log  = [] # cassie state
                 target_log = [] #PD target log
+                speed_log  = [] # speed input to library log
         else:
             sto = False
 
@@ -310,12 +315,15 @@ while True:
     else:
         # Automatically change orientation and speed
         tt = time.monotonic() - t0
-        orient_add += math.sin(t / 8) / 400
+        # orient_add += math.sin(t / 8) / 400
+        orient_add += 0
         #env.speed = 0.2
         # speed = ((math.sin(tt / 2)) * max_speed)
         # speed = ((math.sin(tt / 2)) * max_speed)
-        speed = 0.5
-        print("speed: ", speed)
+
+        speed = SPEED_SCHEDULE[int(tt / SPEED_HOLD_TIME)]
+
+        # print("speed: ", speed)
         #if env.phase % 14 == 0:
         #	env.speed = (random.randint(-1, 1)) / 2.0
         # print(env.speed)
@@ -344,7 +352,7 @@ while True:
         if new_orient[0] < 0:
             new_orient = -new_orient
         new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
-        print('new_orientation: {}'.format(new_orient))
+        # print('new_orientation: {}'.format(new_orient))
 
         ref_pos, ref_vel = traj.get_ref_state(traj.phase)
         ext_state = np.concatenate(traj.get_ref_ext_state(traj.phase))
@@ -368,7 +376,7 @@ while True:
         # RL_state[0] = 1.0
 
         actual_speed = state.pelvis.translationalVelocity[0]
-        print("target speed: {:.2f}\tactual speed: {:.2f}\tfreq: {}".format(traj.speed, actual_speed, traj.freq_adjust))
+        # print("target speed: {:.2f}\tactual speed: {:.2f}\tfreq: {}".format(traj.speed, actual_speed, traj.freq_adjust))
 
         # Construct input vector
         torch_state = torch.Tensor(RL_state)
@@ -400,6 +408,7 @@ while True:
         output_log.append(env_action)
         target_log.append(target)
         traj_log.append(traj.offset)
+        speed_log.append(traj.speed)
     #------------------------------- Start Up Standing ---------------------------
     elif operation_mode == 1:
         print('Startup Standing. Height = ' + str(standing_height))
@@ -439,10 +448,12 @@ while True:
         print('Error, In bad operation_mode with value: ' + str(operation_mode))
     
     # Measure delay
-    print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
+    # print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
 
     # Track phase
     traj.phase += traj.phase_add
     if traj.phase >= traj.phaselen:
         traj.phase = 0
         traj.counter += 1
+
+log()
