@@ -38,7 +38,7 @@ class CassieIKTrajectory:
 
 # simrate used to be 60
 class UnifiedCassieIKEnvAltReward:
-    def __init__(self, traj="stepping", simrate=60, clock_based=False, state_est=True, training=True, debug=False):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, training=True, debug=False):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -76,6 +76,7 @@ class UnifiedCassieIKEnvAltReward:
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
         # self.phaselen = floor(self.trajectory.length / self.simrate) - 1
+        # self.phaselen = self.trajectory.length - 1
         self.phaselen = self.trajectory.length - 1
 
         # see include/cassiemujoco.h for meaning of these indices
@@ -87,6 +88,9 @@ class UnifiedCassieIKEnvAltReward:
         self.global_initial_foot_orient = np.array([-0.24135469773826795, -0.24244324494623198, -0.6659363823866352, 0.6629463911006771])
         self.avg_lfoot_quat = np.zeros(4)
         self.avg_rfoot_quat = np.zeros(4)
+
+        # offset for no delta policy
+        self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
         ## THIS IS JUST AN IDEA, instead of doing this we are having one ref trajectory per speed
             # params for changing the trajectory
@@ -111,32 +115,32 @@ class UnifiedCassieIKEnvAltReward:
 
     def step_simulation(self, action):
 
-        # maybe make ref traj only send relevant idxs?
-        if(self.phase == self.phaselen - 1):
-            ref_pos, ref_vel = self.get_ref_state(0)
-        else:
-            ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
+        # # maybe make ref traj only send relevant idxs?
+        # if(self.phase == self.phaselen - 1):
+        #     ref_pos, ref_vel = self.get_ref_state(0)
+        # else:
+        #     ref_pos, ref_vel = self.get_ref_state(self.phase + 1)
 
-        target = action + ref_pos[self.pos_idx]
+        # target = action + ref_pos[self.pos_idx]
 
-        ## DO NOT WANT RATE LIMITING
-            # h = 0.0005
-            # Tf = 1.0 / 300.0
-            # alpha = h / (Tf + h)
-            # real_action = (1-alpha)*self.prev_action + alpha*target
+        # # h = 0.0005
+        # # Tf = 1.0 / 300.0
+        # # alpha = h / (Tf + h)
+        # # real_action = (1-alpha)*self.prev_action + alpha*target
 
         # real_action = target
 
-        # diff = real_action - self.prev_action
-        # max_diff = np.ones(10)*0.1
-        # for i in range(10):
-        #     if diff[i] < -max_diff[i]:
-        #         target[i] = self.prev_action[i] - max_diff[i]
-        #     elif diff[i] > max_diff[i]:
-        #         target[i] = self.prev_action[i] + max_diff[i]
+        # # diff = real_action - self.prev_action
+        # # max_diff = np.ones(10)*0.1
+        # # for i in range(10):
+        # #     if diff[i] < -max_diff[i]:
+        # #         target[i] = self.prev_action[i] - max_diff[i]
+        # #     elif diff[i] > max_diff[i]:
+        # #         target[i] = self.prev_action[i] + max_diff[i]
 
         # self.prev_action = real_action
-        # real_action = target
+
+        real_action = action + self.offset
 
         self.u = pd_in_t()
         for i in range(5):
@@ -151,8 +155,8 @@ class UnifiedCassieIKEnvAltReward:
             self.u.leftLeg.motorPd.torque[i]  = 0 # Feedforward torque
             self.u.rightLeg.motorPd.torque[i] = 0 
 
-            self.u.leftLeg.motorPd.pTarget[i]  = target[i]
-            self.u.rightLeg.motorPd.pTarget[i] = target[i + 5]
+            self.u.leftLeg.motorPd.pTarget[i]  = real_action[i]
+            self.u.rightLeg.motorPd.pTarget[i] = real_action[i + 5]
 
             self.u.leftLeg.motorPd.dTarget[i]  = 0
             self.u.rightLeg.motorPd.dTarget[i] = 0
@@ -160,6 +164,7 @@ class UnifiedCassieIKEnvAltReward:
         self.cassie_state = self.sim.step_pd(self.u)
 
     def step(self, action):
+
         for i in range(self.simrate):
             self.step_simulation(action)
             # calculate running average of foot quaternion
@@ -261,19 +266,17 @@ class UnifiedCassieIKEnvAltReward:
 
         # TODO: should be variable; where do these come from?
         # TODO: see magnitude of state variables to gauge contribution to reward
-        weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
+        # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
         # weight = [0.05, 0.05, 0.25, 0.25, 0.05, 
         #           0.05, 0.05, 0.25, 0.25, 0.05]
 
         #weight = [.1] * 10
 
-        joint_error       = 0
         footpos_error     = 0
         com_vel_error     = 0
         action_penalty    = 0
         foot_orient_penalty = 0
-        orientation_error = 0
         straight_diff = 0
 
         # enforce distance between feet and com
@@ -298,22 +301,15 @@ class UnifiedCassieIKEnvAltReward:
         for j in [0, 1, 2]:
             com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
 
-        # each joint pos, skipping feet
-        for i, j in enumerate(self.reward_pos_idx):
-            target = ref_pos[j]
-            actual = qpos[j]
+        # # each joint pos, skipping feet
+        # for i, j in enumerate(self.reward_pos_idx):
+        #     target = ref_pos[j]
+        #     actual = qpos[j]
 
-            if j == 20 or j == 34:
-                joint_error += 0
-            else:
-                joint_error += 30 * weight[i] * (target - actual) ** 2
-
-        # COM orientation: qw, qx, qy, qz
-        for j in [3, 4, 5, 6]:
-            target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
-            actual = qpos[j]
-
-            orientation_error += (target - actual) ** 2
+        #     if j == 20 or j == 34:
+        #         joint_error += 0
+        #     else:
+        #         joint_error += (target - actual) ** 2
 
         # action penalty
         action_penalty = np.linalg.norm(action - self.prev_action)
@@ -326,49 +322,19 @@ class UnifiedCassieIKEnvAltReward:
         if straight_diff < 0.05:
             straight_diff = 0
 
-        reward = 0.3 * np.exp(-joint_error) +       \
-                 0.12 * np.exp(-footpos_error) +    \
-                 0.12 * np.exp(-com_vel_error) +    \
-                 0.12 * np.exp(-action_penalty) +     \
-                 0.12 * np.exp(-foot_orient_penalty) + \
-                 0.12 * np.exp(-orientation_error) + \
-                 0.1  * np.exp(-straight_diff)
+        reward = 0.35 * np.exp(-footpos_error) +    \
+                 0.35 * np.exp(-com_vel_error) +    \
+                 0.1 * np.exp(-action_penalty) +     \
+                 0.1 * np.exp(-foot_orient_penalty) + \
+                 0.1 * np.exp(-straight_diff)
 
         if self.debug:
-            print("reward: {14}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\norientation_error:\t{10:.2f}, % = {11:.2f}\nstraight_diff:\t{12:.2f}, % = {13:.2f}\n\n".format(
-            0.3  * np.exp(-joint_error),            0.3 * np.exp(-joint_error) / reward * 100,
-            0.12 * np.exp(-footpos_error),          0.12 * np.exp(-footpos_error) / reward * 100,
-            0.12 * np.exp(-com_vel_error),          0.12 * np.exp(-com_vel_error) / reward * 100,
-            0.12 * np.exp(-action_penalty),         0.12 * np.exp(-action_penalty) / reward * 100,
-            0.12 * np.exp(-foot_orient_penalty),    0.12 * np.exp(-foot_orient_penalty) / reward * 100,
-            0.12 * np.exp(-orientation_error),      0.12 * np.exp(-orientation_error) / reward * 100,
-            0.1 * np.exp(-straight_diff),           0.1 * np.exp(-straight_diff) / reward * 100,
-            reward
-            )
-            )
-            print("actual speed: {}\tdesired_speed: {}".format(qvel[0], self.speed))
-        return reward
-
-        if self.debug:
-            print("reward: {10}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\n\n".format(
-            0.3  * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
-            0.175 * np.exp(-footpos_error),    0.175 * np.exp(-footpos_error) / reward * 100,
-            0.175 * np.exp(-com_vel_error),    0.175 * np.exp(-com_vel_error) / reward * 100,
-            0.175  * (1 - action_penalty),       0.175 * (1 - action_penalty) / reward * 100,
-            0.175 * np.exp(-foot_orient_penalty), 0.175 * np.exp(-foot_orient_penalty) / reward * 100,
-            reward
-            )
-            )
-            print("actual speed: {}\tdesired_speed: {}".format(qvel[0], self.speed))
-        return reward
-
-        if self.debug:
-            print("reward: {10}\njoint:\t{0:.2f}, % = {1:.2f}\nfoot:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\n\n".format(
-            0.3  * np.exp(-joint_error),       0.3 * np.exp(-joint_error) / reward * 100,
-            0.175 * np.exp(-footpos_error),    0.175 * np.exp(-footpos_error) / reward * 100,
-            0.175 * np.exp(-com_vel_error),    0.175 * np.exp(-com_vel_error) / reward * 100,
-            0.175  * (1 - action_penalty),       0.175 * (1 - action_penalty) / reward * 100,
-            0.175 * np.exp(-foot_orient_penalty), 0.175 * np.exp(-foot_orient_penalty) / reward * 100,
+            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_vel:\t{2:.2f}, % = {3:.2f}\naction_penalty:\t{4:.2f}, % = {5:.2f}\nfoot_orient_penalty:\t{6:.2f}, % = {7:.2f}\nstraight_diff:\t{8:.2f}, % = {9:.2f}\n\n".format(
+            0.35 * np.exp(-footpos_error),          0.35 * np.exp(-footpos_error) / reward * 100,
+            0.35 * np.exp(-com_vel_error),          0.35 * np.exp(-com_vel_error) / reward * 100,
+            0.1 * np.exp(-action_penalty),         0.1 * np.exp(-action_penalty) / reward * 100,
+            0.1 * np.exp(-foot_orient_penalty),    0.1 * np.exp(-foot_orient_penalty) / reward * 100,
+            0.1  * np.exp(-straight_diff),         0.1  * np.exp(-straight_diff) / reward * 100,
             reward
             )
             )
@@ -451,7 +417,6 @@ class UnifiedCassieIKEnvAltReward:
         cvel = np.copy(self.trajectory.cvel[phase])
 
         return rpos, rvel, lpos, lvel, cpos, cvel
-
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
