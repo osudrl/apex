@@ -63,8 +63,10 @@ class CassieSim:
         return qaccp[:32]
 
     def xquat(self, body_name):
+        print("in xquat")
         xquatp = cassie_sim_xquat(self.c, body_name.encode())
-        return np.array(xquatp[:4])
+        print("got pointer")
+        return xquatp[:4]
 
     def set_time(self, time):
         timep = cassie_sim_time(self.c)
@@ -79,6 +81,9 @@ class CassieSim:
         qvelp = cassie_sim_qvel(self.c)
         for i in range(min(len(qvel), 32)):
             qvelp[i] = qvel[i]
+
+    def set_cassie_state(self, copy_state):
+        cassie_sim_set_cassiestate(self.c, copy_state)
 
     def hold(self):
         cassie_sim_hold(self.c)
