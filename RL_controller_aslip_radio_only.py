@@ -1,12 +1,6 @@
-
 from cassie.cassiemujoco.cassieUDP import *
 from cassie.cassiemujoco.cassiemujoco_ctypes import *
-# from cassie.speed_env import CassieEnv_speed
-# from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
-# from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
-# from cassie.speed_no_delta_neutral_foot_env import CassieEnv_speed_no_delta_neutral_foot
 
-from cassie.trajectory import CassieTrajectory
 
 import time
 import numpy as np
@@ -18,9 +12,8 @@ from cassie.quaternion_function import *
 #import signal 
 import atexit
 import sys
-import select
-import tty
-import termios
+import datetime
+
 
 """
 We need to include the trajectory library for the right offset information, as well as the right phaselen and speed
@@ -31,7 +24,7 @@ def getAllTrajectories(speeds):
 
     for i, speed in enumerate(speeds):
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "cassie", "trajectory", "aslipTrajsSweep", "walkCycle_{}.pkl".format(speed))
+        traj_path = os.path.join(dirname, "cassie", "trajectory", "aslipTrajsTaskSpace", "walkCycle_{}.pkl".format(speed))
         trajectories.append(CassieIKTrajectory(traj_path))
 
     # print("Got all trajectories")
@@ -45,8 +38,12 @@ class CassieIKTrajectory:
         self.qpos = np.copy(trajectory["qpos"])
         self.length = self.qpos.shape[0]
         self.qvel = np.copy(trajectory["qvel"])
-        self.rfoot = np.copy(trajectory["rfoot"])
-        self.lfoot = np.copy(trajectory["lfoot"])
+        self.rpos = np.copy(trajectory["rpos"])
+        self.rvel = np.copy(trajectory["rvel"])
+        self.lpos = np.copy(trajectory["lpos"])
+        self.lvel = np.copy(trajectory["lvel"])
+        self.cpos = np.copy(trajectory["cpos"])
+        self.cvel = np.copy(trajectory["cvel"])
 
 # simrate used to be 60
 class TrajectoryInfo:
@@ -63,8 +60,8 @@ class TrajectoryInfo:
         self.counter = 0 # number of phase cycles completed in episode
 
         # NOTE: each trajectory in trajectories should have the same length
-        self.speed = self.speeds[0]
-        self.trajectory = self.trajectories[0]
+        self.speed = self.speeds[5]
+        self.trajectory = self.trajectories[5]
 
         # NOTE: a reference trajectory represents ONE phase cycle
 
@@ -111,6 +108,23 @@ class TrajectoryInfo:
 
         return pos, vel
 
+    def get_ref_ext_state(self, phase=None):
+
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        rpos = np.copy(self.trajectory.rpos[phase])
+        rvel = np.copy(self.trajectory.rvel[phase])
+        lpos = np.copy(self.trajectory.lpos[phase])
+        lvel = np.copy(self.trajectory.lvel[phase])
+        cpos = np.copy(self.trajectory.cpos[phase])
+        cvel = np.copy(self.trajectory.cvel[phase])
+
+        return rpos, rvel, lpos, lvel, cpos, cvel
+
     def update_info(self, new_speed):
 
         self.speed = new_speed
@@ -131,11 +145,15 @@ class TrajectoryInfo:
 
         return self.phaselen, self.offset
 
+
 time_log   = [] # time stamp
 input_log  = [] # network inputs
 output_log = [] # network outputs 
 state_log  = [] # cassie state
-target_log = [] #PD target log
+target_log = [] # PD target log
+traj_log   = [] # reference trajectory log
+
+speed_log  = [] # speed input to reference trajectory library log
 
 filename = "test.p"
 filep = open(filename, "wb")
@@ -143,31 +161,35 @@ filep = open(filename, "wb")
 max_speed = 2.0
 min_speed = 0.0
 
-def log():
-    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log}
+if len(sys.argv) > 1:
+    filename = PREFIX + "logs/" + sys.argv[1]
+else:
+    filename = PREFIX + "logs/" + datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M')
+
+def log(sto="final"):
+    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log, "trajectory": traj_log, "speed": speed_log}
+
+    filep = open(filename + "_log" + str(sto) + ".pkl", "wb")
+
     pickle.dump(data, filep)
 
-def isData():
-    return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
+    filep.close()
 
 atexit.register(log)
 
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-# Prepare model
-# env = CassieEnv_speed_no_delta_neutral_foot("walking", clock_based=True, state_est=True)
-# env.reset_for_test()
-traj = TrajectoryInfo()
-
-# policy = torch.load("./trained_models/old_aslip/final_v1/aslip_unified_freq_correction.pt")
-policy = torch.load("./trained_models/aslip_unified_alt10_v2.pt")
+policy = torch.load("./trained_models/aslip_unified_task0_v7.pt")
 policy.eval()
+
+# Prevent latency issues by disabling multithreading in pytorch
+torch.set_num_threads(1)
 
 max_speed = 2.0
 min_speed = 0.0
-max_y_speed = 0.5
-min_y_speed = -0.5
+max_y_speed = 0.0
+min_y_speed = 0.0
 
 # Initialize control structure with gains
 P = np.array([100, 100, 88, 96, 50, 100, 100, 88, 96, 50])
@@ -179,11 +201,10 @@ for i in range(5):
     u.rightLeg.motorPd.pGain[i] = P[i+5]
     u.rightLeg.motorPd.dGain[i] = D[i+5]
 
-pos_index = np.array([2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
+act_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
+pos_index = np.array([1, 2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
 vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
-pos_mirror_index = np.array([2,3,4,5,6,21,22,23,28,29,30,34,7,8,9,14,15,16,20])
-vel_mirror_index = np.array([0,1,2,3,4,5,19,20,21,25,26,27,31,6,7,8,12,13,14,18])
-offset = traj.offset
+_, offset = traj.update_info(min_speed)
 # offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
 # Determine whether running in simulation or on the robot
@@ -311,6 +332,7 @@ while True:
     input_log.append(RL_state)
     output_log.append(env_action)
     target_log.append(target)
+    speed_log.append(traj.speed)
 
     # Track phase
     traj.phase += traj.phase_add

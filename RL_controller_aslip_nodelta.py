@@ -179,7 +179,8 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_no_delta_0_TS_only.pt")
+policy = torch.load("./trained_models/aslip_unified_alt20_TS_withcpos.pt")
+# policy = torch.load("./trained_models/aslip_unified_no_delta_0_v6.pt")
 policy.eval()
 
 max_speed = 2.0

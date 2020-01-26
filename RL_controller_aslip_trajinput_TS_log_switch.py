@@ -146,13 +146,13 @@ class TrajectoryInfo:
         return self.phaselen, self.offset
 
 
-
 time_log   = [] # time stamp
 input_log  = [] # network inputs
 output_log = [] # network outputs 
 state_log  = [] # cassie state
 target_log = [] #PD target log
 traj_log   = [] # reference trajectory log
+speed_log  = [] # speed input to reference trajectory library log
 
 simrate = 60
 
@@ -247,19 +247,31 @@ MIN_HEIGHT = 0.4
 D_mult = 1  # Reaaaaaally bad stability problems if this is pushed higher as a multiplier
             # Might be worth tuning by joint but something else if probably needed
 
+LOG_2kHz = True
+
+SPEED_SCHEDULE = [0.0, 0.8, 1.9, 0.4, 1.3, 0.5, 0.0]
+SPEED_LEN = len(SPEED_SCHEDULE)
+SPEED_HOLD_TIME = 4
+
+policy_time = time.monotonic()
 while True:
+
     # Wait until next cycle time
-    while time.monotonic() - t < 60/2000:
-        time.sleep(0.001)
-    t = time.monotonic()
-    tt = time.monotonic() - t0
+    while time.monotonic() - t < 1/500:
+        time.sleep(0.0001)
 
     # Get newest state
     state = cassie.recv_newest_pd()
 
-    if state is None:
-        print('Missed a cycle')
-        continue	
+    while state is None:
+        state = cassie.recv_newest_pd()
+
+    if LOG_2kHz:
+        time_log.append(time.time())
+        state_log.append(state)
+
+    t = time.monotonic()
+    tt = time.monotonic() - t0
 
     if platform.node() == 'cassie':
         # Radio control
@@ -280,6 +292,7 @@ while True:
                 output_log = [] # network outputs 
                 state_log  = [] # cassie state
                 target_log = [] #PD target log
+                speed_log  = [] # speed input to reference trajectory library log
         else:
             sto = False
 
@@ -303,19 +316,20 @@ while True:
         traj.speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
         #traj.speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
         
-        print("speed: ", traj.speed)
+        # print("speed: ", traj.speed)
         # phase_add = 1+state.radio.channel[5]
         # env.y_speed = max(min_y_speed, -state.radio.channel[1] * max_y_speed)
         # env.y_speed = min(max_y_speed, -state.radio.channel[1] * max_y_speed)
     else:
         # Automatically change orientation and speed
         tt = time.monotonic() - t0
-        orient_add += math.sin(t / 8) / 400
+        # orient_add += math.sin(t / 8) / 400
+        orient_add += 0
         #env.speed = 0.2
         # speed = ((math.sin(tt / 2)) * max_speed)
         # speed = ((math.sin(tt / 2)) * max_speed)
-        speed = 0.5
-        print("speed: ", speed)
+        speed = SPEED_SCHEDULE[int(tt / SPEED_HOLD_TIME) % SPEED_LEN]
+        # print("speed: ", speed)
         #if env.phase % 14 == 0:
         #	env.speed = (random.randint(-1, 1)) / 2.0
         # print(env.speed)
@@ -328,78 +342,87 @@ while True:
     #------------------------------- Normal Walking ---------------------------
     if operation_mode == 0:
         
-        # Reassign because it might have been changed by the damping mode
-        for i in range(5):
-            u.leftLeg.motorPd.pGain[i] = P[i]
-            u.leftLeg.motorPd.dGain[i] = D[i]
-            u.rightLeg.motorPd.pGain[i] = P[i+5]
-            u.rightLeg.motorPd.dGain[i] = D[i+5]
+        if time.monotonic() - policy_time > 60/2000:
+            print(time.monotonic() - policy_time)
+            policy_time = time.monotonic()
 
-        traj.update_info(traj.speed)
+            # Reassign because it might have been changed by the damping mode
+            for i in range(5):
+                u.leftLeg.motorPd.pGain[i] = P[i]
+                u.leftLeg.motorPd.dGain[i] = D[i]
+                u.rightLeg.motorPd.pGain[i] = P[i+5]
+                u.rightLeg.motorPd.dGain[i] = D[i+5]
 
-        clock = [np.sin(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen), np.cos(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen)]
-        quaternion = euler2quat(z=orient_add, y=0, x=0)
-        iquaternion = inverse_quaternion(quaternion)
-        new_orient = quaternion_product(iquaternion, state.pelvis.orientation[:])
-        if new_orient[0] < 0:
-            new_orient = -new_orient
-        new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
-        print('new_orientation: {}'.format(new_orient))
+            traj.update_info(traj.speed)
 
-        ref_pos, ref_vel = traj.get_ref_state(traj.phase)
-        ext_state = np.concatenate(traj.get_ref_ext_state(traj.phase))
-        robot_state = np.concatenate([
-                [state.pelvis.position[2] - state.terrain.height], # pelvis height
-                new_orient,                                     # pelvis orientation
-                state.motor.position[:],                        # actuated joint positions
+            clock = [np.sin(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen), np.cos(2 * np.pi *  traj.phase * traj.freq_adjust / traj.phaselen)]
+            quaternion = euler2quat(z=orient_add, y=0, x=0)
+            iquaternion = inverse_quaternion(quaternion)
+            new_orient = quaternion_product(iquaternion, state.pelvis.orientation[:])
+            if new_orient[0] < 0:
+                new_orient = -new_orient
+            new_translationalVelocity = rotate_by_quaternion(state.pelvis.translationalVelocity[:], iquaternion)
+            print('new_orientation: {}'.format(new_orient))
 
-                new_translationalVelocity[:],                   # pelvis translational velocity
-                state.pelvis.rotationalVelocity[:],             # pelvis rotational velocity 
-                state.motor.velocity[:],                        # actuated joint velocities
+            ref_pos, ref_vel = traj.get_ref_state(traj.phase)
+            ext_state = np.concatenate(traj.get_ref_ext_state(traj.phase))
+            robot_state = np.concatenate([
+                    [state.pelvis.position[2] - state.terrain.height], # pelvis height
+                    new_orient,                                     # pelvis orientation
+                    state.motor.position[:],                        # actuated joint positions
 
-                state.pelvis.translationalAcceleration[:],      # pelvis translational acceleration
-                
-                state.joint.position[:],                        # unactuated joint positions
-                state.joint.velocity[:]                         # unactuated joint velocities
-        ])
-        RL_state = np.concatenate([robot_state, ext_state])
-        
-        #pretending the height is always 1.0
-        # RL_state[0] = 1.0
+                    new_translationalVelocity[:],                   # pelvis translational velocity
+                    state.pelvis.rotationalVelocity[:],             # pelvis rotational velocity 
+                    state.motor.velocity[:],                        # actuated joint velocities
 
-        actual_speed = state.pelvis.translationalVelocity[0]
-        print("target speed: {:.2f}\tactual speed: {:.2f}\tfreq: {}".format(traj.speed, actual_speed, traj.freq_adjust))
+                    state.pelvis.translationalAcceleration[:],      # pelvis translational acceleration
+                    
+                    state.joint.position[:],                        # unactuated joint positions
+                    state.joint.velocity[:]                         # unactuated joint velocities
+            ])
+            RL_state = np.concatenate([robot_state, ext_state])
+            
+            #pretending the height is always 1.0
+            # RL_state[0] = 1.0
 
-        # Construct input vector
-        torch_state = torch.Tensor(RL_state)
-        # torch_state = shared_obs_stats.normalize(torch_state)
+            actual_speed = state.pelvis.translationalVelocity[0]
+            print("target speed: {:.2f}\tactual speed: {:.2f}\tfreq: {}".format(traj.speed, actual_speed, traj.freq_adjust))
 
-        # Get action
-        action = policy.act(torch_state, True)
-        env_action = action.data.numpy()
-        # ref_action = ref_pos[act_idx]
-        target = env_action + traj.offset
+            # Construct input vector
+            torch_state = torch.Tensor(RL_state)
+            # torch_state = shared_obs_stats.normalize(torch_state)
 
-        # Send action
-        for i in range(5):
-            u.leftLeg.motorPd.pTarget[i] = target[i]
-            u.rightLeg.motorPd.pTarget[i] = target[i+5]
-        cassie.send_pd(u)
+            # Get action
+            action = policy.act(torch_state, True)
+            env_action = action.data.numpy()
+            # ref_action = ref_pos[act_idx]
+            target = env_action + traj.offset
 
-        # Logging
-        # if sto == False:
-        #     time_log.append(time.time())
-        #     state_log.append(state)
-        #     input_log.append(RL_state)
-        #     output_log.append(env_action)
-        #     target_log.append(target)
-        #     traj_log.append(traj.offset)
-        time_log.append(time.time())
-        state_log.append(state)
-        input_log.append(RL_state)
-        output_log.append(env_action)
-        target_log.append(target)
-        traj_log.append(traj.offset)
+            # Send action
+            for i in range(5):
+                u.leftLeg.motorPd.pTarget[i] = target[i]
+                u.rightLeg.motorPd.pTarget[i] = target[i+5]
+            cassie.send_pd(u)
+
+            # Logging
+            # if sto == False:
+            #     time_log.append(time.time())
+            #     state_log.append(state)
+            #     input_log.append(RL_state)
+            #     output_log.append(env_action)
+            #     target_log.append(target)
+            #     traj_log.append(traj.offset)
+            input_log.append(RL_state)
+            output_log.append(env_action)
+            target_log.append(target)
+            traj_log.append(traj.offset)
+            speed_log.append(traj.speed)
+
+            # Track phase
+            traj.phase += traj.phase_add
+            if traj.phase >= traj.phaselen:
+                traj.phase = 0
+                traj.counter += 1
     #------------------------------- Start Up Standing ---------------------------
     elif operation_mode == 1:
         print('Startup Standing. Height = ' + str(standing_height))
@@ -439,10 +462,4 @@ while True:
         print('Error, In bad operation_mode with value: ' + str(operation_mode))
     
     # Measure delay
-    print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
-
-    # Track phase
-    traj.phase += traj.phase_add
-    if traj.phase >= traj.phaselen:
-        traj.phase = 0
-        traj.counter += 1
+    # print('delay: {:6.1f} ms'.format((time.monotonic() - t) * 1000))
