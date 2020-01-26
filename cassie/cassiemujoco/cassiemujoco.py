@@ -63,9 +63,9 @@ class CassieSim:
         return qaccp[:32]
 
     def xquat(self, body_name):
-        print("in xquat")
+        # print("in xquat")
         xquatp = cassie_sim_xquat(self.c, body_name.encode())
-        print("got pointer")
+        # print("got pointer")
         return xquatp[:4]
 
     def set_time(self, time):
