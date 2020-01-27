@@ -3,13 +3,14 @@ import pickle
 from matplotlib import pyplot as plt
 import numpy as np
 
-# POLICY_NAME = "aslip_unified_task0_v6"
-# FILE_PATH = "./hardware_logs/"
-# FILE_NAME = "2020-01-21_20:10_log7"
+POLICY_NAME = "aslip_unified_10_v6"
+FILE_PATH = "./hardware_logs/"
+FILE_NAME = "2020-01-26_15:19_logfinal"
 
-POLICY_NAME = "aslip_unified_task0_v6"
-FILE_PATH = "./testTS_logs/"
-FILE_NAME = "2020-01-24_13:12_logfinal"
+
+# POLICY_NAME = "aslip_unified_no_delta_10_TS_only"
+# FILE_PATH = "./hardware_logs/"
+# FILE_NAME = "2020-01-26_16:27_logfinal"
 
 SAVE_NAME = FILE_PATH + POLICY_NAME + "/" + FILE_NAME
 
@@ -20,6 +21,7 @@ for key in data:
     print(key)
 
 time = data['time']
+pelvis = data['pelvis']
 motors = data['motor']
 joints = data['joint']
 torques_mea = data['torques_measured']

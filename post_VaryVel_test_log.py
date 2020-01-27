@@ -7,8 +7,8 @@ import time
 from tempfile import TemporaryFile
 
 
-FILE_PATH = "./testVaryVel_logs/"
-FILE_NAME = "various_speeds_logfinal"
+FILE_PATH = "./hardware_logs/aslip_unified_no_delta_80_TS_only_sim/"
+FILE_NAME = "2020-01-27_10:26_logfinal"
 
 
 logs = pickle.load(open(FILE_PATH + FILE_NAME + ".pkl", "rb")) #load in file with cassie data

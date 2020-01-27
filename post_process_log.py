@@ -6,15 +6,15 @@ import time
 from tempfile import TemporaryFile
 
 
-# POLICY_NAME = "aslip_unified_task0_v6"
+POLICY_NAME = "aslip_unified_10_v6"
+FILE_PATH = "./hardware_logs/"
+FILE_NAME = "2020-01-26_15:19_logfinal"
+
+
+
+# POLICY_NAME = "aslip_unified_no_delta_10_TS_only"
 # FILE_PATH = "./hardware_logs/"
-# FILE_NAME = "2020-01-21_20:10_log7"
-
-
-POLICY_NAME = "aslip_unified_task0_v6"
-FILE_PATH = "./testTS_logs/"
-FILE_NAME = "2020-01-24_13:12_logfinal"
-
+# FILE_NAME = "2020-01-26_16:27_logfinal"
 
 
 logs = pickle.load(open(FILE_PATH + POLICY_NAME + "/" + FILE_NAME + ".pkl", "rb")) #load in file with cassie data
@@ -29,6 +29,7 @@ nn_output = logs["output"]
 trajectory_steps = logs["trajectory"]
 
 numStates = len(states)
+pelvis          = np.zeros((numStates, 3))
 motors_log      = np.zeros((numStates, 10))
 joints_log      = np.zeros((numStates, 6))
 torques_mea_log = np.zeros((numStates, 10))
@@ -40,6 +41,7 @@ trajectory_log = np.zeros((numStates, 10))
 
 j=0
 for s in states:
+    pelvis[j, :] = s.pelvis.position[:]
     motors_log[j, :] = s.motor.position[:]
     joints_log[j, :] = s.joint.position[:]
     torques_mea_log[j, :] = s.motor.torque[:]
@@ -58,4 +60,4 @@ for s in states:
 #     j += 1
 
 SAVE_NAME = FILE_PATH + POLICY_NAME + "/" + FILE_NAME + '.npz'
-np.savez(SAVE_NAME, time = time, motor = motors_log, joint = joints_log, torques_measured=torques_mea_log, left_foot_force = left_foot_forces_log, right_foot_force = right_foot_forces_log, left_foot_pos = left_foot_pos_log, right_foot_pos = right_foot_pos_log, trajectory = trajectory_log)
+np.savez(SAVE_NAME, time = time, pelvis = pelvis, motor = motors_log, joint = joints_log, torques_measured=torques_mea_log, left_foot_force = left_foot_forces_log, right_foot_force = right_foot_forces_log, left_foot_pos = left_foot_pos_log, right_foot_pos = right_foot_pos_log, trajectory = trajectory_log)

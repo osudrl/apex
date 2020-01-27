@@ -153,7 +153,7 @@ output_log = [] # network outputs
 state_log  = [] # cassie state
 target_log = [] #PD target log
 traj_log   = [] # reference trajectory log
-
+speed_log  = [] # speed input to library log
 simrate = 60
 
 PREFIX = "./"
@@ -166,7 +166,7 @@ else:
     filename = PREFIX + "logs/" + datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M')
 
 def log(sto="final"):
-    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log, "trajectory": traj_log}
+    data = {"time": time_log, "output": output_log, "input": input_log, "state": state_log, "target": target_log, "trajectory": traj_log, "speed": speed_log}
 
     filep = open(filename + "_log" + str(sto) + ".pkl", "wb")
 
@@ -179,7 +179,7 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_alt20_TS_withcpos.pt")
+policy = torch.load("./trained_models/aslip_unified_no_delta_80_TS_only.pt")
 # policy = torch.load("./trained_models/aslip_unified_no_delta_0_v6.pt")
 policy.eval()
 
@@ -248,6 +248,10 @@ MIN_HEIGHT = 0.4
 D_mult = 1  # Reaaaaaally bad stability problems if this is pushed higher as a multiplier
             # Might be worth tuning by joint but something else if probably needed
 
+SPEED_SCHEDULE = [0.0, 0.8, 1.9, 0.4, 1.3, 0.5, 0.0]
+LENGTH_THING = len(SPEED_SCHEDULE)
+SPEED_HOLD_TIME = 4
+
 while True:
     # Wait until next cycle time
     while time.monotonic() - t < 60/2000:
@@ -281,6 +285,7 @@ while True:
                 output_log = [] # network outputs 
                 state_log  = [] # cassie state
                 target_log = [] #PD target log
+                speed_log  = [] # speed input to library log
         else:
             sto = False
 
@@ -311,11 +316,12 @@ while True:
     else:
         # Automatically change orientation and speed
         tt = time.monotonic() - t0
-        orient_add += math.sin(t / 8) / 400
+        # orient_add += math.sin(t / 8) / 400
+        orient_add += 0
         #env.speed = 0.2
         # speed = ((math.sin(tt / 2)) * max_speed)
         # speed = ((math.sin(tt / 2)) * max_speed)
-        speed = 0.5
+        speed = SPEED_SCHEDULE[int(tt / SPEED_HOLD_TIME) % LENGTH_THING] 
         print("speed: ", speed)
         #if env.phase % 14 == 0:
         #	env.speed = (random.randint(-1, 1)) / 2.0
@@ -379,7 +385,7 @@ while True:
         action = policy.act(torch_state, True)
         env_action = action.data.numpy()
         # ref_action = ref_pos[act_idx]
-        target = env_action + traj.offset
+        target = env_action + offset
 
         # Send action
         for i in range(5):
@@ -401,6 +407,7 @@ while True:
         output_log.append(env_action)
         target_log.append(target)
         traj_log.append(traj.offset)
+        speed_log.append(traj.speed)
     #------------------------------- Start Up Standing ---------------------------
     elif operation_mode == 1:
         print('Startup Standing. Height = ' + str(standing_height))

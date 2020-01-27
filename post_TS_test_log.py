@@ -7,8 +7,8 @@ import time
 from tempfile import TemporaryFile
 
 
-FILE_PATH = "./testTS_logs/"
-FILE_NAME = "0.5_logfinal"
+FILE_PATH = "./hardware_logs/aslip_unified_10_v6/"
+FILE_NAME = "2020-01-26_15:19_logfinal"
 
 
 logs = pickle.load(open(FILE_PATH + FILE_NAME + ".pkl", "rb")) #load in file with cassie data
@@ -23,6 +23,8 @@ nn_output = logs["output"]
 trajectory_steps = logs["trajectory"]
 
 numStates = len(states)
+rom_input = np.zeros((len(states_rl), 18)) # COM vel command input
+vels        = np.zeros((numStates, 3))
 pelvis      = np.zeros((numStates, 3))
 motors      = np.zeros((numStates, 10))
 joints      = np.zeros((numStates, 6))
@@ -33,8 +35,13 @@ foot_pos_left = np.zeros((numStates, 6))
 foot_pos_right = np.zeros((numStates, 6))
 # trajectory_log = np.zeros((numStates, 10))
 
+states_rl = np.array(states_rl)
+print(states_rl.shape)
+
 j=0
 for s in states:
+    rom_input[j, :] = states_rl[j,-18:64]
+    vels[j, :] = s.pelvis.translationalVelocity[:]
     pelvis[j, :] = s.pelvis.position[:]
     motors[j, :] = s.motor.position[:]
     joints[j, :] = s.joint.position[:]
@@ -57,7 +64,7 @@ np.savez(SAVE_NAME, time = time, motor = motors, joint = joints, torques_measure
 # Plot everything (except for ref traj)
 ##########################################
 
-row = 5
+row = 7
 col = 1
 
 #Plot Motor Positions
@@ -123,7 +130,7 @@ ax5.set_ylabel('Foot Force [N]')
 ax5.legend(loc='upper left')
 ax5.set_title('Foot Forces')
 
-# foot force
+# foot pos
 ax6 = plt.subplot(row,col,5, sharex=ax1)
 # ax6.plot(time, foot_pos_left[:, 0], label='left-X'  )
 # ax6.plot(time, foot_pos_left[:, 1], label='left-Y'  )
@@ -136,6 +143,26 @@ ax6.set_ylabel('Foot Pos [m]')
 ax6.legend(loc='upper left')
 ax6.set_title('Foot Pos')
 
+# pelvis translational vel
+ax7 = plt.subplot(row,col,6, sharex=ax1)
+ax7.plot(time, vels[:, 0], label='X'  )
+ax7.plot(time, vels[:, 1], label='Y'  )
+ax7.plot(time, vels[:, 2], label='Z'  )
+ax7.set_xlabel('Time')
+ax7.set_ylabel('m / s')
+ax7.legend(loc='upper left')
+ax7.set_title('Pelvis translational velocity')
+
+# rom input
+ax8 = plt.subplot(row,col,7, sharex=ax1)
+ax8.plot(time, rom_input[:, 15], label='COM X Vel'  )
+ax8.plot(time, rom_input[:, 16], label='COM Y Vel'  )
+ax8.plot(time, rom_input[:, 17], label='COM Z Vel'  )
+ax8.set_xlabel('Time')
+ax8.set_ylabel('m / s')
+ax8.legend(loc='upper left')
+ax8.set_title('ROM Library input')
+
 # plt.tight_layout()
 # plt.show()
 plt.savefig(SAVE_NAME + '_full_log.png')
@@ -144,9 +171,13 @@ plt.savefig(SAVE_NAME + '_full_log.png')
 fig = plt.figure(figsize=(10,10))
 ax = fig.add_subplot(111, projection='3d')
 
-ax.plot(pelvis[:, 0], pelvis[:, 1], pelvis[:, 2], label='pelvis')
-ax.plot(pelvis[:, 0] + foot_pos_left[:, 0], pelvis[:, 1] + foot_pos_left[:, 1], pelvis[:, 2] + foot_pos_left[:, 2], label='true left foot pos')
-ax.plot(pelvis[:, 0] + foot_pos_right[:, 0], pelvis[:, 1] + foot_pos_right[:, 1], pelvis[:, 2] + foot_pos_right[:, 2], label='true right foot pos')
+# 1 m/s constant x velocity
+x_offset = np.linspace(0, 10, num=pelvis.shape[0])
+x_offset = foot_pos_left[:, 0]
+
+ax.plot(pelvis[:, 0] + x_offset, pelvis[:, 1], pelvis[:, 2], label='pelvis')
+ax.plot(pelvis[:, 0] + x_offset + foot_pos_left[:, 0], pelvis[:, 1] + foot_pos_left[:, 1], pelvis[:, 2] + foot_pos_left[:, 2], label='true left foot pos')
+ax.plot(pelvis[:, 0] + x_offset + foot_pos_right[:, 0], pelvis[:, 1] + foot_pos_right[:, 1], pelvis[:, 2] + foot_pos_right[:, 2], label='true right foot pos')
 
 ax.axis('equal')
 plt.show()
