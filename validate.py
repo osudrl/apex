@@ -5,7 +5,7 @@
 #Get to run with user input of env and policy without iteration
 #Iterate through each parameter
 
-def iterativeValidation(policy, env_name):
+def iterativeValidation(policy, env, max_traj_len=1000, visualize=True, env_name=None, speed=0.0, state_est=True, clock_based=False):
     # Follow apex.py and use an env_factory, or expect an env on input?
 
     #if env_name is None:
@@ -18,6 +18,7 @@ def iterativeValidation(policy, env_name):
     # Future plan: Put all the damp/mass ranges into a tuple and iterate through,
     # at each iteration running a test with the current parameter randomized, and all
     # others default. Then log results and output in a sane and useful way.
+
     damp = env.default_damping
     weak_factor = 0.5
     strong_factor = 1.5
@@ -86,6 +87,34 @@ def iterativeValidation(policy, env_name):
     env.sim.set_body_ipos(com_noise)
     env.sim.set_ground_friction(np.clip(fric_noise, 0, None))
 
+    # From policy_eval
+    while True:
+        state = env.reset()
+        done = False
+        timesteps = 0
+        eval_reward = 0
+        while not done and timesteps < max_traj_len:
+
+        if hasattr(env, 'simrate'):
+            start = time.time()
+        
+        action = policy.forward(torch.Tensor(state)).detach().numpy()
+        state, reward, done, _ = env.step(action)
+        if visualize:
+            env.render()
+        eval_reward += reward
+        timesteps += 1
+
+        if hasattr(env, 'simrate'):
+            # assume 30hz (hack)
+            end = time.time()
+            delaytime = max(0, 1000 / 30000 - (end-start))
+            time.sleep(delaytime)
+
+        print("Eval reward: ", eval_reward)
+
+
+
 #nbody layout:
 # 0:  worldbody (zero)
 # 1:  pelvis
@@ -98,8 +127,8 @@ def iterativeValidation(policy, env_name):
 # 7:  left knee spring
 # 8:  left shin
 # 9:  left tarsus
-# 10:  left heel spring
-# 12:  left foot crank
+# 10: left heel spring
+# 12: left foot crank
 # 12: left plantar rod
 # 13: left foot
 
