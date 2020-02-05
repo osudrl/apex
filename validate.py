@@ -94,26 +94,32 @@ def iterativeValidation(policy, env, max_traj_len=1000, visualize=True, env_name
         timesteps = 0
         eval_reward = 0
         while not done and timesteps < max_traj_len:
+            if hasattr(env, 'simrate'):
+                start = time.time()
+            
+            action = policy.forward(torch.Tensor(state)).detach().numpy()
+            state, reward, done, _ = env.step(action)
+            if visualize:
+                env.render()
+            eval_reward += reward
+            timesteps += 1
 
-        if hasattr(env, 'simrate'):
-            start = time.time()
-        
-        action = policy.forward(torch.Tensor(state)).detach().numpy()
-        state, reward, done, _ = env.step(action)
-        if visualize:
-            env.render()
-        eval_reward += reward
-        timesteps += 1
+            if hasattr(env, 'simrate'):
+                # assume 30hz (hack)
+                end = time.time()
+                delaytime = max(0, 1000 / 30000 - (end-start))
+                time.sleep(delaytime)
 
-        if hasattr(env, 'simrate'):
-            # assume 30hz (hack)
-            end = time.time()
-            delaytime = max(0, 1000 / 30000 - (end-start))
-            time.sleep(delaytime)
+            print("Eval reward: ", eval_reward)
 
-        print("Eval reward: ", eval_reward)
+# Testing to see if the above is even working
 
-
+from apex import env_factory
+import torch
+env = env_factory("CassieIK-v0")
+#policy = torch.load("./trained_models/ddpg/ddpg_actor.pt")
+policy = torch.load("./logs/ddpg/Hopper-v3/538e63-seed0/actor.pt")
+iterativeValidation(policy, env)
 
 #nbody layout:
 # 0:  worldbody (zero)
