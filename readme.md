@@ -26,13 +26,15 @@ python apex.py ars --logdir logs/ars --seed 1337
 
 The resulting directory tree would look something like this:
 ```
-logs/
-├── ars
-│   └── experiments
-│       └── [New Experiment Logdir]
-├── ppo
-├── synctd3
-└── ddpg
+trained_models/                         # directory with all of the saved models and tensorboard logs
+└── td3_async                           # algorithm name
+    └── Cassie-v0                       # environment name
+        └── 8b8b12-seed1                # unique run name created with hash of hyperparameters + seed
+            ├── actor.pt                # actor network for algo
+            ├── critic.pt               # critic network for algo
+            ├── events.out.tfevents     # tensorboard binary file
+            ├── experiment.info         # readable hyperparameters for this run
+            └── experiment.pkl          # loadable pickle of hyperparameters
 ```
 
 Using tensorboard makes it easy to compare experiments and resume training later on.
@@ -46,24 +48,17 @@ You can run the unit tests using pytest.
 
 ### To Do
 - [ ] Sphinx documentation and github wiki
-- [ ] Make logger as robust and pythonic as possible
-- [ ] Fix some hacks having to do with support for parallelism (namely Vectorize, Normalize and Monitor)
-- [ ] Improve/Tune implementations of TD3
-
-### Notes
-
-Troubleshooting: X module not found? Make sure PYTHONPATH is configured. Make sure you run 
-examples from root directory.
+- [ ] Support loading pickle of hyperparameters for resuming training
+- [ ] Improve/Tune implementations of TD3, add capability to resume training for off policy algorithms
 
 ## Features:
 * Parallelism with [Ray](https://github.com/ray-project/ray)
 * [GAE](https://arxiv.org/abs/1506.02438)/TD(lambda) estimators
 * [PPO](https://arxiv.org/abs/1707.06347), VPG with ratio objective and with log likelihood objective
-* [TD3](https://arxiv.org/abs/1802.09477)
+* [TD3](https://arxiv.org/abs/1802.09477) with [Parameter Noise Exploration](https://arxiv.org/abs/1706.01905)
 * [DDPG](https://arxiv.org/abs/1509.02971)
 * [RDPG](https://arxiv.org/abs/1512.04455)
 * [ARS](https://arxiv.org/abs/1803.07055)
-* [Parameter Noise Exploration](https://arxiv.org/abs/1706.01905) (for TD3 only)
 * Entropy based exploration bonus
 * advantage centering (observation normalization WIP)
 

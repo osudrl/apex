@@ -349,6 +349,9 @@ cassie_sim_qpos.argtypes = [POINTER_T(struct_cassie_sim)]
 cassie_sim_qvel = _libraries['./libcassiemujoco.so'].cassie_sim_qvel
 cassie_sim_qvel.restype = POINTER_T(ctypes.c_double)
 cassie_sim_qvel.argtypes = [POINTER_T(struct_cassie_sim)]
+cassie_sim_qacc = _libraries['./libcassiemujoco.so'].cassie_sim_qacc
+cassie_sim_qacc.restype = POINTER_T(ctypes.c_double)
+cassie_sim_qacc.argtypes = [POINTER_T(struct_cassie_sim)]
 cassie_sim_mjmodel = _libraries['./libcassiemujoco.so'].cassie_sim_mjmodel
 cassie_sim_mjmodel.restype = POINTER_T(None)
 cassie_sim_mjmodel.argtypes = [POINTER_T(struct_cassie_sim)]
@@ -370,6 +373,9 @@ cassie_sim_foot_positions.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_dou
 cassie_sim_apply_force = _libraries['./libcassiemujoco.so'].cassie_sim_apply_force
 cassie_sim_apply_force.restype = None
 cassie_sim_apply_force.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_double * 6, ctypes.c_int32]
+cassie_sim_xquat = _libraries['./libcassiemujoco.so'].cassie_sim_xquat
+cassie_sim_xquat.restype = POINTER_T(ctypes.c_double)
+cassie_sim_xquat.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_char_p]
 cassie_sim_clear_forces = _libraries['./libcassiemujoco.so'].cassie_sim_clear_forces
 cassie_sim_clear_forces.restype = None
 cassie_sim_clear_forces.argtypes = [POINTER_T(struct_cassie_sim)]
@@ -713,11 +719,11 @@ __all__ = \
     'cassie_sim_foot_positions', 'struct_c__SA_state_foot_out_t',
     'pd_input_t', 'pack_cassie_user_in_t', 'cassie_state_duplicate',
     'state_pelvis_out_t', 'struct_c__SA_state_terrain_out_t',
-    'cassie_sim_free', 'ssize_t', 'state_output_copy',
+    'cassie_sim_free', 'cassie_sim_xquat', 'ssize_t', 'state_output_copy',
     'cassie_sim_radio', 'cassie_vis_close', 'cassie_vis_paused', 'radio_out_t',
     'state_output_step', 'struct_c__SA_state_motor_out_t',
     'struct_cassie_state', 'cassie_state_time', 'cassie_sim_qvel',
-    'cassie_sim_qpos', 'struct_c__SA_elmo_in_t', 'cassie_joint_out_t',
+    'cassie_sim_qpos', 'cassie_sim_qacc', 'struct_c__SA_elmo_in_t', 'cassie_joint_out_t',
     'cassie_leg_in_t', 'struct_c__SA_cassie_joint_out_t',
     'struct_c__SA_state_out_t', 'struct_c__SA_cassie_pelvis_out_t',
     'pd_input_copy', 'cassie_sim_copy', 'struct_c__SA_cassie_out_t',

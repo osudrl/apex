@@ -208,7 +208,7 @@ class TD3():
 
         return torch.mean(avg_q1), torch.mean(avg_q1), q_loss, pi_loss, avg_action
 
-    def save(self):
+    def save(self, save_path):
         if not os.path.exists('trained_models/syncTD3/'):
             os.makedirs('trained_models/syncTD3/')
 
@@ -216,13 +216,13 @@ class TD3():
 
         filetype = ".pt"  # pytorch model
         torch.save(self.actor, os.path.join(
-            "./trained_models/syncTD3", "actor_model" + filetype))
+            save_path, "actor" + filetype))
         torch.save(self.critic, os.path.join(
-            "./trained_models/syncTD3", "critic_model" + filetype))
+            save_path, "critic_model" + filetype))
 
     def load(self, model_path):
-        actor_path = os.path.join(model_path, "actor_model.pt")
-        critic_path = os.path.join(model_path, "critic_model.pt")
+        actor_path = os.path.join(model_path, "actor.pt")
+        critic_path = os.path.join(model_path, "critic.pt")
         print('Loading models from {} and {}'.format(actor_path, critic_path))
         if actor_path is not None:
             self.actor = torch.load(actor_path)
@@ -231,6 +231,7 @@ class TD3():
             self.critic = torch.load(critic_path)
             self.critic.eval()
 
+# TODO: create way to resume experiment by loading actor and critic pt files
 def run_experiment(args):
     from apex import env_factory, create_logger
 
@@ -294,7 +295,7 @@ def run_experiment(args):
     logger.add_scalar("Test/Return", ret, total_updates)
     logger.add_scalar("Test/Eplen", eplen, total_updates)
 
-    policy.save()
+    policy.save(logger.dir)
 
     while total_timesteps < args.max_timesteps:
 
