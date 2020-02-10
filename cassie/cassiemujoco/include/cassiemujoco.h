@@ -38,7 +38,7 @@ extern "C" {
 // containing cassie.xml, mjpro150/, mjkey.txt, etc. If NULL is
 // passed, the directory containing the current executable is used
 // instead. Returns true if loading was successful, false otherwise.
-bool cassie_mujoco_init(const char *basedir);
+bool cassie_mujoco_init(const char *modelfile);
 
 // Unloads the MuJoCo library and Cassie model. After calling this
 // function, cassie_mujoco_init can be called again.
@@ -52,7 +52,7 @@ void cassie_cleanup(void);
 // Creates an instance of the Cassie simulator. If called before
 // cassie_mujoco_init, cassie_mujoco_init is called with the parameter
 // NULL.
-cassie_sim_t *cassie_sim_init(void);
+cassie_sim_t *cassie_sim_init(const char *modelfile);
 
 // Creates an instance of the Cassie simulator with the same state as
 // an existing instance.
@@ -157,6 +157,8 @@ double *cassie_sim_qpos(cassie_sim_t *sim);
 // [31] Right foot            (Motor [9], Joint [5])
 double *cassie_sim_qvel(cassie_sim_t *sim);
 
+double *cassie_sim_qacc(cassie_sim_t *c);
+
 // Returns the mjModel* used by the simulator
 void *cassie_sim_mjmodel(cassie_sim_t *sim);
 
@@ -179,7 +181,7 @@ bool cassie_sim_check_self_collision(const cassie_sim_t *sim);
 void cassie_sim_foot_forces(const cassie_sim_t *c, double cfrc[12]);
 
 // Applies an external force to a specified body.
-void cassie_sim_apply_force(cassie_sim_t *sim, double xfrc[6], int body);
+void cassie_sim_apply_force(cassie_sim_t *sim, double xfrc[6], const char* name);
 
 // Sets all external forces to zero.
 void cassie_sim_clear_forces(cassie_sim_t *sim);
@@ -195,6 +197,11 @@ void cassie_sim_release(cassie_sim_t *sim);
 // to enable the motors, which is the default state.
 void cassie_sim_radio(cassie_sim_t *sim, double channels[16]);
 
+// Does a "full reset", i.e. sets qpos to a starting position and zeros
+// out all other data used for computation (like velocities, accelerations, forces)
+void cassie_sim_full_reset(cassie_sim_t *sim);
+
+double* cassie_sim_xquat(cassie_sim_t *c, const char* name);
 
 /*******************************************************************************
  * Cassie visualizer functions
@@ -203,7 +210,7 @@ void cassie_sim_radio(cassie_sim_t *sim, double channels[16]);
 // Creates an instance of the Cassie simulation visualizer. If called
 // before cassie_mujoco_init, cassie_mujoco_init is called with the
 // parameter NULL.
-cassie_vis_t *cassie_vis_init(void);
+cassie_vis_t *cassie_vis_init(cassie_sim_t *sim, const char* modelfile);
 
 // Closes the visualization window without freeing the instance. After
 // calling this, cassie_vis_draw can still be called, but the
@@ -219,6 +226,18 @@ bool cassie_vis_draw(cassie_vis_t *vis, cassie_sim_t *sim);
 // Returns true if the visualizer has been closed but not freed.
 bool cassie_vis_valid(cassie_vis_t *vis);
 
+// Returns value of vis->paused
+bool cassie_vis_paused(cassie_vis_t *vis);
+
+// Returns value of vis->slowmotion
+bool cassie_vis_slowmo(cassie_vis_t *vis);
+
+// Apply inputted perturbation to any body in the vis's mjData
+void cassie_vis_apply_force(cassie_vis_t *vis, double xfrc[6], const char* name);
+
+// Does a "full reset", i.e. sets qpos to a starting position and zeros
+// out all other data used for computation (like velocities, accelerations, forces)
+void cassie_vis_full_reset(cassie_vis_t *sim);
 
 /*******************************************************************************
  * Cassie simulation state functions

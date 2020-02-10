@@ -1,7 +1,9 @@
 import numpy as np
 import random
 
-
+"""
+Agility 2 kHz trajectory
+"""
 class CassieTrajectory:
     def __init__(self, filepath):
         n = 1 + 35 + 32 + 10 + 10 + 10

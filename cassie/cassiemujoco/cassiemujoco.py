@@ -61,6 +61,16 @@ class CassieSim:
         qvelp = cassie_sim_qvel(self.c)
         return qvelp[:self.nv]
 
+    def qacc(self):
+        qaccp = cassie_sim_qacc(self.c)
+        return qaccp[:32]
+
+    def xquat(self, body_name):
+        # print("in xquat")
+        xquatp = cassie_sim_xquat(self.c, body_name.encode())
+        # print("got pointer")
+        return xquatp[:4]
+
     def set_time(self, time):
         timep = cassie_sim_time(self.c)
         timep[0] = time
@@ -186,6 +196,9 @@ class CassieSim:
           c_arr[i] = data[i]
 
         cassie_sim_set_ground_friction(self.c, c_arr)
+    
+    def set_const(self):
+        cassie_sim_set_const(self.c)
 
     def __del__(self):
         cassie_sim_free(self.c)
