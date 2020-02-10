@@ -236,7 +236,7 @@ def run_experiment(args):
     from apex import env_factory, create_logger
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, history=args.history)
     max_traj_len = args.max_traj_len
 
     # Start ray

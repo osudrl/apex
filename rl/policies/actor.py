@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-#from rl.distributions import DiagonalGaussian
-
 from torch import sqrt
 
 from rl.policies.base import Net
+
+LOG_STD_HI = 2
+LOG_STD_LO = -20
 
 class Actor(Net):
   def __init__(self):
@@ -40,9 +41,8 @@ class Linear_Actor(Actor):
     return self.action
 
 # Actor network for gaussian mlp
-#class GaussianMLP_Actor(Actor):
 class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conventions
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=torch.nn.functional.relu, fixed_std=None, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=torch.nn.functional.relu, fixed_std=None, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
     super(Gaussian_FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -94,7 +94,7 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
         mean = x
 
     if self.learn_std:
-      sd = torch.clamp(self.log_stds(x), -20, 2).exp() # TODO: make these a constant or something
+      sd = torch.clamp(self.log_stds(x), LOG_STD_LO, LOG_STD_HI).exp()
     else:
       sd = self.fixed_std
 
@@ -118,7 +118,7 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
     return torch.distributions.Normal(mu, sd)
 
 class FF_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name='NOT SET', nonlinearity=F.relu, max_action=1):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, max_action=1):
     super(FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -148,7 +148,7 @@ class FF_Actor(Actor):
     return self.action
 
 class LSTM_Actor(Actor):
-  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name='NOT SET', nonlinearity=torch.tanh, max_action=1):
+  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=torch.tanh, max_action=1):
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -186,18 +186,14 @@ class LSTM_Actor(Actor):
 
     if dims == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=x.size(1))
-      action = []
+      y = []
       for t, x_t in enumerate(x):
-
         for idx, layer in enumerate(self.actor_layers):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-        x_t = self.nonlinearity(self.network_out(x_t))
-        action.append(x_t)
-
-      x = torch.stack([a.float() for a in action])
-      self.action = x
+        y.append(x_t)
+      x = torch.stack([x_t for x_t in y])
 
     else:
       if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
@@ -211,9 +207,9 @@ class LSTM_Actor(Actor):
 
       if dims == 1:
         x = x.view(-1)
-      self.action = x
 
-    return x
+    self.action = self.network_out(x)
+    return self.action
   
   def get_action(self):
     return self.action
@@ -259,16 +255,14 @@ class Gaussian_LSTM_Actor(Actor):
     if dims == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=x.size(1))
       action = []
+      y = []
       for t, x_t in enumerate(x):
-
         for idx, layer in enumerate(self.actor_layers):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-        x_t = self.network_out(x_t)
-        action.append(x_t)
-
-      x = torch.stack([a.float() for a in action])
+        y.append(x_t)
+      x = torch.stack([x_t for x_t in y])
 
     else:
       if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
@@ -278,14 +272,13 @@ class Gaussian_LSTM_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-      x = self.network_out(x)
 
       if dims == 1:
         x = x.view(-1)
 
-    mu = x
+    mu = self.network_out(x)
     if self.learn_std:
-      sd = torch.clamp(self.log_stds(x), -20, 2).exp()
+      sd = torch.clamp(self.log_stds(x), LOG_STD_LO, LOG_STD_HI).exp()
     else:
       sd = self.fixed_std
 

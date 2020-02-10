@@ -25,7 +25,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, **kwargs):
+def env_factory(path, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, history=0, **kwargs):
     from functools import partial
 
     """
@@ -38,12 +38,15 @@ def env_factory(path, clock_based=True, state_est=True, dynamics_randomization=T
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
+    if history > 0 and mirror:
+      raise NotImplementedError
+
     # Custom Cassie Environment
     if path in ['Cassie-v0', 'CassieStandingEnv-v0']:
         from cassie import CassieEnv, CassieStandingEnv
 
         if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization)
+            env_fn = partial(CassieEnv, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, history=history)
         elif path == 'CassieStandingEnv-v0':
             env_fn = partial(CassieStandingEnv, state_est=state_est)
 
@@ -174,7 +177,7 @@ if __name__ == "__main__":
     print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
 
     if len(sys.argv) < 2:
-        print("Usage: python apex.py [algorithm name]", sys.argv)
+        print("Usage: python apex.py [option]", sys.argv)
 
     elif sys.argv[1] == 'ars':
         """
@@ -210,7 +213,7 @@ if __name__ == "__main__":
 
         sys.argv.remove(sys.argv[1])
         """
-            Utility for running Recurrent/Deep Deterministic Policy Gradients.
+            Utility for running Recurrent/Deep Deterministic Policy Gradient.
         """
         from rl.algos.dpg import run_experiment
 
@@ -263,6 +266,7 @@ if __name__ == "__main__":
         parser.add_argument("--env_name", default="Cassie-v0")                    # environment name
         parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
         parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
+        parser.add_argument("--history", default=0, type=int)                                     # number of previous states to use as input
         parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
         parser.add_argument("--seed", default=0, type=int)                              # Sets Gym, PyTorch and Numpy seeds
 
@@ -306,6 +310,7 @@ if __name__ == "__main__":
         parser.add_argument("--hidden_size", default=256)                               # neurons in hidden layer
         parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
         parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
+        parser.add_argument("--history", default=0, type=int)                                     # number of previous states to use as input
 
         # learner specific args
         parser.add_argument("--replay_size", default=1e8, type=int)                     # Max size of replay buffer
@@ -359,12 +364,13 @@ if __name__ == "__main__":
         # general args
         parser.add_argument("--algo_name", default="ppo")                                   # algo name
         parser.add_argument("--env_name", "-e",   default="Cassie-v0")
-        parser.add_argument("--logdir", type=str, default="./trained_models/ppo/")        # Where to log diagnostics to
+        parser.add_argument("--logdir", type=str, default="./trained_models/ppo/")          # Where to log diagnostics to
         parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
         parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
         parser.add_argument("--state_est", type=bool, default=True)                         # use state estimator or not
         parser.add_argument("--clock_based", default=True, action='store_true')
         parser.add_argument("--mirror", default=False, action='store_true')                 # mirror actions or not   
+        parser.add_argument("--history", default=0, type=int)                                         # number of previous states to use as input
         parser.add_argument("--redis_address", type=str, default=None)                      # address of redis server (for cluster setups)
         parser.add_argument("--viz_port", default=8097)                                     # (deprecated) visdom server port
 
@@ -403,12 +409,13 @@ if __name__ == "__main__":
         parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
         parser.add_argument("--state_est", default=True, action='store_true')           # use state estimator or not
         parser.add_argument("--clock_based", default=True, action='store_true')
+        parser.add_argument("--history", default=0, type=int)                                         # number of previous states to use as input
         args = parser.parse_args()
 
         policy = torch.load(args.policy)
 
 
-        eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed, state_est=args.state_est, clock_based=args.clock_based)
+        eval_policy(policy, env_name=args.env_name, max_traj_len=args.traj_len, speed=args.speed, state_est=args.state_est, clock_based=args.clock_based, history=history)
 
     else:
         print("Invalid algorithm '{}'".format(sys.argv[1]))

@@ -14,7 +14,7 @@ import random
 import pickle
 
 class CassieEnv_v2:
-  def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=False, reward="x"):
+  def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, ik_traj=False, reward="x", history=0):
     self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
     self.vis = None
 
@@ -46,6 +46,11 @@ class CassieEnv_v2:
         else:
           self.observation_space = np.zeros(mjstate_size + ref_traj_size)
 
+    # Adds option for state history for FF nets
+    self._obs = len(self.observation_space)
+    self.history = history
+
+    self.observation_space = np.zeros(self._obs + self._obs * self.history)
     self.action_space = np.zeros(10)
 
     # Configure reference trajectory to use
@@ -187,7 +192,10 @@ class CassieEnv_v2:
       else:
         return self.get_full_state(), reward, done, {}
 
-  def reset(self, return_omniscient_state=False):
+  def reset(self):
+
+      self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
+
       if self.ik_traj:
         random_speed_idx = random.randint(0, self.num_speeds-1)
         self.speed = self.speeds[random_speed_idx]
@@ -212,8 +220,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 1.1
-          strong_factor = 1.1
+          weak_factor = 0.8
+          strong_factor = 1.2
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -221,21 +229,21 @@ class CassieEnv_v2:
                                [damp[4], damp[4]], 
                                [damp[5], damp[5]]]                 # 0->5
 
-          hip_damp_range = [[damp[6]/weak_factor, damp[6]*weak_factor],
-                            [damp[7]/weak_factor, damp[7]*weak_factor],
-                            [damp[8]/weak_factor, damp[8]*weak_factor]]  # 6->8 and 19->21
+          hip_damp_range = [[damp[6]*weak_factor, damp[6]*strong_factor],
+                            [damp[7]*weak_factor, damp[7]*strong_factor],
+                            [damp[8]*weak_factor, damp[8]*strong_factor]]  # 6->8 and 19->21
 
-          achilles_damp_range = [[damp[9]/weak_factor,  damp[9]*weak_factor],
-                                 [damp[10]/weak_factor, damp[10]*weak_factor], 
-                                 [damp[11]/weak_factor, damp[11]*weak_factor]] # 9->11 and 22->24
+          achilles_damp_range = [[damp[9]*weak_factor,  damp[9]*strong_factor],
+                                 [damp[10]*weak_factor, damp[10]*strong_factor], 
+                                 [damp[11]*weak_factor, damp[11]*strong_factor]] # 9->11 and 22->24
 
-          knee_damp_range     = [[damp[12]/weak_factor, damp[12]*weak_factor]]   # 12 and 25
-          shin_damp_range     = [[damp[13]/weak_factor, damp[13]*weak_factor]]   # 13 and 26
-          tarsus_damp_range   = [[damp[14], damp[14]*strong_factor]]             # 14 and 27
+          knee_damp_range     = [[damp[12]*weak_factor, damp[12]*strong_factor]]   # 12 and 25
+          shin_damp_range     = [[damp[13]*weak_factor, damp[13]*strong_factor]]   # 13 and 26
+          tarsus_damp_range   = [[damp[14], damp[14]]]             # 14 and 27
           heel_damp_range     = [[damp[15], damp[15]]]                           # 15 and 28
-          fcrank_damp_range   = [[damp[16]/weak_factor, damp[16]*weak_factor]]   # 16 and 29
+          fcrank_damp_range   = [[damp[16]*weak_factor, damp[16]*strong_factor]]   # 16 and 29
           prod_damp_range     = [[damp[17], damp[17]]]                           # 17 and 30
-          foot_damp_range     = [[damp[18]/weak_factor, damp[18]*weak_factor]]   # 18 and 31
+          foot_damp_range     = [[damp[18]*weak_factor, damp[18]*strong_factor]]   # 18 and 31
 
           side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
           damp_range = pelvis_damp_range + side_damp + side_damp
@@ -268,10 +276,10 @@ class CassieEnv_v2:
           mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
           mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
 
-          delta = 0.000
+          delta = 0.0005
           com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
 
-          fric_noise = [np.random.uniform(0.6, 1.2)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
+          fric_noise = [np.random.uniform(0.5, 1.2)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
@@ -294,12 +302,8 @@ class CassieEnv_v2:
       self.prev_action = ref_pos[self.pos_idx]
 
       actor_state  = self.get_full_state()
-      critic_state = self.get_omniscient_state()
 
-      if return_omniscient_state:
-        return actor_state, critic_state
-      else:
-        return actor_state
+      return actor_state
 
   # NOTE: this reward is slightly different from the one in Xie et al
   # see notes for details
@@ -414,14 +418,21 @@ class CassieEnv_v2:
       ])
 
       if self.state_est:
-          return np.concatenate([robot_state, ext_state])
+          state = np.concatenate([robot_state, ext_state])
       else:
-          return np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
+          state = np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
 
+      self.state_history.insert(0, state)
+      self.state_history = self.state_history[:self.history+1]
+
+      return np.concatenate(self.state_history)
+
+  """ Currently unused, commenting out for now.
   def get_omniscient_state(self):
       full_state = self.get_full_state()
       omniscient_state = np.hstack((full_state, self.sim.get_dof_damping(), self.sim.get_body_mass(), self.sim.get_body_ipos(), self.sim.get_ground_friction))
       return omniscient_state
+  """
 
   def render(self):
       if self.vis is None:
