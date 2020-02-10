@@ -15,7 +15,7 @@ def getAllTrajectories(speeds):
 
     for i, speed in enumerate(speeds):
         dirname = os.path.dirname(__file__)
-        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsSweep", "walkCycle_{}.pkl".format(speed))
+        traj_path = os.path.join(dirname, "trajectory", "aslipTrajsTaskSpace", "walkCycle_{}.pkl".format(speed))
         trajectories.append(CassieIKTrajectory(traj_path))
 
     # print("Got all trajectories")
@@ -29,31 +29,26 @@ class CassieIKTrajectory:
         self.qpos = np.copy(trajectory["qpos"])
         self.length = self.qpos.shape[0]
         self.qvel = np.copy(trajectory["qvel"])
-        self.rfoot = np.copy(trajectory["rfoot"])
-        self.lfoot = np.copy(trajectory["lfoot"])
+        self.rpos = np.copy(trajectory["rpos"])
+        self.rvel = np.copy(trajectory["rvel"])
+        self.lpos = np.copy(trajectory["lpos"])
+        self.lvel = np.copy(trajectory["lvel"])
+        self.cpos = np.copy(trajectory["cpos"])
+        self.cvel = np.copy(trajectory["cvel"])
 
 # simrate used to be 60
 class UnifiedCassieIKEnvNoDelta:
-    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, training=True):
+    def __init__(self, traj="stepping", simrate=60, clock_based=True, state_est=True, training=True, debug=False):
         self.sim = CassieSim("./cassiemujoco/cassie.xml")
         self.vis = None
 
-        self.clock_based = clock_based
-        self.state_est = state_est
+        # robot state estimation included here
+        self.observation_space = np.zeros(46 + 18)
 
-        if clock_based:
-            self.observation_space = np.zeros(42 + 1)
-            self.clock_inds = [40, 41]
-            if self.state_est:
-                self.observation_space = np.zeros(48 + 1)       # Size for use with state est
-                self.clock_inds = [46, 47]
-        else:
-            self.observation_space = np.zeros(80)
-            if self.state_est:
-                self.observation_space = np.zeros(86)       # Size for use without state est
+        # motor PD targets
         self.action_space      = np.zeros(10)
 
-        self.speeds = [x / 10 for x in range(0, 31)]
+        self.speeds = np.array([x / 10 for x in range(0, 21)])
         self.trajectories = getAllTrajectories(self.speeds)
         self.num_speeds = len(self.trajectories)
 
@@ -86,15 +81,25 @@ class UnifiedCassieIKEnvNoDelta:
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
+        self.reward_pos_idx = [3,4,5,6,7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
-        # params for changing the trajectory
-        # self.speed = 2 # how fast (m/s) do we go
-        # self.gait = [1,0,0,0]   # one-hot vector of gaits:
-                                # [1, 0, 0, 0] -> walking/running (left single stance, right single stance)
-                                # [0, 1, 0, 0] -> hopping (double stance, flight phase)
-                                # [0, 0, 1, 0] -> skipping (double stance, right single stance, flight phase, right single stance)
-                                # [0, 0, 0, 1] -> galloping (double stance, right single stance, flight, left single stance)
+        # for enforcing the correct foot orientation
+        self.global_initial_foot_orient = np.array([-0.24135469773826795, -0.24244324494623198, -0.6659363823866352, 0.6629463911006771])
+        self.avg_lfoot_quat = np.zeros(4)
+        self.avg_rfoot_quat = np.zeros(4)
+
+        # offset for no delta policy
+        self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+
+        ## THIS IS JUST AN IDEA, instead of doing this we are having one ref trajectory per speed
+            # params for changing the trajectory
+            # self.speed = 2 # how fast (m/s) do we go
+            # self.gait = [1,0,0,0]   # one-hot vector of gaits:
+                                    # [1, 0, 0, 0] -> walking/running (left single stance, right single stance)
+                                    # [0, 1, 0, 0] -> hopping (double stance, flight phase)
+                                    # [0, 0, 1, 0] -> skipping (double stance, right single stance, flight phase, right single stance)
+                                    # [0, 0, 0, 1] -> galloping (double stance, right single stance, flight, left single stance)
 
 
         # maybe make ref traj only send relevant idxs?
@@ -106,7 +111,7 @@ class UnifiedCassieIKEnvNoDelta:
         self.cassie_state = state_out_t()
 
         # for print statements
-        self.debug = False
+        self.debug = debug
 
     def step_simulation(self, action):
 
@@ -135,7 +140,7 @@ class UnifiedCassieIKEnvNoDelta:
 
         # self.prev_action = real_action
 
-        real_action = action
+        real_action = action + self.offset
 
         self.u = pd_in_t()
         for i in range(5):
@@ -159,8 +164,14 @@ class UnifiedCassieIKEnvNoDelta:
         self.cassie_state = self.sim.step_pd(self.u)
 
     def step(self, action):
-        for _ in range(self.simrate):
+
+        for i in range(self.simrate):
             self.step_simulation(action)
+            # calculate running average of foot quaternion
+            self.avg_lfoot_quat += self.sim.xquat("left-foot")
+            self.avg_rfoot_quat += self.sim.xquat("right-foot")
+        self.avg_lfoot_quat /= self.simrate
+        self.avg_rfoot_quat /= self.simrate
 
         height = self.sim.qpos()[2]
 
@@ -175,10 +186,17 @@ class UnifiedCassieIKEnvNoDelta:
         # Early termination
         done = not(height > 0.4 and height < 3.0)
 
-        reward = self.compute_reward()
+        reward = self.compute_reward(action)
+
+        # reset avg foot quaternion
+        self.avg_lfoot_quat = np.zeros(4)
+        self.avg_rfoot_quat = np.zeros(4)
+
+        # update previous action
+        self.prev_action = action
 
         # TODO: make 0.3 a variable/more transparent
-        if reward < 0.5:
+        if reward < 0.3:
             done = True
 
         return self.get_full_state(), reward, done, {}
@@ -188,8 +206,8 @@ class UnifiedCassieIKEnvNoDelta:
         self.speed = self.speeds[random_speed_idx]
         # print("current speed: {}".format(self.speed))
         self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
-        self.phase = random.randint(0, self.phaselen - 1)
-        # self.phase = 0
+        self.phaselen = self.trajectory.length - 1
+        self.phase = random.randint(0, self.phaselen)
         self.time = 0
         self.counter = 0
 
@@ -212,8 +230,9 @@ class UnifiedCassieIKEnvNoDelta:
     # used for plotting against the reference trajectory
     def reset_for_test(self):
         random_speed_idx = random.randint(0, self.num_speeds)
-        self.speed = self.speeds[random_speed_idx]
-        self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
+        self.speed = 0
+        self.trajectory = self.trajectories[0] # switch the current trajectory
+        self.phaselen = self.trajectory.length - 1
         self.phase = 0
         self.time = 0
         self.counter = 0
@@ -232,9 +251,14 @@ class UnifiedCassieIKEnvNoDelta:
 
         return self.get_full_state()
 
+    def update_selected_trajectory(self, new_speed):
+        self.speed = new_speed
+        self.trajectory = self.trajectories[(np.abs(self.speeds - self.speed)).argmin()]
+        self.phaselen = self.trajectory.length - 1
+
     # NOTE: this reward is slightly different from the one in Xie et al
     # see notes for details
-    def compute_reward(self):
+    def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
@@ -242,7 +266,7 @@ class UnifiedCassieIKEnvNoDelta:
 
         # TODO: should be variable; where do these come from?
         # TODO: see magnitude of state variables to gauge contribution to reward
-        weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
+        # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
         # weight = [0.05, 0.05, 0.25, 0.25, 0.05, 
         #           0.05, 0.05, 0.25, 0.25, 0.05]
@@ -250,10 +274,10 @@ class UnifiedCassieIKEnvNoDelta:
         #weight = [.1] * 10
 
         footpos_error     = 0
-        joint_error       = 0
-        com_error         = 0
-        orientation_error = 0
-        spring_error      = 0
+        com_vel_error     = 0
+        action_penalty    = 0
+        foot_orient_penalty = 0
+        straight_diff = 0
 
         # enforce distance between feet and com
         ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
@@ -269,79 +293,67 @@ class UnifiedCassieIKEnvNoDelta:
             print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
             print(footpos_error)
 
-        # speed reward component
-        speed_diff = np.abs(qvel[0] - self.speed)
+        # try to match com velocity
+        ref_cvel = self.get_ref_com_vel(self.phase + 1)
 
-        # each joint pos, skipping feet
-        for i, j in enumerate(self.pos_idx):
-            target = ref_pos[j]
-            actual = qpos[j]
-
-            if j == 20 or j == 34:
-                joint_error += 0
-            else:
-                joint_error += (target - actual) ** 2
-
-        # center of mass: x, y, z
+        # center of mass vel: x, y, z
+        cvel = self.cassie_state.pelvis.translationalVelocity
         for j in [0, 1, 2]:
-            target = ref_pos[j]
-            actual = qpos[j]
+            com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
 
-            # NOTE: in Xie et al y target is 0
+        # # each joint pos, skipping feet
+        # for i, j in enumerate(self.reward_pos_idx):
+        #     target = ref_pos[j]
+        #     actual = qpos[j]
 
-            com_error += (target - actual) ** 2
-        
-        # COM orientation: qx, qy, qz
-        for j in [4, 5, 6]:
-            target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
-            actual = qpos[j]
+        #     if j == 20 or j == 34:
+        #         joint_error += 0
+        #     else:
+        #         joint_error += (target - actual) ** 2
 
-            orientation_error += (target - actual) ** 2
+        # action penalty
+        action_penalty = np.linalg.norm(action - self.prev_action)
 
-        # left and right shin springs
-        for i in [15, 29]:
-            target = ref_pos[i] # NOTE: in Xie et al spring target is 0
-            actual = qpos[i]
+        # foot orientation penalty
+        foot_orient_penalty = np.linalg.norm(self.avg_rfoot_quat - self.global_initial_foot_orient) + np.linalg.norm(self.avg_lfoot_quat - self.global_initial_foot_orient)
 
-            spring_error += (target - actual) ** 2      
-        
-        # reward = 0.1 * np.exp(-footpos_error) +       \
-        #          0.5 * np.exp(-joint_error) +       \
-        #          0.3 * np.exp(-com_error) +         \
-        #          0.1 * np.exp(-orientation_error) + \
-        #          0.0 * np.exp(-spring_error)
-        reward = 0.1 * np.exp(-footpos_error) +       \
-                 0.5 * np.exp(-joint_error) +       \
-                 0.2 * np.exp(-com_error) +         \
-                 0.1 * np.exp(-orientation_error) + \
-                 0.1 * np.exp(-speed_diff)
-        #reward = np.exp(-joint_error)
+        # straight difference penalty
+        straight_diff = np.abs(qpos[1])
+        if straight_diff < 0.05:
+            straight_diff = 0
 
-        # print("{}\t{}\t{}\t{}".format(self.speed, self.sim.qvel()[0], 0.2 * np.exp(-com_error), reward))
+        reward = 0.3 * np.exp(-footpos_error) +    \
+                 0.3 * np.exp(-com_vel_error) +    \
+                 0.1 * np.exp(-action_penalty) +     \
+                 0.2 * np.exp(-foot_orient_penalty) + \
+                 0.1 * np.exp(-straight_diff)
 
-        # orientation error does not look informative
-        # maybe because it's comparing euclidean distance on quaternions
         if self.debug:
-            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\njoint:\t{2:.2f}, % = {3:.2f}\ncom:\t{4:.2f}, % = {5:.2f}\norient:\t{6:.2f}, % = {7:.2f}\nspeed:\t{8:.2f}, % = {9:.2f}\n\n".format(
-            0.1 * np.exp(-footpos_error),     0.1 * np.exp(-footpos_error) / reward * 100,
-            0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-            0.2 * np.exp(-com_error),         0.2 * np.exp(-com_error) / reward * 100,
-            0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-            0.1 * np.exp(-speed_diff),      0.1 * np.exp(-speed_diff) / reward * 100,
+            print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_vel:\t{2:.2f}, % = {3:.2f}\naction_penalty:\t{4:.2f}, % = {5:.2f}\nfoot_orient_penalty:\t{6:.2f}, % = {7:.2f}\nstraight_diff:\t{8:.2f}, % = {9:.2f}\n\n".format(
+            0.3 * np.exp(-footpos_error),          0.3 * np.exp(-footpos_error) / reward * 100,
+            0.3 * np.exp(-com_vel_error),          0.3 * np.exp(-com_vel_error) / reward * 100,
+            0.1 * np.exp(-action_penalty),         0.1 * np.exp(-action_penalty) / reward * 100,
+            0.2 * np.exp(-foot_orient_penalty),    0.2 * np.exp(-foot_orient_penalty) / reward * 100,
+            0.1  * np.exp(-straight_diff),         0.1  * np.exp(-straight_diff) / reward * 100,
             reward
             )
             )
-            print("desired_speed: {}".format(self.speed))
+            print("actual speed: {}\tdesired_speed: {}".format(qvel[0], self.speed))
         return reward
 
     # get the corresponding state from the reference trajectory for the current phase
     def get_ref_state(self, phase=None):
+
+        # print("phase: {}\t (phaselen = {})".format(phase, self.phaselen))
 
         if phase is None:
             phase = self.phase
 
         if phase > self.phaselen:
             phase = 0
+
+        # print("looped phase: {}".format(phase))
+        # print()
 
         # pos = np.copy(self.trajectory.qpos[phase * self.simrate])
         pos = np.copy(self.trajectory.qpos[phase])
@@ -365,27 +377,50 @@ class UnifiedCassieIKEnvNoDelta:
 
     # get the corresponding state from the reference trajectory for the current phase
     def get_ref_footdist(self, phase=None):
+
         if phase is None:
             phase = self.phase
 
         if phase > self.phaselen:
             phase = 0
 
-        # rfoot = np.copy(self.trajectory.rfoot[phase * self.simrate])
-        # lfoot = np.copy(self.trajectory.lfoot[phase * self.simrate])
-        rfoot = np.copy(self.trajectory.rfoot[phase])
-        lfoot = np.copy(self.trajectory.lfoot[phase])
+        rpos = np.copy(self.trajectory.rpos[phase])
+        lpos = np.copy(self.trajectory.lpos[phase])
 
-        return rfoot, lfoot
+        return rpos, lpos
+
+    def get_ref_com_vel(self, phase=None):
+
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        cvel = np.copy(self.trajectory.cvel[phase])
+
+        return cvel
+
+    def get_ref_ext_state(self, phase=None):
+
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        rpos = np.copy(self.trajectory.rpos[phase])
+        rvel = np.copy(self.trajectory.rvel[phase])
+        lpos = np.copy(self.trajectory.lpos[phase])
+        lvel = np.copy(self.trajectory.lvel[phase])
+        cpos = np.copy(self.trajectory.cpos[phase])
+        cvel = np.copy(self.trajectory.cvel[phase])
+
+        return rpos, rvel, lpos, lvel, cpos, cvel
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel()) 
-
-        if(self.phase == 0):
-            ref_pos, ref_vel = self.get_ref_state(self.phaselen - 1)
-        else:
-            ref_pos, ref_vel = self.get_ref_state(self.phase)
 
         # TODO: maybe convert to set subtraction for clarity
         # {i for i in range(35)} - 
@@ -444,18 +479,10 @@ class UnifiedCassieIKEnvNoDelta:
         # [19] Right foot            (Motor [9], Joint [5])
         vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
-        if self.clock_based:
-            #qpos[self.pos_idx] -= ref_pos[self.pos_idx]
-            #qvel[self.vel_idx] -= ref_vel[self.vel_idx]
-
-            clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
-                     np.cos(2 * np.pi *  self.phase / self.phaselen)]
-            
-            ext_state = ext_state = np.concatenate((clock, [self.speed]))
-
+        if(self.phase == 0):
+            ext_state = np.concatenate(self.get_ref_ext_state(self.phaselen - 1))
         else:
-            ext_state = np.concatenate([ref_pos[pos_index], ref_vel[vel_index]])
-
+            ext_state = np.concatenate(self.get_ref_ext_state(self.phase))
 
         robot_state = np.concatenate([
             [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height], # pelvis height
@@ -472,13 +499,7 @@ class UnifiedCassieIKEnvNoDelta:
             self.cassie_state.joint.velocity[:]                                      # unactuated joint velocities
         ])
 
-        if self.state_est:
-            return np.concatenate([robot_state,  
-                               ext_state])
-        else:
-            return np.concatenate([qpos[pos_index], 
-                               qvel[vel_index], 
-                               ext_state])
+        return np.concatenate([robot_state, ext_state])
 
     def reset_for_normalization(self):
         return self.reset()

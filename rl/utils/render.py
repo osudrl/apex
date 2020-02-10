@@ -37,10 +37,12 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
             if isData():
                 c = sys.stdin.read(1)
                 if c == 'w':
-                    env.speed += .1
+                    # env.speed += .1
+                    env.update_selected_trajectory(env.speed + .1)
                     print("Increasing speed to: ", env.speed)
                 elif c == 's':
-                    env.speed -= .1
+                    # env.speed -= .1
+                    env.update_selected_trajectory(env.speed - .1)
                     print("Decreasing speed to: ", env.speed)
                 # elif c == 'a':
                 #     env.side_speed += .1
@@ -67,6 +69,7 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                     force_arr = np.zeros(6)
                     force_arr[push_dir] = push
                     env.sim.apply_force(force_arr)
+                
                 else:
                     pass
             if (not env.vis.ispaused()):

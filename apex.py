@@ -136,7 +136,8 @@ def create_logger(args):
     logger.dir = output_dir
     return logger
 
-def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0, state_est=True, clock_based=False):
+# TODO: incorporate history feature in eval function
+def eval_policy(policy, max_traj_len=1000, visualize=True, env_name=None, speed=0.0, state_est=True, clock_based=False, history=None):
 
     if env_name is None:
         env = env_factory(policy.env_name, speed=speed, state_est=state_est, clock_based=clock_based)()
@@ -449,9 +450,6 @@ if __name__ == "__main__":
 
     # arg for training on aslipik_env
     parser.add_argument("--speed", type=float, default=0.0, help="Speed of aslip env")
-
-    # arg for training on ground_friction_env
-    parser.add_argument("--torsional_friction", type=float, default=0.005)              # change torsional friction
 
     args = parser.parse_args()
     args.num_steps = args.num_steps // args.num_procs

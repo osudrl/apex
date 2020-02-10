@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
-from cassie import CassieEnv, CassieTSEnv, CassieIKEnv, UnifiedCassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
+from cassie import CassieEnv, CassieTSEnv, UnifiedCassieIKEnv, CassieEnv_nodelta, CassieEnv_rand_dyn, CassieEnv_speed_dfreq
 
 # env_fn = partial(CassieIKEnv, "walking", clock_based=True, state_est=state_est, speed=speed)
 env = UnifiedCassieIKEnv("walking", clock_based=True, state_est=True)
@@ -16,7 +16,7 @@ qvels = []
 
 # manually set the environment's speed
 
-env.speed = 2.0
+env.speed = 0.0
 
 print("\nTesting Stuff\n")
 

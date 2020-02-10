@@ -388,6 +388,9 @@ cassie_sim_release.argtypes = [POINTER_T(struct_cassie_sim)]
 cassie_sim_radio = _libraries['./libcassiemujoco.so'].cassie_sim_radio
 cassie_sim_radio.restype = None
 cassie_sim_radio.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_double * 16]
+cassie_sim_full_reset = _libraries['./libcassiemujoco.so'].cassie_sim_full_reset
+cassie_sim_full_reset.restype = None
+cassie_sim_full_reset.argtypes = [POINTER_T(struct_cassie_sim)]
 cassie_vis_init = _libraries['./libcassiemujoco.so'].cassie_vis_init
 cassie_vis_init.restype = POINTER_T(struct_cassie_vis)
 cassie_vis_init.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_char_p]
@@ -406,6 +409,12 @@ cassie_vis_valid.argtypes = [POINTER_T(struct_cassie_vis)]
 cassie_vis_paused = _libraries['./libcassiemujoco.so'].cassie_vis_paused
 cassie_vis_paused.restype = ctypes.c_bool
 cassie_vis_paused.argtypes = [POINTER_T(struct_cassie_vis)]
+cassie_vis_apply_force = _libraries['./libcassiemujoco.so'].cassie_vis_apply_force
+cassie_vis_apply_force.restype = None
+cassie_vis_apply_force.argtypes = [POINTER_T(struct_cassie_vis), POINTER_T(ctypes.c_double), ctypes.c_char_p]
+cassie_vis_full_reset = _libraries['./libcassiemujoco.so'].cassie_vis_full_reset
+cassie_vis_full_reset.restype = None
+cassie_vis_full_reset.argtypes = [POINTER_T(struct_cassie_vis)]
 cassie_state_alloc = _libraries['./libcassiemujoco.so'].cassie_state_alloc
 cassie_state_alloc.restype = POINTER_T(struct_cassie_state)
 cassie_state_alloc.argtypes = []
@@ -713,7 +722,7 @@ __all__ = \
     'state_foot_out_t', 'state_output_t', 'cassie_sim_time',
     'cassie_sim_step_ethercat', 'cassie_sim_check_obstacle_collision',
     'elmo_out_t', 'pack_cassie_in_t', 'cassie_sim_apply_force',
-    'cassie_leg_out_t', 'wait_for_packet',
+    'cassie_leg_out_t', 'wait_for_packet', 'cassie_sim_set_cassiestate',
     'struct_c__SA_cassie_leg_in_t', 'struct_c__SA_state_joint_out_t',
     'process_packet_header', 'cassie_sim_release', 'cassie_sim_foot_forces', 
     'cassie_sim_foot_positions', 'struct_c__SA_state_foot_out_t',

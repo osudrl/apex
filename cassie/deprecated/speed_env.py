@@ -23,7 +23,7 @@ class CassieIKTrajectory:
         return len(self.qpos)
 
 class CassieEnv_speed:
-    def __init__(self, traj, simrate=60, clock_based=False, state_est=False):
+    def __init__(self, traj="walking", simrate=60, clock_based=False, state_est=False):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -91,10 +91,13 @@ class CassieEnv_speed:
         
         target = action + ref_pos[self.pos_idx]
 
-        h = 0.0001
-        Tf = 1.0 / 300.0
-        alpha = h / (Tf + h)
-        real_action = (1-alpha)*self.prev_action + alpha*target
+        ## DO NOT WANT RATE LIMITING
+            # h = 0.0005
+            # Tf = 1.0 / 300.0
+            # alpha = h / (Tf + h)
+            # real_action = (1-alpha)*self.prev_action + alpha*target
+
+        real_action = target
 
         # diff = real_action - self.prev_action
         # max_diff = np.ones(10)*0.1
@@ -105,9 +108,7 @@ class CassieEnv_speed:
         #         target[i] = self.prev_action[i] + max_diff[i]
 
         self.prev_action = real_action
-        real_action = target
-        
-        # target = action + ref_pos[self.pos_idx]
+        # real_action = target
         
         self.u = pd_in_t()
         for i in range(5):
