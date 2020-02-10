@@ -21,6 +21,8 @@ from rl.policies.actor import Gaussian_FF_Actor, Gaussian_LSTM_Actor
 from rl.policies.critic import FF_V, LSTM_V
 from rl.envs.normalize import get_normalization_params, PreNormalizer
 
+import pickle
+
 class PPOBuffer:
     """
     A buffer for storing trajectory data and calculating returns for the policy
@@ -104,7 +106,7 @@ class PPOBuffer:
         )
 
 class PPO:
-    def __init__(self, args):
+    def __init__(self, args, save_path):
         self.env_name       = args['env_name']
         self.gamma          = args['gamma']
         self.lam            = args['lam']
@@ -116,7 +118,6 @@ class PPO:
         self.epochs         = args['epochs']
         self.num_steps      = args['num_steps']
         self.max_traj_len   = args['max_traj_len']
-        self.name           = args['policy_name']
         self.use_gae        = args['use_gae']
         self.n_proc         = args['num_procs']
         self.grad_clip      = args['max_grad_norm']
@@ -126,19 +127,22 @@ class PPO:
         self.total_steps = 0
         self.highest_reward = -1
 
+        self.save_path = save_path
+
         if args['redis_address'] is not None:
             ray.init(redis_address=args['redis_address'])
         else:
             ray.init()
 
-    def save(self, policy):
-        save_path = os.path.join("./trained_models", "ppo")
+    def save(self, policy, critic):
+
         try:
-            os.makedirs(save_path)
+            os.makedirs(self.save_path)
         except OSError:
             pass
         filetype = ".pt" # pytorch model
-        torch.save(policy, os.path.join("./trained_models", self.name + filetype))
+        torch.save(policy, os.path.join(self.save_path, "actor" + filetype))
+        torch.save(critic, os.path.join(self.save_path, "critic" + filetype))
 
     @ray.remote
     @torch.no_grad()
@@ -147,12 +151,6 @@ class PPO:
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
         """
-        torch.set_num_threads(1) # By default, PyTorch will use multiple cores to speed up operations.
-                                 # This can cause issues when Ray also uses multiple cores, especially on machines
-                                 # with a lot of CPUs. I observed a significant speedup when limiting PyTorch 
-                                 # to a single core - I think it basically stopped ray workers from stepping on each
-                                 # other's toes.
-
         env = WrapEnv(env_fn) # TODO
 
         memory = PPOBuffer(self.gamma, self.lam)
@@ -382,7 +380,6 @@ class PPO:
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
                 avg_eval_reward = np.mean(test.ep_returns)
-                print("avg eval reward: {:.2f}".format(avg_eval_reward))
 
                 entropy = np.mean(entropies)
                 kl = np.mean(kls)
@@ -397,8 +394,7 @@ class PPO:
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:
                 self.highest_reward = avg_eval_reward
-                torch.save(policy, os.path.join(logger.dir, 'actor.pt'))
-                #self.save(policy)
+                self.save(policy, critic)
 
 def run_experiment(args):
     from apex import env_factory, create_logger
@@ -406,7 +402,7 @@ def run_experiment(args):
     torch.set_num_threads(1)
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed, clock_based=args.clock_based)
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed, clock_based=args.clock_based, history=args.history)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -415,7 +411,11 @@ def run_experiment(args):
     np.random.seed(args.seed)
 
     if args.previous is not None:
-        policy = torch.load(args.previous)
+        policy = torch.load(args.previous + "actor.pt")
+        critic = torch.load(args.previous + "critic.pt")
+        # TODO: add ability to load previous hyperparameters, if this is something that we event want
+        # with open(args.previous + "experiment.pkl", 'rb') as file:
+        #     args = pickle.loads(file.read())
         print("loaded model from {}".format(args.previous))
     else:
         if args.recurrent:
@@ -432,10 +432,11 @@ def run_experiment(args):
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
 
-    algo = PPO(args=vars(args))
-
     # create a tensorboard logging object
     logger = create_logger(args)
+
+    algo = PPO(args=vars(args), save_path=logger.dir)
+
 
     print()
     print("Synchronous Distributed Proximal Policy Optimization:")

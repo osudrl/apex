@@ -27,9 +27,6 @@ cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 class CassieSim:
     def __init__(self, modelfile):
         self.c = cassie_sim_init(modelfile.encode('utf-8'))
-        self.nv = 32
-        self.nbody = 26
-        self.nq = 35
 
     def step(self, u):
         y = cassie_out_t()
@@ -55,11 +52,31 @@ class CassieSim:
 
     def qpos(self):
         qposp = cassie_sim_qpos(self.c)
-        return qposp[:self.nq]
+        return qposp[:35]
 
     def qvel(self):
         qvelp = cassie_sim_qvel(self.c)
-        return qvelp[:self.nv]
+        return qvelp[:32]
+
+    def qacc(self):
+        qaccp = cassie_sim_qacc(self.c)
+        return qaccp[:32]
+
+    def xquat(self, body_name):
+        # print("in xquat")
+        xquatp = cassie_sim_xquat(self.c, body_name.encode())
+        # print("got pointer")
+        return xquatp[:4]
+
+    def qacc(self):
+        qaccp = cassie_sim_qacc(self.c)
+        return qaccp[:32]
+
+    def xquat(self, body_name):
+        # print("in xquat")
+        xquatp = cassie_sim_xquat(self.c, body_name.encode())
+        # print("got pointer")
+        return xquatp[:4]
 
     def set_time(self, time):
         timep = cassie_sim_time(self.c)
@@ -67,13 +84,16 @@ class CassieSim:
 
     def set_qpos(self, qpos):
         qposp = cassie_sim_qpos(self.c)
-        for i in range(min(len(qpos), self.nq)):
+        for i in range(min(len(qpos), 35)):
             qposp[i] = qpos[i]
 
     def set_qvel(self, qvel):
         qvelp = cassie_sim_qvel(self.c)
-        for i in range(min(len(qvel), self.nv)):
+        for i in range(min(len(qvel), 32)):
             qvelp[i] = qvel[i]
+
+    def set_cassie_state(self, copy_state):
+        cassie_sim_set_cassiestate(self.c, copy_state)
 
     def hold(self):
         cassie_sim_hold(self.c)
@@ -81,11 +101,11 @@ class CassieSim:
     def release(self):
         cassie_sim_release(self.c)
 
-    def apply_force(self, xfrc, body=1):
+    def apply_force(self, xfrc, body_name="cassie-pelvis"):
         xfrc_array = (ctypes.c_double * 6)()
         for i in range(len(xfrc)):
             xfrc_array[i] = xfrc[i]
-        cassie_sim_apply_force(self.c, xfrc_array, body)
+        cassie_sim_apply_force(self.c, xfrc_array, body_name.encode())
 
     def foot_force(self, force):
         frc_array = (ctypes.c_double * 12)()
@@ -195,9 +215,7 @@ class CassieSim:
 
 class CassieVis:
     def __init__(self, c, modelfile):
-        print("making cassievis")
         self.v = cassie_vis_init(c.c, modelfile.encode('utf-8'))
-        print("made cassievis python")
 
     def draw(self, c):
         state = cassie_vis_draw(self.v, c.c)
@@ -209,6 +227,19 @@ class CassieVis:
 
     def ispaused(self):
         return cassie_vis_paused(self.v)
+
+    # Applies the inputted force to the inputted body. "xfrc_apply" should contain the force/torque to 
+    # apply in Cartesian coords as a 6-long array (first 3 are force, last 3 are torque). "body_name" 
+    # should be a string matching a body name in the XML file. If "body_name" doesn't match an existing
+    # body name, then no force will be applied. 
+    def apply_force(self, xfrc_apply, body_name):
+        xfrc_array = (ctypes.c_double * 6)()
+        for i in range(len(xfrc_apply)):
+            xfrc_array[i] = xfrc_apply[i]
+        cassie_vis_apply_force(self.v, xfrc_array, body_name.encode())
+
+    def reset(self):
+        cassie_vis_full_reset(self.v)
 
     def __del__(self):
         cassie_vis_free(self.v)

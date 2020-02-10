@@ -1,6 +1,6 @@
 from rl.utils import ReplayBuffer_remote
 from rl.utils import AdaptiveParamNoiseSpec, distance_metric, perturb_actor_parameters
-from rl.policies.actor import FF_Actor as O_Actor
+from rl.policies.actor import Scaled_FF_Actor as O_Actor
 from rl.policies.critic import Dual_Q_Critic as Critic
 
 # Plot results
@@ -23,8 +23,9 @@ import ray
 
 device = torch.device('cpu')
 
+# TODO: create way to resume experiment by loading actor and critic pt files
 def run_experiment(args):
-    torch.set_num_threads(1);
+    torch.set_num_threads(1)
     from apex import env_factory, create_logger
 
     # Start ray
@@ -91,7 +92,8 @@ def run_experiment(args):
     # futures.append(evaluator_id...)
 
     # wait for training to complete (THIS DOESN'T WORK AND I DON'T KNOW WHY)
-    ray.wait(futures, num_returns=len(futures))
+    # ray.wait(futures, num_returns=len(futures))
+    ray.get(futures)
 
 
 def select_action(perturbed_policy, unperturbed_policy, state, device, param_noise=None):
@@ -170,7 +172,7 @@ class Actor():
         # Initialize param noise (or set to none)
         self.noise_scale = noise_scale
         self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=0.05, desired_action_stddev=self.noise_scale, adaptation_coefficient=1.05) if param_noise else None
-        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, env_name=env_name, max_action=self.max_action).to(self.device)
+        self.policy_perturbed = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
 
         # Termination condition: max episode length
         self.max_traj_len = 400
@@ -293,7 +295,7 @@ class Actor():
             self.storage.clear()
 
             # # tell learner to update
-            # self.learner_id.update_model.remote()
+            self.learner_id.update_model.remote()
 
             # pass episode details to visdom logger on memory server
             if(self.viz_actor):
@@ -363,13 +365,13 @@ class Learner():
         self.max_traj_len = 400
 
         # models and optimizers
-        self.actor = O_Actor(self.state_dim, self.action_dim, env_name=env_name, max_action=self.max_action).to(self.device)
-        self.actor_target = O_Actor(self.state_dim, self.action_dim, env_name=env_name, max_action=self.max_action).to(self.device)
+        self.actor = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
+        self.actor_target = O_Actor(self.state_dim, self.action_dim, self.max_action, hidden_size=hidden_size, env_name=env_name).to(self.device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
-        self.critic = Critic(self.state_dim, self.action_dim, env_name=env_name).to(self.device)
-        self.critic_target = Critic(self.state_dim, self.action_dim, env_name=env_name).to(self.device)
+        self.critic = Critic(self.state_dim, self.action_dim, hidden_size=hidden_size, env_name=env_name).to(self.device)
+        self.critic_target = Critic(self.state_dim, self.action_dim, hidden_size=hidden_size, env_name=env_name).to(self.device)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=c_lr)
 
@@ -381,6 +383,8 @@ class Learner():
 
         # start time for logging duration later
         self.start_time = time.time()
+
+        self.save_path = ray.get(self.logger.get_log_dir.remote())
 
     def train(self):
         while self.step_count < self.max_timesteps:
@@ -541,16 +545,17 @@ class Learner():
         print("Saving model")
 
         filetype = ".pt"  # pytorch model
-        torch.save(self.actor, os.path.join(
-            "./trained_models/asyncTD3", "actor_" + self.policy_name + filetype))
-        torch.save(self.critic, os.path.join(
-            "./trained_models/asyncTD3", "critic_" + self.policy_name + filetype))
+        torch.save(self.actor, os.path.join(self.save_path, "actor" + filetype))
+        torch.save(self.critic, os.path.join(self.save_path, "critic" + filetype))
 
 @ray.remote
 class TD3_logger(object):
     def __init__(self, args):
 
         self.logger = create_logger(args)
+
+    def get_log_dir(self):
+        return self.logger.dir
 
     def plot_actor_results(self, actor_id, actor_timesteps, episode_reward):
         self.logger.add_scalar('Train/Return', episode_reward, actor_timesteps)

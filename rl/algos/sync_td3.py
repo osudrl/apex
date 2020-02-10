@@ -6,7 +6,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 
 from rl.utils.remote_replay import ReplayBuffer
-from rl.policies.actor import FF_Actor as O_Actor
+from rl.policies.actor import Scaled_FF_Actor as O_Actor
 from rl.policies.critic import Dual_Q_Critic as Critic
 
 import functools
@@ -97,14 +97,14 @@ def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
 
 class TD3():
     def __init__(self, state_dim, action_dim, max_action, a_lr, c_lr, env_name='NOT_SET'):
-        self.actor = O_Actor(state_dim, action_dim, env_name=env_name, max_action=max_action).to(device)
-        self.actor_target = O_Actor(state_dim, action_dim, env_name=env_name, max_action=max_action).to(device)
-        self.actor_perturbed = O_Actor(state_dim, action_dim, env_name=env_name, max_action=max_action).to(device)
+        self.actor = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
+        self.actor_target = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
+        self.actor_perturbed = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
-        self.critic = Critic(state_dim, action_dim, env_name=env_name).to(device)
-        self.critic_target = Critic(state_dim, action_dim, env_name=env_name).to(device)
+        self.critic = Critic(state_dim, action_dim, hidden_size=256, env_name=env_name).to(device)
+        self.critic_target = Critic(state_dim, action_dim, hidden_size=256, env_name=env_name).to(device)
         self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=c_lr)
 
@@ -208,7 +208,7 @@ class TD3():
 
         return torch.mean(avg_q1), torch.mean(avg_q1), q_loss, pi_loss, avg_action
 
-    def save(self):
+    def save(self, save_path):
         if not os.path.exists('trained_models/syncTD3/'):
             os.makedirs('trained_models/syncTD3/')
 
@@ -216,13 +216,13 @@ class TD3():
 
         filetype = ".pt"  # pytorch model
         torch.save(self.actor, os.path.join(
-            "./trained_models/syncTD3", "actor_model" + filetype))
+            save_path, "actor" + filetype))
         torch.save(self.critic, os.path.join(
-            "./trained_models/syncTD3", "critic_model" + filetype))
+            save_path, "critic_model" + filetype))
 
     def load(self, model_path):
-        actor_path = os.path.join(model_path, "actor_model.pt")
-        critic_path = os.path.join(model_path, "critic_model.pt")
+        actor_path = os.path.join(model_path, "actor.pt")
+        critic_path = os.path.join(model_path, "critic.pt")
         print('Loading models from {} and {}'.format(actor_path, critic_path))
         if actor_path is not None:
             self.actor = torch.load(actor_path)
@@ -231,11 +231,12 @@ class TD3():
             self.critic = torch.load(critic_path)
             self.critic.eval()
 
+# TODO: create way to resume experiment by loading actor and critic pt files
 def run_experiment(args):
     from apex import env_factory, create_logger
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
+    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, history=args.history)
     max_traj_len = args.max_traj_len
 
     # Start ray
@@ -294,7 +295,7 @@ def run_experiment(args):
     logger.add_scalar("Test/Return", ret, total_updates)
     logger.add_scalar("Test/Eplen", eplen, total_updates)
 
-    policy.save()
+    policy.save(logger.dir)
 
     while total_timesteps < args.max_timesteps:
 
