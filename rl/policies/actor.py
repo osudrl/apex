@@ -2,11 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-<<<<<<< HEAD
-=======
-from rl.distributions import DiagonalGaussian
-
->>>>>>> origin/rom_ik_pipeline
 from torch import sqrt
 
 from rl.policies.base import Net
@@ -46,7 +41,6 @@ class Linear_Actor(Actor):
     return self.action
 
 # Actor network for gaussian mlp
-<<<<<<< HEAD
 class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conventions
   def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=torch.nn.functional.relu, fixed_std=None, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
     super(Gaussian_FF_Actor, self).__init__()
@@ -63,19 +57,6 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
     else:
       self.fixed_std = fixed_std
       self.learn_std = False
-=======
-class GaussianMLP_Actor(Actor):
-  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=torch.tanh, init_std=1, learn_std=True, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
-    super(GaussianMLP_Actor, self).__init__()
-
-    self.actor_layers = nn.ModuleList()
-    self.actor_layers += [nn.Linear(state_dim, hidden_size)]
-    for _ in range(hidden_layers-1):
-        self.actor_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
-
-    self.dist = DiagonalGaussian(action_dim, init_std, learn_std)
->>>>>>> origin/rom_ik_pipeline
 
     self.action = None
     self.action_dim = action_dim
@@ -114,7 +95,6 @@ class GaussianMLP_Actor(Actor):
     else:
         mean = x
 
-<<<<<<< HEAD
     if self.learn_std:
       sd = torch.clamp(self.log_stds(x), LOG_STD_LO, LOG_STD_HI).exp()
     else:
@@ -141,24 +121,6 @@ class GaussianMLP_Actor(Actor):
 
 class FF_Actor(Actor):
   def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=F.relu, max_action=1):
-=======
-    self.action = mean
-    return mean
-
-  def get_action(self):
-    return self.action
-
-  def act(self, inputs, deterministic=False):
-    action = self.dist.sample(self(inputs), deterministic=deterministic)
-    return action.detach()
-
-  def evaluate(self, inputs):
-    x = self(inputs)
-    return self.dist.evaluate(x)
-
-class FF_Actor(Actor):
-  def __init__(self, state_dim, action_dim, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=F.relu, max_action=1):
->>>>>>> origin/rom_ik_pipeline
     super(FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -220,11 +182,7 @@ class Scaled_FF_Actor(Actor):
     return self.action
 
 class LSTM_Actor(Actor):
-<<<<<<< HEAD
   def __init__(self, input_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=torch.tanh, max_action=1):
-=======
-  def __init__(self, input_dim, action_dim, hidden_size=64, hidden_layers=1, env_name='NOT SET', nonlinearity=torch.tanh, max_action=1):
->>>>>>> origin/rom_ik_pipeline
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
@@ -267,20 +225,12 @@ class LSTM_Actor(Actor):
           c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-<<<<<<< HEAD
         y.append(x_t)
       x = torch.stack([x_t for x_t in y])
-=======
-        x_t = self.network_out(x_t)
-        action.append(x_t)
-
-      x = torch.stack([a.float() for a in action])
->>>>>>> origin/rom_ik_pipeline
 
     elif len(x.size()) == 2: # if we get a whole trajectory
       self.init_hidden_state()
 
-<<<<<<< HEAD
       for idx, layer in enumerate(self.actor_layers):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
@@ -339,25 +289,12 @@ class Gaussian_LSTM_Actor(Actor):
       action = []
       y = []
       for t, x_t in enumerate(x):
-=======
-      self.action = []
-      for t, x_t in enumerate(x):
-        x_t = x_t.view(1, -1)
-
->>>>>>> origin/rom_ik_pipeline
         for idx, layer in enumerate(self.actor_layers):
           h, c = self.hidden[idx], self.cells[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
-<<<<<<< HEAD
         y.append(x_t)
       x = torch.stack([x_t for x_t in y])
-=======
-        x_t = self.nonlinearity(self.network_out(x_t))
-        self.action.append(x_t)
-
-      x = torch.cat([a.float() for a in self.action])
->>>>>>> origin/rom_ik_pipeline
 
     elif len(x.size()) == 1: # if we get a single timestep
       x = x.view(1, -1)
@@ -366,7 +303,6 @@ class Gaussian_LSTM_Actor(Actor):
         h, c = self.hidden[idx], self.cells[idx]
         self.hidden[idx], self.cells[idx] = layer(x, (h, c))
         x = self.hidden[idx]
-<<<<<<< HEAD
 
       if dims == 1:
         x = x.view(-1)
@@ -396,13 +332,6 @@ class Gaussian_LSTM_Actor(Actor):
   def distribution(self, inputs):
     mu, sd = self._get_dist_params(inputs)
     return torch.distributions.Normal(mu, sd)
-=======
-      x = self.nonlinearity(self.network_out(x))[0]
-
-    else:
-      print("Invalid input dimensions.")
-      exit(1)
->>>>>>> origin/rom_ik_pipeline
 
     self.action = x * self.max_action
     return x
