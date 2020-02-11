@@ -6,7 +6,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 
 from rl.utils.remote_replay import ReplayBuffer
-from rl.policies.actor import Scaled_FF_Actor as O_Actor
+from rl.policies.actor import FF_Actor as O_Actor
 from rl.policies.critic import Dual_Q_Critic as Critic
 
 import functools
@@ -97,9 +97,9 @@ def collect_experience(env_fn, policy, min_steps, max_traj_len, act_noise):
 
 class TD3():
     def __init__(self, state_dim, action_dim, max_action, a_lr, c_lr, env_name='NOT_SET'):
-        self.actor = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
-        self.actor_target = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
-        self.actor_perturbed = O_Actor(state_dim, action_dim, max_action, env_name=env_name).to(device)
+        self.actor = O_Actor(state_dim, action_dim, max_action=max_action, env_name=env_name).to(device)
+        self.actor_target = O_Actor(state_dim, action_dim, max_action=max_action, env_name=env_name).to(device)
+        self.actor_perturbed = O_Actor(state_dim, action_dim, max_action=max_action, env_name=env_name).to(device)
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=a_lr)
 
