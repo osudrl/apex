@@ -27,7 +27,6 @@ class PPOBuffer:
     """
     A buffer for storing trajectory data and calculating returns for the policy
     and critic updates.
-
     This container is intentionally not optimized w.r.t. to memory allocation
     speed because such allocation is almost never a bottleneck for policy 
     gradient. 
@@ -36,7 +35,6 @@ class PPOBuffer:
     off-by-one errors and other bugs in policy gradient implementations, so
     this code is optimized for clarity and readability, at the expense of being
     (very) marginally slower than some other implementations. 
-
     (Premature optimization is the root of all evil).
     """
     def __init__(self, gamma=0.99, lam=0.95, use_gae=False):
@@ -151,6 +149,12 @@ class PPO:
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
         """
+        torch.set_num_threads(1) # By default, PyTorch will use multiple cores to speed up operations.
+                                 # This can cause issues when Ray also uses multiple cores, especially on machines
+                                 # with a lot of CPUs. I observed a significant speedup when limiting PyTorch 
+                                 # to a single core - I think it basically stopped ray workers from stepping on each
+                                 # other's toes.
+
         env = WrapEnv(env_fn) # TODO
 
         memory = PPOBuffer(self.gamma, self.lam)
@@ -380,6 +384,7 @@ class PPO:
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
                 avg_eval_reward = np.mean(test.ep_returns)
+                print("avg eval reward: {:.2f}".format(avg_eval_reward))
 
                 entropy = np.mean(entropies)
                 kl = np.mean(kls)
@@ -460,4 +465,3 @@ def run_experiment(args):
     print()
 
     algo.train(env_fn, policy, critic, args.n_itr, logger=logger)
-

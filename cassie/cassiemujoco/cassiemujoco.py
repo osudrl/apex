@@ -27,6 +27,9 @@ cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 class CassieSim:
     def __init__(self, modelfile):
         self.c = cassie_sim_init(modelfile.encode('utf-8'))
+        self.nv = 32
+        self.nbody = 26
+        self.nq = 35
 
     def step(self, u):
         y = cassie_out_t()
@@ -92,8 +95,8 @@ class CassieSim:
         for i in range(min(len(qvel), 32)):
             qvelp[i] = qvel[i]
 
-    def set_cassie_state(self, copy_state):
-        cassie_sim_set_cassiestate(self.c, copy_state)
+    # def set_cassie_state(self, copy_state):
+    #     cassie_sim_set_cassiestate(self.c, copy_state)
 
     def hold(self):
         cassie_sim_hold(self.c)

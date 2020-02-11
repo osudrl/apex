@@ -77,18 +77,16 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
   def init_parameters(self):
     if self.normc_init:
         self.apply(normc_fn)
+        self.means.weight.data.mul_(0.01)
 
-        if self.dist.__class__.__name__ == "DiagGaussian":
-            self.network_out.weight.data.mul_(0.01)
-
-  def forward(self, inputs):
+  def _get_dist_params(self, state):
     if self.training == False:
-        inputs = (inputs - self.obs_mean) / self.obs_std
+        state = (state - self.obs_mean) / self.obs_std
 
-    x = inputs
+    x = state
     for l in self.actor_layers:
         x = self.nonlinearity(l(x))
-    x = self.network_out(x)
+    x = self.means(x)
 
     if self.bounded:
         mean = torch.tanh(x) 
@@ -124,10 +122,10 @@ class FF_Actor(Actor):
     super(FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
-    self.actor_layers += [nn.Linear(state_dim, hidden_size)]
-    for _ in range(hidden_layers-1):
-        self.actor_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.actor_layers += [nn.Linear(state_dim, layers[0])]
+    for i in range(len(layers)-1):
+        self.actor_layers += [nn.Linear(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[-1], action_dim)
 
     self.action = None
     self.action_dim = action_dim
@@ -149,47 +147,15 @@ class FF_Actor(Actor):
   def get_action(self):
     return self.action
 
-# identical to FF_Actor but allows output to scale to max_action
-class Scaled_FF_Actor(Actor):
-  def __init__(self, state_dim, action_dim, max_action, hidden_size=256, hidden_layers=2, env_name='NOT SET', nonlinearity=F.relu):
-    super(Scaled_FF_Actor, self).__init__()
-
-    self.max_action = max_action
-
-    self.actor_layers = nn.ModuleList()
-    self.actor_layers += [nn.Linear(state_dim, hidden_size)]
-    for _ in range(hidden_layers-1):
-        self.actor_layers += [nn.Linear(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
-
-    self.action = None
-    self.action_dim = action_dim
-    self.env_name = env_name
-    self.nonlinearity = nonlinearity
-
-  def forward(self, state):
-    x = state
-    #print(x.size())
-    for idx, layer in enumerate(self.actor_layers):
-      x = self.nonlinearity(layer(x))
-
-    self.action = self.max_action * torch.tanh(self.network_out(x))
-    #print(self.action)
-    #exit(1)
-    return self.action
-
-  def get_action(self):
-    return self.action
-
 class LSTM_Actor(Actor):
   def __init__(self, input_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=torch.tanh, max_action=1):
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
-    self.actor_layers += [nn.LSTMCell(input_dim, hidden_size)]
-    for _ in range(hidden_layers-1):
-        self.actor_layers += [nn.LSTMCell(hidden_size, hidden_size)]
-    self.network_out = nn.Linear(hidden_size, action_dim)
+    self.actor_layers += [nn.LSTMCell(state_dim, layers[0])]
+    for i in range(len(layers)-1):
+        self.actor_layers += [nn.LSTMCell(layers[i], layers[i+1])]
+    self.network_out = nn.Linear(layers[i-1], action_dim)
 
     self.action = None
     self.action_dim = action_dim
@@ -216,8 +182,9 @@ class LSTM_Actor(Actor):
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
 
   def forward(self, x):
+    dims = len(x.size())
 
-    if len(x.size()) == 3: # if we get a batch of trajectories
+    if dims == 3: # if we get a batch of trajectories
       self.init_hidden_state(batch_size=x.size(1))
       y = []
       for t, x_t in enumerate(x):
@@ -228,8 +195,9 @@ class LSTM_Actor(Actor):
         y.append(x_t)
       x = torch.stack([x_t for x_t in y])
 
-    elif len(x.size()) == 2: # if we get a whole trajectory
-      self.init_hidden_state()
+    else:
+      if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
+        x = x.view(1, -1)
 
       for idx, layer in enumerate(self.actor_layers):
         h, c = self.hidden[idx], self.cells[idx]
@@ -290,14 +258,15 @@ class Gaussian_LSTM_Actor(Actor):
       y = []
       for t, x_t in enumerate(x):
         for idx, layer in enumerate(self.actor_layers):
-          h, c = self.hidden[idx], self.cells[idx]
+          c, h = self.cells[idx], self.hidden[idx]
           self.hidden[idx], self.cells[idx] = layer(x_t, (h, c))
           x_t = self.hidden[idx]
         y.append(x_t)
       x = torch.stack([x_t for x_t in y])
 
-    elif len(x.size()) == 1: # if we get a single timestep
-      x = x.view(1, -1)
+    else:
+      if dims == 1: # if we get a single timestep (if not, assume we got a batch of single timesteps)
+        x = x.view(1, -1)
 
       for idx, layer in enumerate(self.actor_layers):
         h, c = self.hidden[idx], self.cells[idx]
@@ -333,9 +302,6 @@ class Gaussian_LSTM_Actor(Actor):
     mu, sd = self._get_dist_params(inputs)
     return torch.distributions.Normal(mu, sd)
 
-    self.action = x * self.max_action
-    return x
-  
   def get_action(self):
     return self.action
 
@@ -349,3 +315,5 @@ def normc_fn(m):
         m.weight.data *= 1 / torch.sqrt(m.weight.data.pow(2).sum(1, keepdim=True))
         if m.bias is not None:
             m.bias.data.fill_(0)
+
+GaussianMLP_Actor = Gaussian_FF_Actor # for legacy code compatibility
