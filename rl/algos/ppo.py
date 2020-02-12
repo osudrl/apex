@@ -240,7 +240,7 @@ class PPO:
         if self.n_proc > 1:
             real_proc = self.n_proc
             if self.limit_cores:
-                real_proc = 50 - 16*int(np.log2(60 / env_fn().simrate))
+                real_proc = 48 - 16*int(np.log2(60 / env_fn().simrate))
                 print("limit cores active, using {} cores".format(real_proc))
                 args = (self, env_fn, policy, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
             result_ids = [worker.remote(*args) for _ in range(real_proc)]
@@ -426,6 +426,7 @@ class PPO:
 
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:
+                print("saving policy")
                 self.highest_reward = avg_eval_reward
                 self.save(policy)
 

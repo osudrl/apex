@@ -36,13 +36,28 @@ class CassieFootTrajectory:
         # lfoot_relative = np.copy(trajectory["lfoot"])
         # self.rfoot = com_xyz + rfoot_relative
         # self.lfoot = com_xyz + lfoot_relative
-        self.rfoot = trajectory["rfoot"]
-        self.lfoot = trajectory["lfoot"]
-        self.rfoot_vel = trajectory["rfoot_vel"]
-        self.lfoot_vel = trajectory["lfoot_vel"]
+        self.rfoot = trajectory["rfoot"][:]
+        self.lfoot = trajectory["lfoot"][:]
+        self.rfoot_vel = trajectory["rfoot_vel"][:]
+        self.lfoot_vel = trajectory["lfoot_vel"][:]
+        # print("rfoot shape: ", self.rfoot.shape)
+        # print("rfoot vel shape: ", self.rfoot_vel.shape)
     
     def __len__(self):
         return len(self.rfoot)
+
+class CassieTraj:
+    def __init__(self, filepath):
+        data = np.load(filepath)
+
+        # states
+        # self.time = data[:, 0]
+        self.qpos = data#[:, 1:36]
+        self.len = data.shape[0]
+        # self.qvel = data[:, 36:68]
+    
+    def __len__(self):
+        return self.len
 
 class CassieEnv_speed_sidestep:
     def __init__(self, traj, simrate=60, clock_based=False, state_est=False):
@@ -72,9 +87,11 @@ class CassieEnv_speed_sidestep:
             # traj_path = os.path.join(dirname, "trajectory", "spline_stepping_traj.pkl")
             traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
                         
-        self.trajectory = CassieTrajectory(traj_path)
-        self.foot_traj = CassieFootTrajectory(os.path.join(dirname, "trajectory", "foottraj_doublestance_time0.4_land0.4_h0.2.pkl"))
+        # self.trajectory = CassieTrajectory(traj_path)
+        self.trajectory = CassieTraj(os.path.join(dirname, "trajectory", "iktraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel_fixedfoot.npy"))
+        # self.foot_traj = CassieFootTrajectory(os.path.join(dirname, "trajectory", "foottraj_doublestance_time0.4_land0.4_h0.2_vels.pkl"))
         # self.foot_traj = CassieFootTrajectory(os.path.join(dirname, "trajectory", "foottraj_doublestance_time0.4_land0.2_vels.pkl"))
+        self.foot_traj = CassieFootTrajectory(os.path.join(dirname, "trajectory", "foottraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel.pkl"))
 
         self.P = np.array([100,  100,  88,  96,  50]) 
         self.D = np.array([10.0, 10.0, 8.0, 9.6, 5.0])
@@ -115,6 +132,11 @@ class CassieEnv_speed_sidestep:
         self.r_foot_diff = 0
         self.l_footvel_diff = 0
         self.r_footvel_diff = 0
+        self.joint_error       = 0
+        self.com_error         = 0
+        self.orientation_error = 0
+        self.spring_error      = 0
+
         self.phase_add = 1
         if self.state_est:
             self.clock_inds = [46, 47]
@@ -162,8 +184,8 @@ class CassieEnv_speed_sidestep:
 
         self.cassie_state = self.sim.step_pd(self.u)
         self.sim.foot_pos(foot_pos)
-        self.lfoot_vel = (foot_pos[2] - prev_foot[2]) / 0.0005
-        self.rfoot_vel = (foot_pos[5] - prev_foot[5]) / 0.0005
+        self.lfoot_vel = (foot_pos[0:3] - prev_foot[0:3]) / 0.0005
+        self.rfoot_vel = (foot_pos[3:6] - prev_foot[3:6]) / 0.0005
         # if (np.abs(self.lfoot_vel) < 0.05):
         #     print("l foot height: ", foot_pos[2])
         # if (np.abs(self.rfoot_vel) < 0.05):
@@ -178,6 +200,12 @@ class CassieEnv_speed_sidestep:
         self.r_foot_diff = 0
         self.l_footvel_diff = 0
         self.r_footvel_diff = 0
+        self.joint_error       = 0
+        self.com_error         = 0
+        self.orientation_error = 0
+        self.spring_error      = 0
+        
+        weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
         ######## Linear Interpolate ########
         # num_steps = int(self.simrate * 3/4)  # Number of steps to interpolate over. Should be between 0 and self.simrate
         # alpha = 1 / num_steps
@@ -192,25 +220,67 @@ class CassieEnv_speed_sidestep:
         ######## Regular action (no interpolate) ######## 
         for i in range(self.simrate):
             self.step_simulation(action)
+            qpos = np.copy(self.sim.qpos())
+            ref_lpos, ref_rpos, ref_lvel, ref_rvel = self.get_ref_foot(self.phase, i+1)
             # Calculate foot pos and vel diff
             self.sim.foot_pos(foot_pos)
-            curr_l_yfoot = np.abs(foot_pos[2] - self.foot_traj.lfoot[int(self.phase*self.simrate) + i, 2])
-            curr_r_yfoot = np.abs(foot_pos[5] - self.foot_traj.rfoot[int(self.phase*self.simrate) + i, 2])
+            # curr_l_yfoot = np.abs(foot_pos[2] - self.foot_traj.lfoot[int(self.phase*self.simrate) + i+1, 2])
+            # curr_r_yfoot = np.abs(foot_pos[5] - self.foot_traj.rfoot[int(self.phase*self.simrate) + i+1, 2])
+            # curr_l_yfoot = np.linalg.norm(foot_pos[[0, 2]] - ref_lpos[[0,2]])
+            # curr_r_yfoot = np.linalg.norm(foot_pos[[3, 5]] - ref_rpos[[0,2]])
+            curr_l_yfoot = np.linalg.norm(foot_pos[2] - ref_lpos[2])
+            curr_r_yfoot = np.linalg.norm(foot_pos[5] - ref_rpos[2])
             # if curr_l_yfoot > self.l_foot_diff:
             #     self.l_foot_diff = curr_l_yfoot
             # if curr_r_yfoot > self.r_foot_diff:
             #     self.r_foot_diff = curr_r_yfoot
-            self.l_foot_diff += (curr_l_yfoot - self.l_foot_diff) / (i + 1)
-            self.r_foot_diff += (curr_r_yfoot - self.r_foot_diff) / (i + 1)
-            curr_l_yfoot_vel = np.abs(self.lfoot_vel - self.foot_traj.lfoot_vel[int(self.phase*self.simrate) + i])
-            curr_r_yfoot_vel = np.abs(self.rfoot_vel - self.foot_traj.rfoot_vel[int(self.phase*self.simrate) + i])
+            self.l_foot_diff += curr_l_yfoot# - self.l_foot_diff) / (i + 1)
+            self.r_foot_diff += curr_r_yfoot# - self.r_foot_diff) / (i + 1)
+            # curr_l_yfoot_vel = np.abs(self.lfoot_vel - self.foot_traj.lfoot_vel[int(self.phase*self.simrate) + i+1, 2])
+            # curr_r_yfoot_vel = np.abs(self.rfoot_vel - self.foot_traj.rfoot_vel[int(self.phase*self.simrate) + i+1, 2])
+            # curr_l_yfoot_vel = np.linalg.norm(self.lfoot_vel[[0, 2]] - ref_lvel[[0, 2]])
+            # curr_r_yfoot_vel = np.linalg.norm(self.rfoot_vel[[0, 2]] - ref_rvel[[0, 2]])
+            curr_l_yfoot_vel = np.linalg.norm(self.lfoot_vel[2] - ref_lvel[2])
+            curr_r_yfoot_vel = np.linalg.norm(self.rfoot_vel[2] - ref_rvel[2])
             # if curr_l_yfoot_vel > self.l_footvel_diff:
             #     self.l_footvel_diff = curr_l_yfoot_vel
             # if curr_r_yfoot_vel > self.r_footvel_diff:
             #     self.r_footvel_diff = curr_r_yfoot_vel
-            self.l_footvel_diff += (curr_l_yfoot_vel - self.l_footvel_diff) / (i + 1)
-            self.r_footvel_diff += (curr_r_yfoot_vel - self.r_footvel_diff) / (i + 1)
+            self.l_footvel_diff += curr_l_yfoot_vel# - self.l_footvel_diff) / (i + 1)
+            self.r_footvel_diff += curr_r_yfoot_vel# - self.r_footvel_diff) / (i + 1)
             
+            ##### Ref traj errors #####
+            ref_pos = np.copy(self.trajectory.qpos[int(self.phase*self.simrate)+i+1])
+            ref_pos[0] = self.speed * self.counter + (self.speed / self.phaselen)*self.phase
+            ref_pos[1] = self.side_speed * self.counter + (self.side_speed / self.phaselen)*self.phase
+            ######                          ########
+            # each joint pos
+            for i, j in enumerate(self.pos_idx):
+                self.joint_error += 30 * weight[i] * (ref_pos[j] - qpos[j]) ** 2
+
+            # center of mass: x, y, z
+            for j in [0, 1, 2]:
+                # NOTE: in Xie et al y target is 0
+                self.com_error += (ref_pos[j] - qpos[j]) ** 2
+            
+            # COM orientation: qw, qx, qy, qz
+            for j in [3, 4, 5, 6]:
+                # NOTE: in Xie et al orientation target is 0
+                self.orientation_error += (ref_pos[j] - qpos[j]) ** 2
+
+            # left and right shin springs
+            for i in [15, 29]:
+                # NOTE: in Xie et al spring target is 0
+                self.spring_error += 1000 * (ref_pos[i] - qpos[i]) ** 2     
+            
+        self.joint_error       /= self.simrate 
+        self.com_error         /= self.simrate 
+        self.orientation_error /= self.simrate 
+        self.spring_error      /= self.simrate
+        self.l_foot_diff       /= self.simrate
+        self.r_foot_diff       /= self.simrate
+        self.l_footvel_diff       /= self.simrate
+        self.r_footvel_diff       /= self.simrate
         height = self.sim.qpos()[2]
 
         self.time  += 1
@@ -253,12 +323,12 @@ class CassieEnv_speed_sidestep:
 
         
         self.speed = (random.randint(-5, 10)) / 10
-        self.side_speed = 0.6*random.random() - 0.3
+        self.side_speed = 0.4*random.random() - 0.2
         self.phase_add = 1# + random.random()
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.prev_action = None
-        self.l_footvel = 0
-        self.r_footvel = 0
+        self.lfoot_vel = 0
+        self.rfoot_vel = 0
         self.l_foot_diff = 0
         self.r_foot_diff = 0
         self.l_footvel_diff = 0
@@ -271,7 +341,7 @@ class CassieEnv_speed_sidestep:
         self.phase = 0
         self.time = 0
         self.counter = 0
-        self.speed = .5
+        self.speed = 0.5
         self.side_speed = 0
         self.max_force = 0
 
@@ -286,8 +356,8 @@ class CassieEnv_speed_sidestep:
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.prev_action = None
         self.prev_foot = None
-        self.l_footvel = 0
-        self.r_footvel = 0
+        self.lfoot_vel = 0
+        self.rfoot_vel = 0
         self.l_foot_diff = 0
         self.r_foot_diff = 0
         self.l_footvel_diff = 0
@@ -333,6 +403,7 @@ class CassieEnv_speed_sidestep:
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
+        # ref_pos, ref_vel = self.get_ref_state(self.phase)
         # ref_pos_prev, ref_vel_prev = self.get_ref_state(int(np.floor(self.phase)))
         # phase_diff = self.phase - np.floor(self.phase)
         # if phase_diff != 0:
@@ -345,8 +416,8 @@ class CassieEnv_speed_sidestep:
         #     ref_pos = ref_pos_prev
         #     ref_vel = ref_vel_prev
 
-        # # TODO: should be variable; where do these come from?
-        # # TODO: see magnitude of state variables to gauge contribution to reward
+        # TODO: should be variable; where do these come from?
+        # TODO: see magnitude of state variables to gauge contribution to reward
         # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
         # joint_error       = 0
@@ -369,8 +440,8 @@ class CassieEnv_speed_sidestep:
         #     # NOTE: in Xie et al y target is 0
         #     com_error += (target - actual) ** 2
         
-        # # COM orientation: qx, qy, qz
-        # for j in [4, 5, 6]:
+        # # COM orientation: qw, qx, qy, qz
+        # for j in [3, 4, 5, 6]:
         #     target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
         #     actual = qpos[j]
 
@@ -387,6 +458,11 @@ class CassieEnv_speed_sidestep:
         #         0.3 * np.exp(-com_error) +         \
         #         0.1 * np.exp(-orientation_error) + \
         #         0.1 * np.exp(-spring_error)
+
+        # reward = 0.5 * np.exp(-self.joint_error) +       \
+        #         0.3 * np.exp(-self.com_error) +         \
+        #         0.1 * np.exp(-self.orientation_error) + \
+        #         0.1 * np.exp(-self.spring_error)
 
         # orientation error does not look informative
         # maybe because it's comparing euclidean distance on quaternions
@@ -406,67 +482,67 @@ class CassieEnv_speed_sidestep:
            forward_diff = 0
         if side_diff < 0.05:
            side_diff = 0
-        ######## Foot position penalty ########
+        # ######## Foot position penalty ########
         foot_pos = np.zeros(6)
         self.sim.foot_pos(foot_pos)
-        foot_dist = np.linalg.norm(foot_pos[0:2]-foot_pos[3:5])
-        foot_penalty = 0
-        if foot_dist < 0.22:
-           foot_penalty = 0.2
-        ######## Foot force penalty ########
-        foot_forces = self.sim.get_foot_forces()
-        lforce = max((foot_forces[0] - 700)/1000, 0)
-        rforce = max((foot_forces[1] - 700)/1000, 0)
+        # foot_dist = np.linalg.norm(foot_pos[0:2]-foot_pos[3:5])
+        # foot_penalty = 0
+        # if foot_dist < 0.22:
+        #    foot_penalty = 0.2
+        # ######## Foot force penalty ########
+        # foot_forces = self.sim.get_foot_forces()
+        # lforce = max((foot_forces[0] - 700)/1000, 0)
+        # rforce = max((foot_forces[1] - 700)/1000, 0)
         ######## Hip yaw penalty (pigeon/duck toed) #########
-        lhipyaw = qpos[8]
-        rhipyaw = qpos[22]
+        lhipyaw = np.abs(qpos[8])
+        rhipyaw = np.abs(qpos[22])
         if lhipyaw < 0.05:
             lhipyaw = 0
         if rhipyaw < 0.05:
             rhipyaw = 0
+        ######## Hip roll penalty #########
+        lhiproll = np.abs(qpos[7])
+        rhiproll = np.abs(qpos[21])
+        if lhiproll < 0.05:
+            lhiproll = 0
+        if rhiproll < 0.05:
+            rhiproll = 0
         ######## Foot orientation penalty #######
-        #leuler = quaternion2euler(self.cassie_state.leftFoot.orientation)
-        #reuler = quaternion2euler(self.cassie_state.rightFoot.orientation)
-        ######## Torque penalty ########
-        torque = np.linalg.norm(self.cassie_state.motor.torque[:])        
-        ######## Pelvis z accel penalty #########
-        pelaccel = np.abs(self.cassie_state.pelvis.translationalAcceleration[2])
-        pelaccel_penalty = 0
-        if pelaccel > 6:
-            pelaccel_penalty = (pelaccel - 6) / 30
+        lfoot_orient = 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.leftFoot.orientation[:]) ** 2
+        rfoot_orient = 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.rightFoot.orientation[:]) ** 2
+        # ######## Torque penalty ########
+        # torque = np.linalg.norm(self.cassie_state.motor.torque[:])        
+        # ######## Pelvis z accel penalty #########
+        # pelaccel = np.abs(self.cassie_state.pelvis.translationalAcceleration[2])
+        # pelaccel_penalty = 0
+        # if pelaccel > 6:
+        #     pelaccel_penalty = (pelaccel - 6) / 30
         ######## Prev action penalty ########
         if self.prev_action is not None:
-            prev_penalty = np.linalg.norm(self.curr_action - self.prev_action) / 3 #* (30/self.simrate)
+            prev_penalty = np.linalg.norm(self.curr_action - self.prev_action) / 10 #* (30/self.simrate)
         else:
             prev_penalty = 0
         # print("prev_penalty: ", prev_penalty)
-        ######## Foot height bonus ########
-        footheight_penalty = 0
-        if (np.abs(self.lfoot_vel) < 0.05 and foot_pos[2] < 0.2 and foot_forces[0] == 0) or (np.abs(self.rfoot_vel) < 0.05 and foot_pos[5] < 0.2 and foot_forces[1] == 0):
-            # print("adding foot height penalty")
-            footheight_penalty = 0.2
-        ######## Foot y traj ########
-        r_yfoot = self.foot_traj.rfoot[int(self.phase*self.simrate), 2]
-        l_yfoot = self.foot_traj.lfoot[int(self.phase*self.simrate), 2]
-        ly_diff = np.abs(foot_pos[2] - l_yfoot)
-        ry_diff = np.abs(foot_pos[5] - r_yfoot)
-        # if ly_diff < 0.02:
-        #    ly_diff = 0
-        # if ry_diff < 0.02:
-        #    ry_diff = 0
-        r_yfoot_vel = self.foot_traj.rfoot_vel[int(self.phase*self.simrate)]
-        l_yfoot_vel = self.foot_traj.lfoot_vel[int(self.phase*self.simrate)]
-        ly_vel_diff = np.abs(self.lfoot_vel - l_yfoot_vel)
-        ry_vel_diff = np.abs(self.rfoot_vel - r_yfoot_vel)
-        # if ly_vel_diff < 0.02:
-        #    ly_vel_diff = 0
-        # if ry_vel_diff < 0.02:
-        #    ry_vel_diff = 0
+        # ######## Foot height bonus ########
+        # footheight_penalty = 0
+        # if (np.abs(self.lfoot_vel) < 0.05 and foot_pos[2] < 0.2 and foot_forces[0] == 0) or (np.abs(self.rfoot_vel) < 0.05 and foot_pos[5] < 0.2 and foot_forces[1] == 0):
+        #     # print("adding foot height penalty")
+        #     footheight_penalty = 0.2
+        ######## Foot height vel cost ########
+        lf_heightvel = (0.2 - foot_pos[2])**2 * np.linalg.norm(self.lfoot_vel) * 20
+        rf_heightvel = (0.2 - foot_pos[5])**2 * np.linalg.norm(self.rfoot_vel) * 20
+        # print("lf cost: {}\trf cost: {}".format(lf_heightvel, rf_heightvel))
 
-        # reward = .35*np.exp(-4*self.l_foot_diff) + .35*np.exp(-4*self.r_foot_diff) + .15*np.exp(-2*self.l_footvel_diff) + .15*np.exp(-2*self.r_footvel_diff)
-        reward = .2*np.exp(-forward_diff) + .1*np.exp(-side_diff) + .1*np.exp(-orient_diff) \
-                    + .15*np.exp(-20*self.l_foot_diff) + .15*np.exp(-20*self.r_foot_diff) + .15*np.exp(-5*self.l_footvel_diff) + .15*np.exp(-5*self.r_footvel_diff) - prev_penalty
+        # reward = .35*np.exp(-20*self.l_foot_diff) + .35*np.exp(-20*self.r_foot_diff) + .15*np.exp(-5*self.l_footvel_diff) + .15*np.exp(-5*self.r_footvel_diff)
+        reward = .15*np.exp(-forward_diff) + .15*np.exp(-side_diff) + .1*np.exp(-orient_diff) \
+                    + .1*np.exp(-lfoot_orient) + .1*np.exp(-rfoot_orient) \
+                    + .05*np.exp(-10*lhipyaw) + .05*np.exp(-10*rhipyaw) + .05*np.exp(-10*lhiproll) + .05*np.exp(-10*rhiproll) \
+                    + .1*np.exp(-lf_heightvel) + .1*np.exp(-rf_heightvel) - prev_penalty
+                    # + .1*np.exp(-20*self.l_foot_diff) + .1*np.exp(-20*self.r_foot_diff) + \
+                    # .1*np.exp(-5*self.l_footvel_diff) + .1*np.exp(-5*self.r_footvel_diff) - prev_penalty
+                    
                     # - pelaccel_penalty
+                    # + .15*np.exp(-lhiproll) + .15*np.exp(-rhiproll) + .1*np.exp(-lhipyaw) + .1*np.exp(-rhipyaw)#- pelaccel_penalty
                     # + .1*np.exp(-4*ly_diff) + .1*np.exp(-4*ry_diff) + .1*np.exp(-2*ly_vel_diff) + .1*np.exp(-2*ry_vel_diff)# \
                     
                     #+ .1*np.exp(-lhipyaw) + .1*np.exp(-rhipyaw) - foot_penalty
@@ -477,6 +553,29 @@ class CassieEnv_speed_sidestep:
 
         return reward
 
+    def get_ref_foot(self, phase, cycle_ind):
+        if phase is None: 
+            phase = self.phase
+        if phase > self.phaselen:
+            phase = 0
+
+        # Copy data from foot traj
+        l_pos = np.copy(self.foot_traj.lfoot[int(phase*self.simrate) + cycle_ind, :])
+        r_pos = np.copy(self.foot_traj.rfoot[int(phase*self.simrate) + cycle_ind, :])
+        l_vel = np.copy(self.foot_traj.lfoot_vel[int(phase*self.simrate) + cycle_ind, :])
+        r_vel = np.copy(self.foot_traj.rfoot_vel[int(phase*self.simrate) + cycle_ind, :])
+
+        # Setting variable speed
+        l_pos[0] *= self.speed
+        l_pos[0] += (self.foot_traj.lfoot[-1, 0] - self.foot_traj.lfoot[0, 0]) * self.counter * self.speed
+        r_pos[0] *= self.speed
+        r_pos[0] += (self.foot_traj.rfoot[-1, 0] - self.foot_traj.rfoot[0, 0]) * self.counter * self.speed
+
+        l_vel[0] *= self.speed
+        r_vel[0] *= self.speed
+
+        return l_pos, r_pos, l_vel, r_vel
+
     # get the corresponding state from the reference trajectory for the current phase
     def get_ref_state(self, phase=None):
         if phase is None:
@@ -485,7 +584,7 @@ class CassieEnv_speed_sidestep:
         if phase > self.phaselen:
             phase = 0
 
-        pos = np.copy(self.trajectory.qpos[phase * self.simrate])
+        pos = np.copy(self.trajectory.qpos[int(phase * self.simrate)])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
@@ -497,19 +596,24 @@ class CassieEnv_speed_sidestep:
         ###### Setting variable speed  #########
         pos[0] *= self.speed
         pos[0] += (self.trajectory.qpos[-1, 0]- self.trajectory.qpos[0, 0])* self.counter * self.speed
+        # pos[0] = self.speed * self.counter + (self.speed / self.phaselen)*phase
         ######                          ########
         ###### Setting variable side speed  #########
-        pos[1] *= self.side_speed
-        pos[1] += (self.trajectory.qpos[-1, 1]- self.trajectory.qpos[0, 1])* self.counter * self.side_speed
+        # pos[1] *= self.side_speed
+        # pos[1] += (self.trajectory.qpos[-1, 1]- self.trajectory.qpos[0, 1])* self.counter * self.side_speed
+        pos[1] = self.side_speed * self.counter + (self.side_speed / self.phaselen)*phase
         ######                          ########
 
         # setting lateral distance target to 0?
         # regardless of reference trajectory?
         # pos[1] = 0
 
-        vel = np.copy(self.trajectory.qvel[phase * self.simrate])
+        # vel = np.copy(self.trajectory.qvel[int(phase * self.simrate)])
+        vel = np.zeros(32)
         vel[0] *= self.speed
-        vel[1] *= self.side_speed
+        # vel[1] *= self.side_speed
+        # vel[0] = self.speed
+        vel[1] = self.side_speed
 
         return pos, vel
 
