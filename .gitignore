@@ -126,5 +126,6 @@ ray_timeline.json
 ref_qposes.png
 
 # testing directory files
-/tests/aslip_pipeline/testTS_logs/*
-/tests/aslip_pipeline/testVaryVel_logs/*
+/tools/aslip_pipeline/testTS_logs/*
+/tools/aslip_pipeline/testVaryVel_logs/*
+/tools/apex_plots/*

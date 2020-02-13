@@ -1,6 +1,6 @@
 import numpy as np
 
-def xie_reward(self):
+def iros_paper_reward(self):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())
 

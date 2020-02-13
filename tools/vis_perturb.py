@@ -1,13 +1,15 @@
+import sys
+sys.path.append("..") # Adds higher directory to python modules path.
+
+RUN_NAME = "7b7e24-seed0"
+POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
+
 import numpy as np
 import torch
 import time
 import copy
 
 from cassie import CassieEnv
-from cassie.speed_env import CassieEnv_speed
-
-# from rl.policies import GaussianMLP
-from rl.policies.actor import GaussianMLP_Actor
 
 # Will reset the env to the given phase by reset_for_test, and then
 # simulating 2 cycle then to the given phase
@@ -26,13 +28,9 @@ def reset_to_phase(env, policy, phase):
         state = torch.Tensor(state)
 
 # Load environment and policy
-# cassie_env = CassieEnv("walking", clock_based=True, state_est=False)
-cassie_env = CassieEnv_speed("walking", clock_based=True, state_est=True)
+cassie_env = CassieEnv("walking", clock_based=True, state_est=True)
 
-# file_prefix = "fwrd_walk_StateEst_speed-05-3_freq1-2_footvelpenalty_heightflag_footxypenalty"
-# file_prefix = "sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.2_vels_avgdiff_simrate15_evenweight_actpenalty"
-file_prefix = "control_0"
-policy = torch.load("./trained_models/{}.pt".format(file_prefix))
+policy = torch.load(POLICY_PATH)
 # policy.bounded = False
 # policy.eval()
 # empty_u = pd_in_t()
@@ -44,7 +42,7 @@ cassie_env.phase_add = 1
 num_steps = cassie_env.phaselen + 1
 # Simulate for "wait_time" first to stabilize
 for i in range(num_steps*2):
-    action = policy.act(state, True)
+    action = policy(state, True)
     action = action.data.numpy()
     state, reward, done, _ = cassie_env.step(action)
     state = torch.Tensor(state)
@@ -52,7 +50,7 @@ curr_time = cassie_env.sim.time()
 start_t = curr_time
 sim_t = time.time()
 while curr_time < start_t + 4:
-    action = policy.act(state, True)
+    action = policy(state, True)
     action = action.data.numpy()
     state, reward, done, _ = cassie_env.step(action)
     state = torch.Tensor(state)

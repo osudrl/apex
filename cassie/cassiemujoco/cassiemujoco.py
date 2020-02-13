@@ -213,6 +213,9 @@ class CassieSim:
     def set_const(self):
         cassie_sim_set_const(self.c)
 
+    def full_reset(self):
+        cassie_sim_full_reset(self.c)
+
     def __del__(self):
         cassie_sim_free(self.c)
 

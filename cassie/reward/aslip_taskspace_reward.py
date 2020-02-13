@@ -25,6 +25,23 @@ def get_ref_com_vel(self, phase=None):
 
     return cvel
 
+def get_ref_aslip_ext_state(self, phase=None):
+
+    if phase is None:
+        phase = self.phase
+
+    if phase > self.phaselen:
+        phase = 0
+
+    rpos = np.copy(self.trajectory.rpos[phase])
+    rvel = np.copy(self.trajectory.rvel[phase])
+    lpos = np.copy(self.trajectory.lpos[phase])
+    lvel = np.copy(self.trajectory.lvel[phase])
+    cpos = np.copy(self.trajectory.cpos[phase])
+    cvel = np.copy(self.trajectory.cvel[phase])
+
+    return rpos, rvel, lpos, lvel, cpos, cvel
+
 def aslip_TaskSpace_reward(self, action):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())

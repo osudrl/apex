@@ -372,7 +372,7 @@ cassie_sim_foot_positions.restype = None
 cassie_sim_foot_positions.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_double * 6]
 cassie_sim_apply_force = _libraries['./libcassiemujoco.so'].cassie_sim_apply_force
 cassie_sim_apply_force.restype = None
-cassie_sim_apply_force.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_double * 6, ctypes.c_int32]
+cassie_sim_apply_force.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_double * 6, ctypes.c_char_p]
 cassie_sim_xquat = _libraries['./libcassiemujoco.so'].cassie_sim_xquat
 cassie_sim_xquat.restype = POINTER_T(ctypes.c_double)
 cassie_sim_xquat.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_char_p]
@@ -721,7 +721,7 @@ __all__ = \
     'cassie_sim_mjdata', 'state_output_setup', 'cassie_sim_mjmodel',
     'state_foot_out_t', 'state_output_t', 'cassie_sim_time',
     'cassie_sim_step_ethercat', 'cassie_sim_check_obstacle_collision',
-    'elmo_out_t', 'pack_cassie_in_t', 'cassie_sim_apply_force',
+    'elmo_out_t', 'pack_cassie_in_t', 'cassie_sim_apply_force','cassie_sim_full_reset',
     'cassie_leg_out_t', 'wait_for_packet',
     'struct_c__SA_cassie_leg_in_t', 'struct_c__SA_state_joint_out_t',
     'process_packet_header', 'cassie_sim_release', 'cassie_sim_foot_forces', 

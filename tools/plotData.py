@@ -1,39 +1,26 @@
+import sys
+sys.path.append("..") # Adds higher directory to python modules path.
+
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from torch.autograd import Variable
 import time
 
-# from cassie.slipik_env import CassieIKEnv
-# from cassie.no_delta_env import CassieEnv_nodelta
-# from cassie.speed_env import CassieEnv_speed
-# from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
-# from cassie.speed_no_delta_env import CassieEnv_speed_no_delta
-# from cassie.speed_no_delta_neutral_foot_env import CassieEnv_speed_no_delta_neutral_foot
-# from cassie.standing_env import CassieEnv_stand
-# from cassie.speed_sidestep_env import CassieEnv_speed_sidestep
-from cassie.aslipik_unified_env import UnifiedCassieIKEnv
-from cassie.aslipik_unified_env_alt_reward import UnifiedCassieIKEnvAltReward
-from cassie.aslipik_unified_env_task_reward import UnifiedCassieIKEnvTaskReward
-from cassie.aslipik_unified_no_delta_env import UnifiedCassieIKEnvNoDelta
+from cassie import CassieEnv
+
+RUN_NAME = "7b7e24-seed0"
+POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
 
 def avg_pols(policies, state):
     total_act = np.zeros(10)
     for policy in policies:
-        _, action = policy.act(state, False)
+        _, action = policy(state, False)
         total_act += action.data[0].numpy()
     return total_act / len(policies)
 
 # Load environment and policy
-# cassie_env = CassieEnv("walking", clock_based=True, state_est=True)
-# cassie_env = CassieEnv_nodelta("walking", clock_based=True, state_est=False)
-# cassie_env = CassieEnv_speed("walking", clock_based=True, state_est=True)
-# cassie_env = CassieEnv_speed_dfreq("walking", clock_based=True, state_est=False)
-# cassie_env = CassieEnv_speed_no_delta("walking", clock_based=True, state_est=False)
-# cassie_env = CassieEnv_speed_no_delta_neutral_foot("walking", clock_based=True, state_est=True)
-# cassie_env = CassieEnv_speed_sidestep("walking", clock_based=True, state_est=True)
-cassie_env = UnifiedCassieIKEnvNoDelta("walking", clock_based=True, state_est=True, debug=True)
-# cassie_env = CassieEnv_stand(state_est=False)
+cassie_env = CassieEnv("walking", clock_based=True, state_est=True)
 
 obs_dim = cassie_env.observation_space.shape[0] # TODO: could make obs and ac space static properties
 action_dim = cassie_env.action_space.shape[0]
@@ -44,10 +31,7 @@ limittargs = False
 lininterp = False
 offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
-# file_prefix = "fwrd_walk_StateEst_speed-05-3_freq1-2_footvelpenalty_heightflag_footxypenalty"
-file_prefix = "aslip_unified_task10_v6"#_actpenalty_retrain"
-# file_prefix = "nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2"
-policy = torch.load("./trained_models/{}.pt".format(file_prefix))
+policy = torch.load(POLICY_PATH)
 # policy.bounded = False
 # policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
 policy.eval()
@@ -97,7 +81,7 @@ with torch.no_grad():
     cassie_env.phase_add = 1
     for i in range(pre_steps):
         if not do_multi:
-            action = policy.act(state, True)
+            action = policy(state, True)
             state, reward, done, _ = cassie_env.step(action.data.numpy())
         else:
             action = avg_pols(policies, state)
@@ -105,7 +89,7 @@ with torch.no_grad():
         state = torch.Tensor(state)
     for i in range(num_steps):
         if not do_multi:
-            action = policy.act(state, True)
+            action = policy(state, True)
             action = action.data.numpy()
         else:
             action = avg_pols(policies, state)
@@ -190,7 +174,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+file_prefix+"_torques.png")
+plt.savefig("./apex_plots/"+RUN_NAME+"_torques.png")
 
 # Graph GRF data
 fig, ax = plt.subplots(2, figsize=(10, 5))
@@ -205,7 +189,7 @@ ax[1].set_title("Right Foot")
 ax[1].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+file_prefix+"_GRFs.png")
+plt.savefig("./apex_plots/"+RUN_NAME+"_GRFs.png")
 
 # Graph PD target data
 fig, ax = plt.subplots(2, 5, figsize=(15, 5))
@@ -221,7 +205,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+file_prefix+"_targets.png")
+plt.savefig("./apex_plots/"+RUN_NAME+"_targets.png")
 
 # Graph action data
 fig, ax = plt.subplots(2, 5, figsize=(15, 5))
@@ -237,7 +221,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+file_prefix+"_actions.png")
+plt.savefig("./apex_plots/"+RUN_NAME+"_actions.png")
 
 # Graph state data
 fig, ax = plt.subplots(2, 2, figsize=(10, 5))
@@ -255,7 +239,7 @@ for i in range(2):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+file_prefix+"_state.png")
+plt.savefig("./apex_plots/"+RUN_NAME+"_state.png")
 
 # Graph feet qpos data
 fig, ax = plt.subplots(5, 2, figsize=(12, 6), sharex=True, sharey='row')
@@ -278,7 +262,7 @@ for i in range(2):
         ax[j+2][i].set_ylabel("Velocity (m/s)")    
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+file_prefix+"_feet.png")
+plt.savefig("./apex_plots/"+RUN_NAME+"_feet.png")
 
 # Graph phase portrait for actuated joints
 fig, ax = plt.subplots(1, 5, figsize=(15, 4))
@@ -294,7 +278,7 @@ for i in range(5):
     ax[i].set_xlabel("Angle")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+file_prefix+"_phaseportrait.png")
+plt.savefig("./apex_plots/"+RUN_NAME+"_phaseportrait.png")
 
 # Misc Plotting
 fig, ax = plt.subplots()
@@ -305,4 +289,4 @@ t = np.linspace(0, num_steps-1, num_steps*simrate)
 ax.set_ylabel("Height (m)")
 ax.set_title("Pelvis Height")
 ax.plot(t, pelheight)
-plt.savefig("./apex_plots/"+file_prefix+"_misc.png")
+plt.savefig("./apex_plots/"+RUN_NAME+"_misc.png")

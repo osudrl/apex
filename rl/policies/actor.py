@@ -136,7 +136,7 @@ class FF_Actor(Actor):
 
     self.max_action = max_action
 
-  def forward(self, state):
+  def forward(self, state, deterministic=True):
     x = state
     for idx, layer in enumerate(self.actor_layers):
       x = self.nonlinearity(layer(x))
@@ -181,7 +181,7 @@ class LSTM_Actor(Actor):
     self.hidden = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
 
-  def forward(self, x):
+  def forward(self, x, deterministic=True):
     dims = len(x.size())
 
     if dims == 3: # if we get a batch of trajectories

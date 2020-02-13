@@ -1,3 +1,6 @@
+import sys
+sys.path.append("../..") # Adds higher directory to python modules path.
+
 from cassie.cassiemujoco.cassieUDP import *
 from cassie.cassiemujoco.cassiemujoco_ctypes import *
 
@@ -180,7 +183,10 @@ def log(sto="final"):
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_10_v6.pt")
+RUN_NAME = "7b7e24-seed0"
+POLICY_PATH = "../../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
+
+policy = torch.load("POLICY_PATH")
 policy.eval()
 
 max_speed = 2.0

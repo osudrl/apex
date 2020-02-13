@@ -1,3 +1,6 @@
+import sys
+sys.path.append("..") # Adds higher directory to python modules path.
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -9,7 +12,6 @@ import ray
 from functools import partial
 
 from cassie import CassieEnv
-from cassie.speed_env import CassieEnv_speed
 
 from rl.policies.actor import GaussianMLP_Actor
 
@@ -19,12 +21,12 @@ from rl.policies.actor import GaussianMLP_Actor
 def reset_to_phase(env, policy, phase):
     state = torch.Tensor(cassie_env.reset_for_test())
     for i in range(2*(env.phaselen + 1)):
-        action = policy.act(state, True)
+        action = policy(state, True)
         action = action.data.numpy()
         state, reward, done, _ = cassie_env.step(action)
         state = torch.Tensor(state)
     for i in range(phase):
-        action = policy.act(state, True)
+        action = policy(state, True)
         action = action.data.numpy()
         state, reward, done, _ = cassie_env.step(action)
         state = torch.Tensor(state)
@@ -57,7 +59,7 @@ def compute_perturbs(cassie_env, policy, wait_time, perturb_duration, perturb_si
                 start_t = curr_time
                 while curr_time < start_t + perturb_duration:
                     cassie_env.sim.apply_force([force_x, force_y, 0, 0, 0, 0], perturb_body)
-                    action = policy.act(state, True)
+                    action = policy(state, True)
                     action = action.data.numpy()
                     state, reward, done, _ = cassie_env.step(action)
                     state = torch.Tensor(state)
@@ -66,7 +68,7 @@ def compute_perturbs(cassie_env, policy, wait_time, perturb_duration, perturb_si
                 cassie_env.sim.apply_force([0, 0, 0, 0, 0, 0], perturb_body)
                 start_t = curr_time
                 while curr_time < start_t + wait_time:
-                    action = policy.act(state, True)
+                    action = policy(state, True)
                     action = action.data.numpy()
                     state, reward, done, _ = cassie_env.step(action)
                     state = torch.Tensor(state)
@@ -229,14 +231,14 @@ def plot_perturb(filename):
 # plot_perturb("./test_perturb_eval_phase.npy")
 # exit()
 
+RUN_NAME = "7b7e24-seed0"
+POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
+
 # Load environment and policy
 # env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
-cassie_env = CassieEnv_speed("walking", clock_based=True, state_est=True)
+cassie_env = CassieEnv("walking", clock_based=True, state_est=True)
 
-file_prefix = "control_0"
-# file_prefix = "sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.2_vels_avgdiff_simrate15_evenweight_actpenalty"
-# file_prefix = "nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2"
-policy = torch.load("./trained_models/{}.pt".format(file_prefix))
+policy = torch.load(POLICY_PATH)
 # policy.bounded = False
 policy.eval()
 

@@ -27,9 +27,11 @@ class MirrorPPO(PPO):
                env_fn
     ):
         env = env_fn()
-        mirror_observation = env.mirror_observation
+        
         if env.clock_based:
             mirror_observation = env.mirror_clock_observation
+        else:
+            mirror_observation = env.mirror_observation
         mirror_action = env.mirror_action
 
         minibatch_size = self.minibatch_size or advantages.numel()

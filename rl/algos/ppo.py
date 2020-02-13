@@ -221,7 +221,7 @@ class PPO:
             return merged
         return merge(result)
 
-    def update_policy(self, obs_batch, action_batch, return_batch, advantage_batch, mask, mirror_observation=None, mirror_action=None):
+    def update_policy(self, obs_batch, action_batch, return_batch, advantage_batch, mask, env_fn, mirror_observation=None, mirror_action=None):
         policy = self.policy
         critic = self.critic
         old_policy = self.old_policy
@@ -248,6 +248,7 @@ class PPO:
 
         # Mirror Symmetry Loss
         if mirror_observation is not None and mirror_action is not None:
+          env = env_fn()
           deterministic_actions = policy(obs_batch)
           if env.clock_based:
               mir_obs = mirror_observation(obs_batch, env.clock_inds)
@@ -361,7 +362,7 @@ class PPO:
                         advantage_batch = advantages[indices]
                         mask            = 1
 
-                    scalars = self.update_policy(obs_batch, action_batch, return_batch, advantage_batch, mask, mirror_observation=obs_mirr, mirror_action=act_mirr)
+                    scalars = self.update_policy(obs_batch, action_batch, return_batch, advantage_batch, mask, env_fn, mirror_observation=obs_mirr, mirror_action=act_mirr)
                     actor_loss, entropy, critic_loss, ratio, kl = scalars
 
                     entropies.append(entropy)
@@ -407,7 +408,7 @@ def run_experiment(args):
     torch.set_num_threads(1)
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror, speed=args.speed, clock_based=args.clock_based, history=args.history)
+    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, mirror=args.mirror, clock_based=args.clock_based, history=args.history)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -446,6 +447,7 @@ def run_experiment(args):
     print()
     print("Synchronous Distributed Proximal Policy Optimization:")
     print("\tenv:            {}".format(args.env_name))
+    print("\trun name:       {}".format(args.run_name))
     print("\tmax traj len:   {}".format(args.max_traj_len))
     print("\tseed:           {}".format(args.seed))
     print("\tmirror:         {}".format(args.mirror))

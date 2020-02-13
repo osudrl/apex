@@ -95,7 +95,7 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                     state[20:23] = torch.FloatTensor(new_translationalVelocity)
                
                 # Get action
-                action = policy.act(state, deterministic)
+                action = policy(state, deterministic)
                 if deterministic:
                     action = action.data.numpy()
                 else:
