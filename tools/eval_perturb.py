@@ -231,15 +231,21 @@ def plot_perturb(filename):
 # plot_perturb("./test_perturb_eval_phase.npy")
 # exit()
 
-RUN_NAME = "7b7e24-seed0"
-POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
+import argparse
+import pickle
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--path", type=str, default=None, help="path to folder containing policy and run details")
+args = parser.parse_args()
+run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
+
+# RUN_NAME = "7b7e24-seed0"
+# POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
 
 # Load environment and policy
 # env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
-cassie_env = CassieEnv("walking", clock_based=True, state_est=True)
-
-policy = torch.load(POLICY_PATH)
-# policy.bounded = False
+cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
+policy = torch.load(args.path + "actor.pt")
 policy.eval()
 
 wait_time = 4

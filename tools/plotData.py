@@ -9,8 +9,24 @@ import time
 
 from cassie import CassieEnv
 
-RUN_NAME = "7b7e24-seed0"
-POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
+import argparse
+import pickle
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--path", type=str, default=None, help="path to folder containing policy and run details")
+args = parser.parse_args()
+run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
+
+RUN_NAME = run_args.run_name if run_args.run_name != None else "plot"
+
+# RUN_NAME = "7b7e24-seed0"
+# POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
+
+# Load environment and policy
+# env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
+cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
+policy = torch.load(args.path + "actor.pt")
+policy.eval()
 
 def avg_pols(policies, state):
     total_act = np.zeros(10)
@@ -18,9 +34,6 @@ def avg_pols(policies, state):
         _, action = policy(state, False)
         total_act += action.data[0].numpy()
     return total_act / len(policies)
-
-# Load environment and policy
-cassie_env = CassieEnv("walking", clock_based=True, state_est=True)
 
 obs_dim = cassie_env.observation_space.shape[0] # TODO: could make obs and ac space static properties
 action_dim = cassie_env.action_space.shape[0]
@@ -30,11 +43,6 @@ no_delta = True
 limittargs = False
 lininterp = False
 offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
-
-policy = torch.load(POLICY_PATH)
-# policy.bounded = False
-# policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
-policy.eval()
 
 policies = []
 if do_multi:
@@ -174,7 +182,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+RUN_NAME+"_torques.png")
+plt.savefig(args.path+RUN_NAME+"_torques.png")
 
 # Graph GRF data
 fig, ax = plt.subplots(2, figsize=(10, 5))
@@ -189,7 +197,7 @@ ax[1].set_title("Right Foot")
 ax[1].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+RUN_NAME+"_GRFs.png")
+plt.savefig(args.path+RUN_NAME+"_GRFs.png")
 
 # Graph PD target data
 fig, ax = plt.subplots(2, 5, figsize=(15, 5))
@@ -205,7 +213,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+RUN_NAME+"_targets.png")
+plt.savefig(args.path+RUN_NAME+"_targets.png")
 
 # Graph action data
 fig, ax = plt.subplots(2, 5, figsize=(15, 5))
@@ -221,7 +229,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+RUN_NAME+"_actions.png")
+plt.savefig(args.path+RUN_NAME+"_actions.png")
 
 # Graph state data
 fig, ax = plt.subplots(2, 2, figsize=(10, 5))
@@ -239,7 +247,7 @@ for i in range(2):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+RUN_NAME+"_state.png")
+plt.savefig(args.path+RUN_NAME+"_state.png")
 
 # Graph feet qpos data
 fig, ax = plt.subplots(5, 2, figsize=(12, 6), sharex=True, sharey='row')
@@ -262,7 +270,7 @@ for i in range(2):
         ax[j+2][i].set_ylabel("Velocity (m/s)")    
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+RUN_NAME+"_feet.png")
+plt.savefig(args.path+RUN_NAME+"_feet.png")
 
 # Graph phase portrait for actuated joints
 fig, ax = plt.subplots(1, 5, figsize=(15, 4))
@@ -278,7 +286,7 @@ for i in range(5):
     ax[i].set_xlabel("Angle")
 
 plt.tight_layout()
-plt.savefig("./apex_plots/"+RUN_NAME+"_phaseportrait.png")
+plt.savefig(args.path+RUN_NAME+"_phaseportrait.png")
 
 # Misc Plotting
 fig, ax = plt.subplots()
@@ -289,4 +297,4 @@ t = np.linspace(0, num_steps-1, num_steps*simrate)
 ax.set_ylabel("Height (m)")
 ax.set_title("Pelvis Height")
 ax.plot(t, pelheight)
-plt.savefig("./apex_plots/"+RUN_NAME+"_misc.png")
+plt.savefig(args.path+RUN_NAME+"_misc.png")

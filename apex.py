@@ -25,7 +25,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, history=0, **kwargs):
+def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, history=0, **kwargs):
     from functools import partial
 
     """
@@ -46,7 +46,7 @@ def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics
         from cassie import CassieEnv, CassieStandingEnv
 
         if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, history=history)
+            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, history=history)
         elif path == 'CassieStandingEnv-v0':
             env_fn = partial(CassieStandingEnv, state_est=state_est)
 
@@ -122,12 +122,12 @@ def create_logger(args):
     # also pickle file for resuming training easily
     info_path = os.path.join(output_dir, "experiment.info")
     pkl_path = os.path.join(output_dir, "experiment.pkl")
+    with open(pkl_path, 'wb') as file:
+        pickle.dump(args, file)
     with open(info_path, 'w') as file:
         for key, val in arg_dict.items():
             file.write("%s: %s" % (key, val))
             file.write('\n')
-    with open(pkl_path, 'wb') as file:
-        pickle.dump(arg_dict, file)
 
     logger = SummaryWriter(output_dir, flush_secs=60) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
     print("Logging to " + color.BOLD + color.ORANGE + str(output_dir) + color.END)

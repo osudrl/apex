@@ -1,8 +1,8 @@
 import sys
 sys.path.append("..") # Adds higher directory to python modules path.
 
-RUN_NAME = "7b7e24-seed0"
-POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
+import argparse
+import pickle
 
 import numpy as np
 import torch
@@ -27,13 +27,19 @@ def reset_to_phase(env, policy, phase):
         state, reward, done, _ = cassie_env.step(action)
         state = torch.Tensor(state)
 
-# Load environment and policy
-cassie_env = CassieEnv("walking", clock_based=True, state_est=True)
+parser = argparse.ArgumentParser()
+parser.add_argument("--path", type=str, default=None, help="path to folder containing policy and run details")
+args = parser.parse_args()
+run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 
-policy = torch.load(POLICY_PATH)
-# policy.bounded = False
-# policy.eval()
-# empty_u = pd_in_t()
+# RUN_NAME = "7b7e24-seed0"
+# POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
+
+# Load environment and policy
+# env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
+cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
+policy = torch.load(args.path + "actor.pt")
+policy.eval()
 
 state = torch.Tensor(cassie_env.reset_for_test())
 # cassie_env.sim.step_pd(self.u)
