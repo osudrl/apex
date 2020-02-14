@@ -14,7 +14,7 @@ import random
 import pickle
 
 class CassieEnv_v2:
-  def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, reward="x", history=0):
+  def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, reward="iros_paper", history=0):
     self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
     self.vis = None
 
@@ -456,10 +456,14 @@ class CassieEnv_v2:
 
       if self.reward_func == "jonah_RNN":
           return jonah_RNN_reward(self)
+      elif self.reward_func == "aslip":
+          return aslip_reward(self, action)
       elif self.reward_func == "aslip_TaskSpace":
           return aslip_TaskSpace_reward(self, action)
-      else:
+      elif self.reward_func == "iros_paper":
           return iros_paper_reward(self)
+      else:
+          raise NotImplementedError
 
   # get the corresponding state from the reference trajectory for the current phase
   def get_ref_state(self, phase=None):
