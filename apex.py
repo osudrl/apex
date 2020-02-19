@@ -129,7 +129,7 @@ def create_logger(args):
             file.write("%s: %s" % (key, val))
             file.write('\n')
 
-    logger = SummaryWriter(output_dir, flush_secs=60) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
+    logger = SummaryWriter(output_dir, flush_secs=0.1) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
     print("Logging to " + color.BOLD + color.ORANGE + str(output_dir) + color.END)
 
     logger.dir = output_dir
