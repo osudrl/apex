@@ -180,7 +180,7 @@ if __name__ == "__main__":
         General arguments for configuring the environment
     """
     parser.add_argument("--traj", default="walking", type=str, help="reference trajectory to use. options are 'aslip', 'walking', 'stepping'")
-    parser.add_argument("--clock_based", default=True, action='store_true')
+    parser.add_argument("--clock_based", default=False, action='store_true')
     parser.add_argument("--state_est", default=True, action='store_true')
     parser.add_argument("--dyn_random", default=False, action='store_true')
     parser.add_argument("--no_delta", default=False, action='store_true')
