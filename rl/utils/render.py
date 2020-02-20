@@ -15,18 +15,18 @@ def isData():
 
 @torch.no_grad()
 def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05):
+
+    clock_based = env.clock_based
+    state_est = env.state_est
+    no_delta = env.no_delta
+    dynamics_randomization = env.dynamics_randomization
+
     state = torch.Tensor(env.reset_for_test())
-    env.speed = 0
-    # env.side_speed = 0
-    env.phase_add = 1
+    speed = 0
+
+    # env.side_speed = 
     orient_add = 0
     prev_foot = None
-
-    # Check if using StateEst or not
-    if env.observation_space.shape[0] >= 48:
-        is_stateest = True
-    else:
-        is_stateest = False
 
     render_state = env.render()
     old_settings = termios.tcgetattr(sys.stdin)
@@ -35,15 +35,15 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
         tty.setcbreak(sys.stdin.fileno())
         while render_state:
             if isData():
+
+                # CHOOSE SPEED, ORIENT, APPLY FORCE
                 c = sys.stdin.read(1)
                 if c == 'w':
-                    env.speed += .1
-                    # env.update_selected_trajectory(env.speed + .1)
-                    print("Increasing speed to: ", env.speed)
+                    speed += .1
+                    print("Increasing speed to: ", speed)
                 elif c == 's':
-                    env.speed -= .1
-                    # env.update_selected_trajectory(env.speed - .1)
-                    print("Decreasing speed to: ", env.speed)
+                    speed -= .1
+                    print("Decreasing speed to: ", speed)
                 # elif c == 'a':
                 #     env.side_speed += .1
                 #     print("Increasing side speed to: ", env.side_speed)
@@ -70,23 +70,37 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                     force_arr[push_dir] = push
                     env.sim.apply_force(force_arr)
                 
+                # SET SPEED
+                if env.aslip_traj:
+                    env.update_selected_trajectory(speed)
+                    print("foo")
                 else:
-                    pass
+                    env.speed = speed
+                
+            else:
+                pass
+
             if (not env.vis.ispaused()):
-                # Update orientation
+
                 quaternion = euler2quat(z=orient_add, y=0, x=0)
                 iquaternion = inverse_quaternion(quaternion)
-                if is_stateest:
+
+                if state_est:
                     curr_orient = state[1:5]
                     curr_transvel = state[14:17]
                 else:
                     curr_orient = state[2:6]
                     curr_transvel = state[20:23]
+                
                 new_orient = quaternion_product(iquaternion, curr_orient)
+
                 if new_orient[0] < 0:
                     new_orient = -new_orient
+
                 new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
-                if is_stateest:
+                
+                # UPDATE ORIENTATION
+                if state_est:
                     state[1:5] = torch.FloatTensor(new_orient)
                     state[14:17] = torch.FloatTensor(new_translationalVelocity)
                     state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
@@ -100,6 +114,8 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                     action = action.data.numpy()
                 else:
                     action = action.data[0].numpy()
+
+                print(env.phase)
 
                 state, reward, done, _ = env.step(action)
                 foot_pos = np.zeros(6)

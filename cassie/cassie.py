@@ -337,21 +337,20 @@ class CassieEnv_v2:
       self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
       if self.aslip_traj:
-        random_speed_idx = random.randint(0, self.num_speeds-1)
-        self.speed = self.speeds[random_speed_idx]
+        self.speed = 0
         # print("current speed: {}".format(self.speed))
-        self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
+        self.trajectory = self.trajectories[0] # switch the current trajectory
         self.phaselen = self.trajectory.length - 1
       else:
-        self.speed = (random.randint(0, 10)) / 10
+        self.speed = 0
     
-      self.phase = random.randint(0, self.phaselen)
+      self.phase = 0
       self.time = 0
       self.counter = 0
 
       qpos, qvel = self.get_ref_state(self.phase)
 
-      self.sim.full_reset()
+    #   self.sim.full_reset()
 
     #   self.sim.set_qpos(qpos)
     #   if self.aslip_traj:
