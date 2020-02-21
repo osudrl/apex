@@ -1,3 +1,6 @@
+import time
+import numpy as np
+import torch
 #validate the sensitivity of policy to environment parameters
 
 ##########To do#########
@@ -5,21 +8,23 @@
 #Get to run with user input of env and policy without iteration
 #Iterate through each parameter
 
-def iterativeValidation(policy, env, max_traj_len=1000, visualize=True, env_name=None, speed=0.0, state_est=True, clock_based=False):
-    # Follow apex.py and use an env_factory, or expect an env on input?
+def iterativeValidation(cassie_env, policy):
+    state = torch.Tensor(cassie_env.reset_for_test())
 
-    #if env_name is None:
-    #    env = env_factory(policy.env_name, speed=speed, state_est=state_est, clock_based=clock_based)()
-    #else:
-    #    env = env_factory(env_name, speed=speed, state_est=state_est, clock_based=clock_based)()
-
+    eval_start = time.time() 
     # This stuff was ripped out from Jonah's dynamics randomization.
     # We are leaving it as is while building the infrastructure for testing.
     # Future plan: Put all the damp/mass ranges into a tuple and iterate through,
     # at each iteration running a test with the current parameter randomized, and all
     # others default. Then log results and output in a sane and useful way.
 
-    damp = env.default_damping
+    # TODO: Edit below into usable format for setting up a sweep of values for
+    # dof damping and mass changing. Also setup ground friction values. The
+    # ultimate plan is to sweep over all joints and bodies that we care about
+    # and change their values, then run the sim for a few seconds and see if
+    # cassie falls over. then we will return an array of values representing
+    # the survival data for every parameter.
+    damp = cassie_env.default_damping
     weak_factor = 0.5
     strong_factor = 1.5
     pelvis_damp_range = [[damp[0], damp[0]], 
@@ -33,19 +38,19 @@ def iterativeValidation(policy, env, max_traj_len=1000, visualize=True, env_name
                     [damp[7]*weak_factor, damp[7]*strong_factor],
                     [damp[8]*weak_factor, damp[8]*strong_factor]]  # 6->8 and 19->21
 
-    achilles_damp_range = [[damp[9]*weak_factor,  damp[9]*strong_factor],
-                            [damp[10]*weak_factor, damp[10]*strong_factor], 
-                            [damp[11]*weak_factor, damp[11]*strong_factor]] # 9->11 and 22->24
+    #achilles_damp_range = [[damp[9]*weak_factor,  damp[9]*strong_factor],
+    #                       [damp[10]*weak_factor, damp[10]*strong_factor], 
+    #                       [damp[11]*weak_factor, damp[11]*strong_factor]] # 9->11 and 22->24
 
     knee_damp_range     = [[damp[12]*weak_factor, damp[12]*strong_factor]]   # 12 and 25
     shin_damp_range     = [[damp[13]*weak_factor, damp[13]*strong_factor]]   # 13 and 26
     tarsus_damp_range   = [[damp[14], damp[14]]]             # 14 and 27
-    heel_damp_range     = [[damp[15], damp[15]]]                           # 15 and 28
-    fcrank_damp_range   = [[damp[16]*weak_factor, damp[16]*strong_factor]]   # 16 and 29
-    prod_damp_range     = [[damp[17], damp[17]]]                           # 17 and 30
+    #heel_damp_range     = [[damp[15], damp[15]]]                           # 15 and 28
+    #fcrank_damp_range   = [[damp[16]*weak_factor, damp[16]*strong_factor]]   # 16 and 29
+    #prod_damp_range     = [[damp[17], damp[17]]]                           # 17 and 30
     foot_damp_range     = [[damp[18]*weak_factor, damp[18]*strong_factor]]   # 18 and 31
 
-    side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
+    side_damp = hip_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + foot_damp_range
     damp_range = pelvis_damp_range + side_damp + side_damp
     damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
@@ -82,35 +87,29 @@ def iterativeValidation(policy, env, max_traj_len=1000, visualize=True, env_name
 
     fric_noise = [np.random.uniform(0.4, 1.4)] + [np.random.uniform(3e-3, 8e-3)] + list(env.default_fric[2:])
 
-    env.sim.set_dof_damping(np.clip(damp_noise, 0, None))
-    env.sim.set_body_mass(np.clip(mass_noise, 0, None))
-    env.sim.set_body_ipos(com_noise)
-    env.sim.set_ground_friction(np.clip(fric_noise, 0, None))
+    cassie_env.sim.set_dof_damping(np.clip(damp_noise, 0, None))
+    cassie_env.sim.set_body_mass(np.clip(mass_noise, 0, None))
+    cassie_env.sim.set_body_ipos(com_noise)
+    cassie_env.sim.set_ground_friction(np.clip(fric_noise, 0, None))
+    
+    #TODO: Set a range of values to sweep for dof damping
 
-    # From policy_eval
-    while True:
-        state = env.reset()
-        done = False
-        timesteps = 0
-        eval_reward = 0
-        while not done and timesteps < max_traj_len:
-            if hasattr(env, 'simrate'):
-                start = time.time()
-            
-            action = policy.forward(torch.Tensor(state)).detach().numpy()
-            state, reward, done, _ = env.step(action)
-            if visualize:
-                env.render()
-            eval_reward += reward
-            timesteps += 1
+    for i in range(10):             # 10 is just a placeholder for how granular
+                                    # our sweep will be.
 
-            if hasattr(env, 'simrate'):
-                # assume 30hz (hack)
-                end = time.time()
-                delaytime = max(0, 1000 / 30000 - (end-start))
-                time.sleep(delaytime)
+        while not done:
+            reset(cassie_env, policy)
+            curr_time = cassie_env.sim.time()
 
-            print("Eval reward: ", eval_reward)
+            while curr_time < start_t + wait_time:
+                action = policy(state, True)
+                action = action.data.numpy()
+                state, reward, done, _ = cassie_env.step(action)
+                state = torch.Tensor(state)
+                curr_time = cassie_env.sim.time()
+                if casse_env.sim.qpos()[2] < 0.4:
+                    done = True
+                    break
 
 # Testing to see if the above is even working
 
@@ -189,24 +188,3 @@ iterativeValidation(policy, env)
 # [33] Right plantar rod
 # [34] Right foot            (Motor [9], Joint [5])
 
-# qvel layout
-# [ 0] Pelvis x
-# [ 1] Pelvis y
-# [ 2] Pelvis z
-# [ 3] Pelvis orientation wx
-# [ 4] Pelvis orientation wy
-# [ 5] Pelvis orientation wz
-# [ 6] Left hip roll         (Motor [0])
-# [ 7] Left hip yaw          (Motor [1])
-# [ 8] Left hip pitch        (Motor [2])
-# [ 9] Left knee             (Motor [3])
-# [10] Left shin                        (Joint [0])
-# [11] Left tarsus                      (Joint [1])
-# [12] Left foot             (Motor [4], Joint [2])
-# [13] Right hip roll        (Motor [5])
-# [14] Right hip yaw         (Motor [6])
-# [15] Right hip pitch       (Motor [7])
-# [16] Right knee            (Motor [8])
-# [17] Right shin                       (Joint [3])
-# [18] Right tarsus                     (Joint [4])
-# [19] Right foot            (Motor [9], Joint [5])
