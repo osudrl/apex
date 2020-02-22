@@ -124,69 +124,72 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.com_error         = 0
         self.com_vel_error     = 0
         self.orientation_error = 0
+        self.torque_cost = 0
+        self.smooth_cost = 0
 
         #### Dynamics Randomization ####
         self.dynamics_rand = False
         # Record default dynamics parameters
-        self.default_damping = self.sim.get_dof_damping()
-        self.default_mass = self.sim.get_body_mass()
-        self.default_ipos = self.sim.get_body_ipos()
-        self.default_fric = self.sim.get_ground_friction()
+        if self.dynamics_rand:
+            self.default_damping = self.sim.get_dof_damping()
+            self.default_mass = self.sim.get_body_mass()
+            self.default_ipos = self.sim.get_body_ipos()
+            self.default_fric = self.sim.get_ground_friction()
 
-        weak_factor = 0.8
-        strong_factor = 1.2
+            weak_factor = 0.8
+            strong_factor = 1.2
 
-        pelvis_damp_range = [[self.default_damping[0], self.default_damping[0]], 
-                               [self.default_damping[1], self.default_damping[1]], 
-                               [self.default_damping[2], self.default_damping[2]], 
-                               [self.default_damping[3], self.default_damping[3]], 
-                               [self.default_damping[4], self.default_damping[4]], 
-                               [self.default_damping[5], self.default_damping[5]]] 
+            pelvis_damp_range = [[self.default_damping[0], self.default_damping[0]], 
+                                [self.default_damping[1], self.default_damping[1]], 
+                                [self.default_damping[2], self.default_damping[2]], 
+                                [self.default_damping[3], self.default_damping[3]], 
+                                [self.default_damping[4], self.default_damping[4]], 
+                                [self.default_damping[5], self.default_damping[5]]] 
 
-        hip_damp_range = [[self.default_damping[6]*weak_factor, self.default_damping[6]*strong_factor],
-                        [self.default_damping[7]*weak_factor, self.default_damping[7]*strong_factor],
-                        [self.default_damping[8]*weak_factor, self.default_damping[8]*strong_factor]]  # 6->8 and 19->21
+            hip_damp_range = [[self.default_damping[6]*weak_factor, self.default_damping[6]*strong_factor],
+                            [self.default_damping[7]*weak_factor, self.default_damping[7]*strong_factor],
+                            [self.default_damping[8]*weak_factor, self.default_damping[8]*strong_factor]]  # 6->8 and 19->21
 
-        achilles_damp_range = [[self.default_damping[9]*weak_factor,  self.default_damping[9]*strong_factor],
-                                [self.default_damping[10]*weak_factor, self.default_damping[10]*strong_factor], 
-                                [self.default_damping[11]*weak_factor, self.default_damping[11]*strong_factor]] # 9->11 and 22->24
+            achilles_damp_range = [[self.default_damping[9]*weak_factor,  self.default_damping[9]*strong_factor],
+                                    [self.default_damping[10]*weak_factor, self.default_damping[10]*strong_factor], 
+                                    [self.default_damping[11]*weak_factor, self.default_damping[11]*strong_factor]] # 9->11 and 22->24
 
-        knee_damp_range     = [[self.default_damping[12]*weak_factor, self.default_damping[12]*strong_factor]]   # 12 and 25
-        shin_damp_range     = [[self.default_damping[13]*weak_factor, self.default_damping[13]*strong_factor]]   # 13 and 26
-        tarsus_damp_range   = [[self.default_damping[14], self.default_damping[14]]]             # 14 and 27
-        heel_damp_range     = [[self.default_damping[15], self.default_damping[15]]]                           # 15 and 28
-        fcrank_damp_range   = [[self.default_damping[16]*weak_factor, self.default_damping[16]*strong_factor]]   # 16 and 29
-        prod_damp_range     = [[self.default_damping[17], self.default_damping[17]]]                           # 17 and 30
-        foot_damp_range     = [[self.default_damping[18]*weak_factor, self.default_damping[18]*strong_factor]]   # 18 and 31
+            knee_damp_range     = [[self.default_damping[12]*weak_factor, self.default_damping[12]*strong_factor]]   # 12 and 25
+            shin_damp_range     = [[self.default_damping[13]*weak_factor, self.default_damping[13]*strong_factor]]   # 13 and 26
+            tarsus_damp_range   = [[self.default_damping[14], self.default_damping[14]]]             # 14 and 27
+            heel_damp_range     = [[self.default_damping[15], self.default_damping[15]]]                           # 15 and 28
+            fcrank_damp_range   = [[self.default_damping[16]*weak_factor, self.default_damping[16]*strong_factor]]   # 16 and 29
+            prod_damp_range     = [[self.default_damping[17], self.default_damping[17]]]                           # 17 and 30
+            foot_damp_range     = [[self.default_damping[18]*weak_factor, self.default_damping[18]*strong_factor]]   # 18 and 31
 
-        side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
-        self.damp_range = pelvis_damp_range + side_damp + side_damp
+            side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
+            self.damp_range = pelvis_damp_range + side_damp + side_damp
 
-        hi = 1.1
-        lo = 0.9
-        m = self.default_mass
-        pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
-        hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
-                                [lo*m[3],  hi*m[3]], 
-                                [lo*m[4],  hi*m[4]]] 
+            hi = 1.1
+            lo = 0.9
+            m = self.default_mass
+            pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
+            hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
+                                    [lo*m[3],  hi*m[3]], 
+                                    [lo*m[4],  hi*m[4]]] 
 
-        achilles_mass_range    = [[lo*m[5],  hi*m[5]]]  # 5 and 17
-        knee_mass_range        = [[lo*m[6],  hi*m[6]]]  # 6 and 18
-        knee_spring_mass_range = [[lo*m[7],  hi*m[7]]]  # 7 and 19
-        shin_mass_range        = [[lo*m[8],  hi*m[8]]]  # 8 and 20
-        tarsus_mass_range      = [[lo*m[9],  hi*m[9]]]  # 9 and 21
-        heel_spring_mass_range = [[lo*m[10], hi*m[10]]] # 10 and 22
-        fcrank_mass_range      = [[lo*m[11], hi*m[11]]] # 11 and 23
-        prod_mass_range        = [[lo*m[12], hi*m[12]]] # 12 and 24
-        foot_mass_range        = [[lo*m[13], hi*m[13]]] # 13 and 25
+            achilles_mass_range    = [[lo*m[5],  hi*m[5]]]  # 5 and 17
+            knee_mass_range        = [[lo*m[6],  hi*m[6]]]  # 6 and 18
+            knee_spring_mass_range = [[lo*m[7],  hi*m[7]]]  # 7 and 19
+            shin_mass_range        = [[lo*m[8],  hi*m[8]]]  # 8 and 20
+            tarsus_mass_range      = [[lo*m[9],  hi*m[9]]]  # 9 and 21
+            heel_spring_mass_range = [[lo*m[10], hi*m[10]]] # 10 and 22
+            fcrank_mass_range      = [[lo*m[11], hi*m[11]]] # 11 and 23
+            prod_mass_range        = [[lo*m[12], hi*m[12]]] # 12 and 24
+            foot_mass_range        = [[lo*m[13], hi*m[13]]] # 13 and 25
 
-        side_mass = hip_mass_range + achilles_mass_range \
-                    + knee_mass_range + knee_spring_mass_range \
-                    + shin_mass_range + tarsus_mass_range \
-                    + heel_spring_mass_range + fcrank_mass_range \
-                    + prod_mass_range + foot_mass_range
+            side_mass = hip_mass_range + achilles_mass_range \
+                        + knee_mass_range + knee_spring_mass_range \
+                        + shin_mass_range + tarsus_mass_range \
+                        + heel_spring_mass_range + fcrank_mass_range \
+                        + prod_mass_range + foot_mass_range
 
-        self.mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
+            self.mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
 
         # self.delta_x_min, self.delta_x_max = self.default_ipos[3] - 0.05, self.default_ipos[3] + 0.05
         # self.delta_y_min, self.delta_y_max = self.default_ipos[4] - 0.05, self.default_ipos[4] + 0.05
@@ -196,6 +199,8 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.orient_time = 500
         self.prev_action = None
         self.curr_action = None
+        self.prev_torque = None
+        self.y_offset = 0
 
         if self.state_est:
             self.clock_inds = [46, 47]
@@ -257,14 +262,16 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.com_error         = 0
         self.com_vel_error     = 0
         self.orientation_error = 0
+        self.torque_cost = 0
+        self.smooth_cost = 0
 
         for i in range(self.simrate):
             self.step_simulation(action)
-            qpos = np.copy(self.sim.qpos())
-            qvel = np.copy(self.sim.qvel())
-            ref_lpos, ref_rpos, ref_lvel, ref_rvel = self.get_ref_foot(self.phase, i+1)
+            # qpos = np.copy(self.sim.qpos())
+            # qvel = np.copy(self.sim.qvel())
+            # ref_lpos, ref_rpos, ref_lvel, ref_rvel = self.get_ref_foot(self.phase, i+1)
             # Calculate foot pos and vel diff
-            self.sim.foot_pos(foot_pos)
+            # self.sim.foot_pos(foot_pos)
             # lfoot = np.copy(self.foot_traj.lfoot[int(self.phase * self.simrate) + i+1, :])
             # rfoot = np.copy(self.foot_traj.rfoot[int(self.phase * self.simrate) + i+1, :])
             # lfoot_vel = np.copy(self.foot_traj.lfoot_vel[int(self.phase * self.simrate) + i+1, :])
@@ -273,20 +280,20 @@ class CassieEnv_speed_no_delta_neutral_foot:
             # self.r_foot_diff += (np.linalg.norm(foot_pos[3:6] - rfoot) - self.r_foot_diff) / (i+1)
             # self.l_footvel_diff += (np.linalg.norm(self.lfoot_vel - lfoot_vel) - self.l_footvel_diff) / (i+1)
             # self.r_footvel_diff += (np.linalg.norm(self.rfoot_vel - rfoot_vel) - self.r_footvel_diff) / (i+1)
-            self.l_foot_diff += np.linalg.norm(foot_pos[0:3] - ref_lpos)
-            self.r_foot_diff += np.linalg.norm(foot_pos[3:6] - ref_rpos)
-            self.l_footvel_diff += np.linalg.norm(self.lfoot_vel - ref_lvel)
-            self.r_footvel_diff += np.linalg.norm(self.rfoot_vel - ref_rvel)
+            # self.l_foot_diff += np.linalg.norm(foot_pos[0:3] - ref_lpos)
+            # self.r_foot_diff += np.linalg.norm(foot_pos[3:6] - ref_rpos)
+            # self.l_footvel_diff += np.linalg.norm(self.lfoot_vel - ref_lvel)
+            # self.r_footvel_diff += np.linalg.norm(self.rfoot_vel - ref_rvel)
 
             # Calculate qpos diffs
-            ref_pos = np.copy(self.trajectory.qpos[int(self.phase*self.simrate)+i+1])
-            ref_pos[0] *= self.speed
-            ref_pos[0] += (self.trajectory.qpos[-1, 0]- self.trajectory.qpos[0, 0])* self.counter * self.speed
+            # ref_pos = np.copy(self.trajectory.qpos[int(self.phase*self.simrate)+i+1])
+            # ref_pos[0] *= self.speed
+            # ref_pos[0] += (self.trajectory.qpos[-1, 0]- self.trajectory.qpos[0, 0])* self.counter * self.speed
 
             # center of mass: x, y, z
-            self.com_error += np.inner(ref_pos[0:3] - qpos[0:3], ref_pos[0:3] - qpos[0:3])
-            self.com_vel_error += np.abs(qvel[0] - self.speed)
-            self.orientation_error += np.inner(ref_pos[3:7] - qpos[3:7], ref_pos[3:7] - qpos[3:7])
+            # self.com_error += np.inner(ref_pos[0:3] - qpos[0:3], ref_pos[0:3] - qpos[0:3])
+            # self.com_vel_error += np.abs(qvel[0] - self.speed)
+            # self.orientation_error += np.inner(ref_pos[3:7] - qpos[3:7], ref_pos[3:7] - qpos[3:7])
 
             # curr_l_yfoot = np.abs(foot_pos[2] - self.foot_traj.lfoot[int(self.phase*self.simrate) + i+1, 2])
             # curr_r_yfoot = np.abs(foot_pos[5] - self.foot_traj.rfoot[int(self.phase*self.simrate) + i+1, 2])
@@ -297,13 +304,25 @@ class CassieEnv_speed_no_delta_neutral_foot:
             # self.l_footvel_diff += (curr_l_yfoot_vel - self.l_footvel_diff) / (i + 1)
             # self.r_footvel_diff += (curr_r_yfoot_vel - self.r_footvel_diff) / (i + 1)
 
-        self.com_error         /= self.simrate 
-        self.com_vel_error     /= self.simrate
-        self.orientation_error /= self.simrate 
-        self.l_foot_diff       /= self.simrate
-        self.r_foot_diff       /= self.simrate
-        self.l_footvel_diff    /= self.simrate
-        self.r_footvel_diff    /= self.simrate
+            # Torque costs
+            curr_torques = np.array(self.cassie_state.motor.torque[:])
+            self.torque_cost += 0.00008*np.linalg.norm(np.square(curr_torques))
+            if self.prev_torque is not None:
+                self.smooth_cost += 0.1*np.linalg.norm(np.square(curr_torques - self.prev_torque))
+            else:
+                self.smooth_cost += 0
+            self.prev_torque = curr_torques
+
+
+        # self.com_error          /= self.simrate 
+        # self.com_vel_error      /= self.simrate
+        # self.orientation_error  /= self.simrate 
+        # self.l_foot_diff        /= self.simrate
+        # self.r_foot_diff        /= self.simrate
+        # self.l_footvel_diff     /= self.simrate
+        # self.r_footvel_diff     /= self.simrate
+        self.torque_cost        /= self.simrate
+        self.smooth_cost        /= self.simrate
 
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -311,7 +330,7 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.time  += 1
         self.phase += self.phase_add
         # Assuming max traj len when sampling is 400
-        # self.speed = self.speed_schedule[min(int(np.floor(self.time/100)), 3)]
+        # self.speed = self.speed_schedule[min(int(np.floor(self.time/100)), 2)]
 
         if self.phase > self.phaselen:
             self.phase = 0
@@ -338,7 +357,7 @@ class CassieEnv_speed_no_delta_neutral_foot:
         orientation = random.randint(-10, 10) * np.pi / 25
         quaternion = euler2quat(z=orientation, y=0, x=0)
         qpos[3:7] = quaternion
-        self.y_offset = 0#4*random.random()
+        self.y_offset = 0#random.uniform(-3.5, 3.5)
         qpos[1] = self.y_offset
 
         self.sim.set_qpos(qpos)
@@ -347,33 +366,36 @@ class CassieEnv_speed_no_delta_neutral_foot:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = (random.randint(-5, 30)) / 10
-        # self.speed_schedule = np.random.randint(-5, 30, size=4) / 10
+        self.speed = (random.randint(0, 30)) / 10
+        # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed = self.speed_schedule[0]
         # Make sure that if speed is above 2, freq is at least 1.2
-        if self.speed > 2:# or np.any(self.speed_schedule > 2):
-            self.phase_add = 1.2 + 0.8*random.random()
+        if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
+            self.phase_add = 1.3 + 0.4*random.random()
         else:
             self.phase_add = 1 + random.random()
         # self.phase_add = 1
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
-        self.orient_time = 500#random.randint(100, 300) 
+        self.orient_time = 500#random.randint(50, 200) 
         self.lfoot_vel = np.zeros(3)
         self.rfoot_vel = np.zeros(3)
         self.l_foot_diff = 0
         self.r_foot_diff = 0
         self.l_footvel_diff = 0
         self.r_footvel_diff = 0
+        self.torque_cost = 0
+        self.smooth_cost = 0
         self.prev_action = None
+        self.prev_torque = None
 
         if self.dynamics_rand:
             #### Dynamics Randomization ####
-            damp_noise = [np.random.uniform(a, b) for a, b in self.damp_range]
-            mass_noise = [np.random.uniform(a, b) for a, b in self.mass_range]
+            # damp_noise = [np.random.uniform(a, b) for a, b in self.damp_range]
+            # mass_noise = [np.random.uniform(a, b) for a, b in self.mass_range]
             # com_noise = [0, 0, 0] + [np.random.uniform(self.delta_x_min, self.delta_x_min)] + [np.random.uniform(self.delta_y_min, self.delta_y_max)] + [0] + list(self.default_ipos[6:])
             fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
-            self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
-            self.sim.set_body_mass(np.clip(mass_noise, 0, None))
+            # self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
+            # self.sim.set_body_mass(np.clip(mass_noise, 0, None))
             # self.sim.set_body_ipos(com_noise)
             self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
 
@@ -387,12 +409,18 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.time = 0
         self.counter = 0
         self.speed = 1
+        self.speed_schedule = self.speed * np.ones(3)
+        self.orient_add = 0
+        self.orient_time = 500
+        self.y_offset = 0
         self.phase_add = 1
 
         qpos, qvel = self.get_ref_state(self.phase)
 
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
+
+        # self.sim.reset()
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -402,12 +430,17 @@ class CassieEnv_speed_no_delta_neutral_foot:
         self.r_foot_diff = 0
         self.l_footvel_diff = 0
         self.r_footvel_diff = 0
+        self.torque_cost = 0
+        self.smooth_cost = 0
         self.prev_action = None
+        self.prev_torque = None
 
-        self.sim.set_dof_damping(self.default_damping)
-        self.sim.set_body_mass(self.default_mass)
-        self.sim.set_body_ipos(self.default_ipos)
-        self.sim.set_ground_friction(self.default_fric)
+        if self.dynamics_rand:
+            # self.sim.set_dof_damping(self.default_damping)
+            # self.sim.set_body_mass(self.default_mass)
+            # self.sim.set_body_ipos(self.default_ipos)
+            self.sim.set_ground_friction(self.default_fric)
+            self.sim.set_const()
 
 
         return self.get_full_state()
@@ -521,18 +554,21 @@ class CassieEnv_speed_no_delta_neutral_foot:
         orient_targ = np.array([1, 0, 0, 0])
         speed_targ = np.array([self.speed, 0, 0])
         if self.time >= self.orient_time:
-            orient_targ = quaternion = euler2quat(z=self.orient_add, y=0, x=0)
-            iquaternion = inverse_quaternion(quaternion)
+            orient_targ = euler2quat(z=self.orient_add, y=0, x=0)
+            iquaternion = inverse_quaternion(orient_targ)
             speed_targ = rotate_by_quaternion(speed_targ, iquaternion)
+            new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
+            if new_orient[0] < 0:
+                new_orient = -new_orient
         forward_diff = np.abs(qvel[0] - speed_targ[0])
         orient_diff = 1 - np.inner(orient_targ, qpos[3:7]) ** 2
-        # # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
-        y_vel = np.abs(qvel[1] - speed_targ[1])
-        if forward_diff < 0.03:
+        # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+        y_vel = 2*np.abs(qvel[1] - speed_targ[1])
+        if forward_diff < 0.05:
            forward_diff = 0
-        if y_vel < 0.03:
+        if y_vel < 0.3:
           y_vel = 0
-        straight_diff = np.abs(qpos[1] - self.y_offset)
+        straight_diff = 10*np.abs(qpos[1] - self.y_offset)
         if straight_diff < 0.05:
           straight_diff = 0
         # ######## Pelvis z accel penalty #########
@@ -570,37 +606,39 @@ class CassieEnv_speed_no_delta_neutral_foot:
         # # if self.r_high:
         # #     rfoot_vel_bonus = self.rfoot_vel * 0.3
         # ######## Foot orientation ########
-        lfoot_orient = 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.leftFoot.orientation[:]) ** 2
-        rfoot_orient = 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.rightFoot.orientation[:]) ** 2
+        # lfoot_orient = 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.leftFoot.orientation[:]) ** 2
+        # rfoot_orient = 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.rightFoot.orientation[:]) ** 2
         ######## Hip yaw ########
-        rhipyaw = np.abs(qpos[22])
-        lhipyaw = np.abs(qpos[8])
-        if lhipyaw < 0.05:
-            lhipyaw = 0
-        if rhipyaw < 0.05:
-            rhipyaw = 0
+        # rhipyaw = np.abs(qpos[22])
+        # lhipyaw = np.abs(qpos[8])
+        # if lhipyaw < 0.05:
+        #     lhipyaw = 0
+        # if rhipyaw < 0.05:
+        #     rhipyaw = 0
         ######## Hip roll penalty #########
-        lhiproll = np.abs(qpos[7])
-        rhiproll = np.abs(qpos[21])
-        if lhiproll < 0.05:
-            lhiproll = 0
-        if rhiproll < 0.05:
-            rhiproll = 0
+        # lhiproll = np.abs(qpos[7])
+        # rhiproll = np.abs(qpos[21])
+        # if lhiproll < 0.05:
+        #     lhiproll = 0
+        # if rhiproll < 0.05:
+        #     rhiproll = 0
         ######## Prev action penalty ########
-        if self.prev_action is not None:
-            prev_penalty = np.linalg.norm(self.curr_action - self.prev_action) / 10 #* (30/self.simrate)
-        else:
-            prev_penalty = 0
-
+        # if self.prev_action is not None:
+        #     prev_penalty = np.linalg.norm(self.curr_action - self.prev_action) / 10 #* (30/self.simrate)
+        # else:
+        #     prev_penalty = 0
 
         # reward = .2*np.exp(-self.com_vel_error) + .1*np.exp(-self.com_error) + .1*np.exp(-self.orientation_error) \
         #         + .1*np.exp(-20*self.l_foot_diff) + .1*np.exp(-5*self.l_footvel_diff) \
         #         + .1*np.exp(-20*self.r_foot_diff) + .1*np.exp(-5*self.r_footvel_diff) \
                 # + .1*np.exp(-lfoot_orient) + .1*np.exp(-rfoot_orient)
-        reward = .2*np.exp(-forward_diff) + .1*np.exp(-orient_diff) + .1*np.exp(-y_vel) \
-                    + 0.075*np.exp(-lfoot_orient) + 0.075*np.exp(-rfoot_orient) \
-                     + .15*np.exp(-straight_diff) \
-                     + .075*np.exp(-10*lhipyaw) + .075*np.exp(-10*rhipyaw) + .075*np.exp(-10*lhiproll) + .075*np.exp(-10*rhiproll)
+        reward = .3*np.exp(-forward_diff) + .15*np.exp(-orient_diff) + .1*np.exp(-y_vel) \
+                    + .25*np.exp(-straight_diff) \
+                    + .1*np.exp(-self.torque_cost) + .1*np.exp(-self.smooth_cost)
+                    
+                     
+                    #  + 0.075*np.exp(-lfoot_orient) + 0.075*np.exp(-rfoot_orient) \
+                    #  + .075*np.exp(-10*lhipyaw) + .075*np.exp(-10*rhipyaw) + .075*np.exp(-10*lhiproll) + .075*np.exp(-10*rhiproll)
         #         + .1*np.exp(-20*self.l_foot_diff) + .1*np.exp(-20*self.r_foot_diff) \
         #         + .1*np.exp(-5*self.l_footvel_diff) + .1*np.exp(-5*self.r_footvel_diff)
         # - lfoot_vel_bonus - rfoot_vel_bonus - foot_penalty

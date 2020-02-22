@@ -21,7 +21,7 @@ import numpy as np
 _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # Initialize libcassiesim
-cassie_mujoco_init(str.encode(_dir_path+"/cassie_crown.xml"))
+cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 
 # Interface classes
 class CassieSim:
@@ -81,6 +81,9 @@ class CassieSim:
 
     def release(self):
         cassie_sim_release(self.c)
+
+    def reset(self):
+        cassie_sim_full_reset(self.c)
 
     def apply_force(self, xfrc, body=1):
         xfrc_array = (ctypes.c_double * 6)()

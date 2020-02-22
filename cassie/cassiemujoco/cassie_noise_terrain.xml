@@ -66,7 +66,7 @@
     <mesh name='right-foot-crank'   scale='1 1 -1' file='foot-crank.stl'/>
     <mesh name='right-plantar-rod'  scale='1 1 -1' file='plantar-rod.stl'/>
     <mesh name='right-foot'         scale='1 1 -1' file='foot.stl'/>
-    <hfield name='hf1' file="/homes/jdao/apex/cassie/cassiemujoco/terrains/noisy.png" size="20 5 0.03 0.0001"/>
+    <hfield name='hf1' file="/homes/jdao/apex/cassie/cassiemujoco/terrains/noisy.png" size="20 5 0.015 0.0001"/>
   </asset>
 
   <worldbody>

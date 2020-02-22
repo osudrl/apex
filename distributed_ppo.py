@@ -83,20 +83,26 @@ parser.add_argument("--max_grad_norm", type=float, default=0.5, help="Value to c
 parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
 
 args = parser.parse_args()
+simrate = 60
+args.n_itr = 20000
 args.mirror = True
 args.state_est = True
-args.num_procs = 112
-args.num_steps = 12000 // args.num_procs
-args.input_norm_steps = 100
+args.num_procs = 64 - 16*int(np.log2(60 / simrate))
+args.num_steps = (12000 + 8000*(int(60/simrate)-1)) // args.num_procs
+args.input_norm_steps = 10000
 args.minibatch_size = 2048
 args.lr = 1e-4
 args.epochs = 5
-args.max_traj_len = 300
+args.max_traj_len = 300 * int(60/simrate)
 args.seed = int(time.time())
 args.max_grad_norm = 0.05
 args.use_gae = False
-args.name = "fwrd_StateEst_symtuples_bounded_speedmatch_SGD_lr1e-5"
-args.logdir = "./logs/test/"
+args.name = "5k_freq1-1.7_torquecost_smoothcost"
+# args.name = "fwrd_walk_StateEst_origtrajmatch"
+# args.name = "sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.4_vels_avgdiff_simrate15_savedvels_cont"#_pelaccel_hipyaw_footxypenalty"
+# args.name = "sidestep_StateEst_foottrajmatchz_speed1.0_fixedheightfreq_fixedtdvel_avgdiff_minnegzvel_torquecost_smoothcost"
+# args.name = "sidestep_StateEst_speedmatch_footheightnegzvel"
+args.logdir = "./logs/5k/"
 # args.name = "test"
 # args.logdir = "./logs/test/"
 # Check if policy name already exists. If it does, increment filename
@@ -139,8 +145,8 @@ if __name__ == "__main__":
 
         # set up cassie environment
         # env_fn = functools.partial(CassieEnv, "walking", clock_based=True, state_est=args.state_est)
-        env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=args.state_est)
-        # env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
+        # env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
 
@@ -175,12 +181,15 @@ if __name__ == "__main__":
     # policy = GaussianMLP(
     #     obs_dim, action_dim, 
     #     nonlinearity="relu", 
-    #     bounded=True, 
+    #     bounded=False, 
     #     init_std=np.exp(-2), 
     #     learn_std=False,
     #     normc_init=False
     # )
-    policy = torch.load("./trained_models/fwrd_StateEst_mirloss_trajmatch.pt")
+    # policy = torch.load("./trained_models/fwrd_walk_StateEst_speed-05-1_freq1_foottraj_land0.2_simrate15_(1).pt")
+    # policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_(3).pt")
+    # policy = torch.load("./trained_models/sidestep_StateEst_iktrajmatch_fixedheightfreq_avgdiff.pt")
+    # policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.4_vels_avgdiff_simrate15_savedvels.pt")
 
     # policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
     # normalizer = PreNormalizer(iter=args.input_norm_steps, noise_std=2, policy=policy, online=False)
@@ -190,8 +199,11 @@ if __name__ == "__main__":
     # policy.obs_std = torch.Tensor(std)
 
     # Load previous policy
-    #policy = torch.load("./trained_models/sidestep/sidestep_StateEst_speed-05-2_freq1-2.pt")
-    #policy.bounded = False
+    policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
+    # policy = torch.load("./trained_models/5k_footorient_crown_width2_(1).pt")
+    # policy = torch.load("./trained_models/sidestep_StateEst_foottrajmatchz_speed1.0_fixedheightfreq_fixedtdvel_avgdiff_footorient_actpenalty.pt")
+    # policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_(3).pt")
+    policy.bounded = False
     
     policy.train(0)
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
