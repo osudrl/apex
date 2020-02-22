@@ -28,22 +28,23 @@ class CassieFootTrajectory:
         return len(self.rfoot)
 
 # Load environment and policy
-simrate = 15
-cassie_env = CassieEnv_speed_no_delta_neutral_foot("walking", simrate = simrate, clock_based=True, state_est=True)
-# cassie_env = CassieEnv_speed_sidestep("walking", simrate=simrate, clock_based=True, state_est=True)
+simrate = 60
+# cassie_env = CassieEnv_speed_no_delta_neutral_foot("walking", simrate = simrate, clock_based=True, state_est=True)
+cassie_env = CassieEnv_speed_sidestep("walking", simrate=simrate, clock_based=True, state_est=True)
 obs_dim = cassie_env.observation_space.shape[0] # TODO: could make obs and ac space static properties
 action_dim = cassie_env.action_space.shape[0]
 
 offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
-file_prefix = "fwrd_walk_StateEst_speed-05-1_freq1_foottraj_land0.2_simrate15_(1)"
-# file_prefix = "sidestep_StateEst_justfootmatch_simrate15_bigweight"
-# file_prefix = "sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.4_vels_avgdiff_simrate15_bigweight_actpenalty_retrain_(2)"
+# file_prefix = "fwrd_walk_StateEst_speed-05-1_freq1_foottraj_land0.2_simrate15_cont"
+file_prefix = "sidestep_StateEst_foottrajmatchz_speed1.0_fixedheightfreq_fixedtdvel_avgdiff_footorient_actpenalty"
+# file_prefix = "sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.4_vels_avgdiff_simrate15_bigweight_actpenalty_retrain_(1)"#bigweight_actpenalty_retrain_(2)"
 policy = torch.load("./trained_models/{}.pt".format(file_prefix))
 # policy.bounded = False
 policy.eval()
-# foot_traj = CassieFootTrajectory("./cassie/trajectory/foottraj_doublestance_time0.4_land0.4_h0.2.pkl")
-foot_traj = CassieFootTrajectory("./cassie/trajectory/foottraj_doublestance_time0.4_land0.2_vels.pkl")
+# foot_traj = CassieFootTrajectory("./cassie/trajectory/foottraj_doublestance_time0.4_land0.4_h0.2_vels.pkl")
+# foot_traj = CassieFootTrajectory("./cassie/trajectory/foottraj_doublestance_time0.4_land0.2_vels.pkl")
 # foot_traj = CassieFootTrajectory("./cassie/trajectory/foottraj_doublestance_time0.4_land1.0_h0.2.pkl")
+foot_traj = CassieFootTrajectory("./cassie/trajectory/foottraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel.pkl")
 
 num_steps = cassie_env.phaselen + 1
 print("num_steps: ", num_steps)
@@ -58,7 +59,7 @@ vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 # Execute policy and save torques
 with torch.no_grad():
     state = torch.Tensor(cassie_env.reset_for_test())
-    cassie_env.speed = 0
+    cassie_env.speed = 0.2
     # cassie_env.side_speed = .2
     cassie_env.phase_add = 1.0
     # print("first phase: ", cassie_env.phase)
@@ -84,7 +85,7 @@ with torch.no_grad():
             mj_foot = np.zeros(6)
             cassie_env.sim.foot_pos(mj_foot)
             mj_foot_pos[i*simrate+j, :] = mj_foot
-            foot_vel[i*simrate+j, :] = [cassie_env.lfoot_vel, cassie_env.rfoot_vel]
+            foot_vel[i*simrate+j, :] = [cassie_env.lfoot_vel[2], cassie_env.rfoot_vel[2]]
 
             # foot_vel[i*60+j, :] = np.concatenate((cassie_env.cassie_state.leftFoot.footTranslationalVelocity, cassie_env.cassie_state.rightFoot.footTranslationalVelocity))
 
