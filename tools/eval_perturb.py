@@ -81,7 +81,7 @@ def compute_perturbs(cassie_env, policy, wait_time, perturb_duration, perturb_si
             print("search time: ", time.time() - curr_start)
 
     print("Total compute time: ", time.time() - eval_start)
-    # np.save("test_perturb_eval_phase.npy", max_force)
+    np.save("test_perturb_eval_phase.npy", max_force)
 
 @ray.remote
 @torch.no_grad()
@@ -226,10 +226,10 @@ def plot_perturb(filename):
     ax_image.imshow(img, alpha=.3)
     ax_image.axis('off')
     plt.show()
-    # plt.savefig("./test_perturb_eval_phase.png")
+    plt.savefig("./test_perturb_eval_phase.png")
 
-# plot_perturb("./test_perturb_eval_phase.npy")
-# exit()
+plot_perturb("./test_perturb_eval_phase.npy")
+exit()
 
 import argparse
 import pickle
@@ -246,7 +246,6 @@ run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 # env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
 cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
 policy = torch.load(args.path + "actor.pt")
-policy.eval()
 
 wait_time = 4
 perturb_duration = 0.2

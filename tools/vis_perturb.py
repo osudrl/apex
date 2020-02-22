@@ -39,7 +39,6 @@ run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 # env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
 cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
 policy = torch.load(args.path + "actor.pt")
-policy.eval()
 
 state = torch.Tensor(cassie_env.reset_for_test())
 # cassie_env.sim.step_pd(self.u)
