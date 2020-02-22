@@ -144,6 +144,7 @@ def eval_policy(policy, args, run_args):
     import termios
     import select
     import numpy as np
+    from cassie import CassieEnv, CassieStandingEnv
 
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
@@ -151,8 +152,12 @@ def eval_policy(policy, args, run_args):
     max_traj_len = args.traj_len
     visualize = True
 
-    env = env_factory(run_args.env_name, traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, mirror=run_args.mirror, clock_based=run_args.clock_based, history=run_args.history)()
+    if run_args.env_name == "Cassie-v0":
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
+    else:
+        env = CassieStandingEnv(state_est=run_args.state_est)
     
+
     old_settings = termios.tcgetattr(sys.stdin)
 
     orient_add = 0
@@ -160,79 +165,79 @@ def eval_policy(policy, args, run_args):
     try:
         tty.setcbreak(sys.stdin.fileno())
 
+        state = env.reset_for_test()
+        done = False
+        timesteps = 0
+        eval_reward = 0
+        speed = 0.0
+
         while True:
+        
+            if isData():
+                c = sys.stdin.read(1)
+                if c == 'w':
+                    speed += 0.1
+                elif c == 's':
+                    speed -= 0.1
+                elif c == 'l':
+                    orient_add += .1
+                    print("Increasing orient_add to: ", orient_add)
+                elif c == 'k':
+                    orient_add -= .1
+                    print("Decreasing orient_add to: ", orient_add)
+                elif c == 'p':
+                    push = 100
+                    push_dir = 2
+                    force_arr = np.zeros(6)
+                    force_arr[push_dir] = push
+                    env.sim.apply_force(force_arr)
+
+                env.update_speed(speed)
+                print("speed: ", env.speed)
             
-            state = env.reset()
-            done = False
-            timesteps = 0
-            eval_reward = 0
+            # Update Orientation
+            quaternion = euler2quat(z=orient_add, y=0, x=0)
+            iquaternion = inverse_quaternion(quaternion)
 
-            while not done and timesteps < max_traj_len:
+            if env.state_est:
+                curr_orient = state[1:5]
+                curr_transvel = state[14:17]
+            else:
+                curr_orient = state[2:6]
+                curr_transvel = state[20:23]
+            
+            new_orient = quaternion_product(iquaternion, curr_orient)
 
-                if isData():
-                    c = sys.stdin.read(1)
-                    if c == 'w':
-                        env.speed += .1
-                        print("speed: ", env.speed)
-                    elif c == 's':
-                        env.speed -= .1
-                        print("speed: ", env.speed)
-                    elif c == 'l':
-                        orient_add += .1
-                        print("Increasing orient_add to: ", orient_add)
-                    elif c == 'k':
-                        orient_add -= .1
-                        print("Decreasing orient_add to: ", orient_add)
-                    elif c == 'p':
-                        push = 100
-                        push_dir = 2
-                        force_arr = np.zeros(6)
-                        force_arr[push_dir] = push
-                        env.sim.apply_force(force_arr)
+            if new_orient[0] < 0:
+                new_orient = -new_orient
+
+            new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+            
+            if env.state_est:
+                state[1:5] = torch.FloatTensor(new_orient)
+                state[14:17] = torch.FloatTensor(new_translationalVelocity)
+                # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+            else:
+                state[2:6] = torch.FloatTensor(new_orient)
+                state[20:23] = torch.FloatTensor(new_translationalVelocity)
+
+            if hasattr(env, 'simrate'):
+                start = time.time()
                 
-                # Update Orientation
-                quaternion = euler2quat(z=orient_add, y=0, x=0)
-                iquaternion = inverse_quaternion(quaternion)
+            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+            state, reward, done, _ = env.step(action)
+            if visualize:
+                env.render()
+            eval_reward += reward
+            timesteps += 1
 
-                if env.state_est:
-                    curr_orient = state[1:5]
-                    curr_transvel = state[14:17]
-                else:
-                    curr_orient = state[2:6]
-                    curr_transvel = state[20:23]
-                
-                new_orient = quaternion_product(iquaternion, curr_orient)
+            if hasattr(env, 'simrate'):
+                # assume 30hz (hack)
+                end = time.time()
+                delaytime = max(0, 1000 / 30000 - (end-start))
+                time.sleep(delaytime)
 
-                if new_orient[0] < 0:
-                    new_orient = -new_orient
-
-                new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
-                
-                if env.state_est:
-                    state[1:5] = torch.FloatTensor(new_orient)
-                    state[14:17] = torch.FloatTensor(new_translationalVelocity)
-                    # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
-                else:
-                    state[2:6] = torch.FloatTensor(new_orient)
-                    state[20:23] = torch.FloatTensor(new_translationalVelocity)
-
-                if hasattr(env, 'simrate'):
-                    start = time.time()
-                    
-                action = policy.forward(torch.Tensor(state)).detach().numpy()
-                state, reward, done, _ = env.step(action)
-                if visualize:
-                    env.render()
-                eval_reward += reward
-                timesteps += 1
-
-                if hasattr(env, 'simrate'):
-                    # assume 30hz (hack)
-                    end = time.time()
-                    delaytime = max(0, 1000 / 30000 - (end-start))
-                    time.sleep(delaytime)
-
-            print("Eval reward: ", eval_reward)
+        print("Eval reward: ", eval_reward)
 
     finally:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)

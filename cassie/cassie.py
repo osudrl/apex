@@ -25,7 +25,7 @@ class CassieEnv_v2:
     self.no_delta = no_delta
     self.dynamics_randomization = dynamics_randomization
 
-    # Configure reference trajectory to use
+    # CONFIGURE REF TRAJECTORY to use
     if traj == "aslip":
         self.speeds = np.array([x / 10 for x in range(0, 21)])
         self.trajectories = getAllTrajectories(self.speeds)
@@ -82,7 +82,12 @@ class CassieEnv_v2:
     self.pos_index = np.array([1,2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
     self.vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
-    self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+    # CONFIGURE OFFSET for No Delta Policies
+    if self.aslip_traj:
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.offset = ref_pos[self.pos_idx]
+    else:
+        self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
     # global flat foot orientation, can be useful part of reward function:
     self.global_initial_foot_orient = np.array([-0.24135469773826795, -0.24244324494623198, -0.6659363823866352, 0.6629463911006771])
@@ -445,6 +450,21 @@ class CassieEnv_v2:
 
       return actor_state
 
+  # Helper function for updating the speed, used in visualization tests
+  def update_speed(self, new_speed):
+      if self.aslip_traj:
+        self.speed = new_speed
+        self.trajectory = self.trajectories[(np.abs(self.speeds - self.speed)).argmin()]
+        old_phaselen = self.phaselen
+        self.phaselen = self.trajectory.length - 1
+        # update phase
+        self.phase = int(self.phaselen * self.phase / old_phaselen)
+        # new offset
+        ref_pos, ref_vel = self.get_ref_state(self.phase)
+        self.offset = ref_pos[self.pos_idx]
+      else:
+          self.speed = new_speed
+
   # NOTE: this reward is slightly different from the one in Xie et al
   # see notes for details
   def compute_reward(self, action):
@@ -491,7 +511,8 @@ class CassieEnv_v2:
       pos[1] = 0
 
       vel = np.copy(self.trajectory.qvel[phase * self.simrate]) if not self.aslip_traj else np.copy(self.trajectory.qvel[phase])
-      vel[0] *= self.speed
+      if not self.aslip_traj:
+            vel[0] *= self.speed
 
       return pos, vel
 
@@ -514,19 +535,24 @@ class CassieEnv_v2:
       # trajectory despite being global coord. Y is only invariant to straight
       # line trajectories.
 
+      # CLOCK BASED (NO TRAJECTORY)
       if self.clock_based and not self.aslip_traj:
         clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                  np.cos(2 * np.pi *  self.phase / self.phaselen)]
         
         ext_state = np.concatenate((clock, [self.speed]))
 
+      # ASLIP TRAJECTORY
       elif self.aslip_traj:
         if(self.phase == 0):
             ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.phaselen - 1))
         else:
             ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.phase))
+      
+      # OTHER TRAJECTORY
       else:
         ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
+        print(ext_state.shape)
 
       # Use state estimator
       robot_state = np.concatenate([
