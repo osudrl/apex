@@ -552,7 +552,6 @@ class CassieEnv_v2:
       # OTHER TRAJECTORY
       else:
         ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
-        print(ext_state.shape)
 
       # Use state estimator
       robot_state = np.concatenate([
