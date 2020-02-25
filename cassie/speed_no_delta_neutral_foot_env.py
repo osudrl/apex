@@ -78,8 +78,8 @@ class CassieEnv_speed_no_delta_neutral_foot:
             traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
 
         # self.trajectory = CassieIKTrajectory(traj_path)
-        self.trajectory = CassieTrajectory(traj_path)
-        # self.trajectory = CassieTraj(os.path.join(dirname, "trajectory", "iktraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel_fixedfoot.npy"))
+        # self.trajectory = CassieTrajectory(traj_path)
+        self.trajectory = CassieTraj(os.path.join(dirname, "trajectory", "iktraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel_fixedfoot.npy"))
         # self.foot_traj = CassieFootTrajectory(os.path.join(dirname, "trajectory", "foottraj_doublestance_time0.4_land1.0_h0.2.pkl"))
         self.foot_traj = CassieFootTrajectory(os.path.join(dirname, "trajectory", "foottraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel.pkl"))
 
@@ -393,11 +393,17 @@ class CassieEnv_speed_no_delta_neutral_foot:
             # damp_noise = [np.random.uniform(a, b) for a, b in self.damp_range]
             # mass_noise = [np.random.uniform(a, b) for a, b in self.mass_range]
             # com_noise = [0, 0, 0] + [np.random.uniform(self.delta_x_min, self.delta_x_min)] + [np.random.uniform(self.delta_y_min, self.delta_y_max)] + [0] + list(self.default_ipos[6:])
-            fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
+            # fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
+            fric_noise = []
+            translational = np.random.uniform(0.95, 1.05)
+            torsional = np.random.uniform(5e-4, 5e-3)
+            rolling = np.random.uniform(5e-5, 5e-4)
+            for _ in range(int(len(self.default_fric)/3)):
+                fric_noise += [translational, torsional, rolling]
             # self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
             # self.sim.set_body_mass(np.clip(mass_noise, 0, None))
             # self.sim.set_body_ipos(com_noise)
-            self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
+            self.sim.set_geom_friction(np.clip(fric_noise, 0, None))
 
             self.sim.set_const()
 
@@ -679,17 +685,18 @@ class CassieEnv_speed_no_delta_neutral_foot:
             phase = 0
 
         desired_ind = phase * self.simrate
-        phase_diff = desired_ind - math.floor(desired_ind)
-        if phase_diff != 0:       # desired ind is an int
-            pos_prev = np.copy(self.trajectory.qpos[math.floor(desired_ind)])
-            vel_prev = np.copy(self.trajectory.qvel[math.floor(desired_ind)])
-            pos_next = np.copy(self.trajectory.qpos[math.ceil(desired_ind)])
-            vel_next = np.copy(self.trajectory.qvel[math.ceil(desired_ind)])
-            pos = pos_prev + phase_diff * (pos_next - pos_prev)
-            vel = vel_prev + phase_diff * (vel_next - vel_prev)
-        else:
-            pos = np.copy(self.trajectory.qpos[int(desired_ind)])
-            vel = np.copy(self.trajectory.qvel[int(desired_ind)])
+        # phase_diff = desired_ind - math.floor(desired_ind)
+        # if phase_diff != 0:       # desired ind is an int
+        #     pos_prev = np.copy(self.trajectory.qpos[math.floor(desired_ind)])
+        #     vel_prev = np.copy(self.trajectory.qvel[math.floor(desired_ind)])
+        #     pos_next = np.copy(self.trajectory.qpos[math.ceil(desired_ind)])
+        #     vel_next = np.copy(self.trajectory.qvel[math.ceil(desired_ind)])
+        #     pos = pos_prev + phase_diff * (pos_next - pos_prev)
+        #     vel = vel_prev + phase_diff * (vel_next - vel_prev)
+        # else:
+        # print("desired ind: ", desired_ind)
+        pos = np.copy(self.trajectory.qpos[int(desired_ind)])
+        vel = np.copy(self.trajectory.qvel[int(desired_ind)])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
@@ -706,7 +713,14 @@ class CassieEnv_speed_no_delta_neutral_foot:
 
         # setting lateral distance target to 0?
         # regardless of reference trajectory?
-        pos[1] = 0
+        # pos[1] = 0
+        # Zero out hip roll
+        # pos[7] = 0
+        # pos[21] = 0
+        # pos[8] = 0
+        # pos[22] = 0
+        # pos[0:2] = np.zeros(2)
+        # pos[2] = 1.3
 
         return pos, vel
 

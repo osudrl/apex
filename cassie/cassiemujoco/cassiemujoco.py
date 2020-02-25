@@ -62,6 +62,16 @@ class CassieSim:
         qvelp = cassie_sim_qvel(self.c)
         return qvelp[:32]
 
+    def qacc(self):
+        qaccp = cassie_sim_qacc(self.c)
+        return qaccp[:32]
+
+    def xquat(self, body_name):
+        # print("in xquat")
+        xquatp = cassie_sim_xquat(self.c, body_name.encode())
+        # print("got pointer")
+        return xquatp[:4]
+
     def set_time(self, time):
         timep = cassie_sim_time(self.c)
         timep[0] = time
@@ -76,20 +86,20 @@ class CassieSim:
         for i in range(min(len(qvel), 32)):
             qvelp[i] = qvel[i]
 
+    # def set_cassie_state(self, copy_state):
+    #     cassie_sim_set_cassiestate(self.c, copy_state)
+
     def hold(self):
         cassie_sim_hold(self.c)
 
     def release(self):
         cassie_sim_release(self.c)
 
-    def reset(self):
-        cassie_sim_full_reset(self.c)
-
-    def apply_force(self, xfrc, body=1):
+    def apply_force(self, xfrc, body_name="cassie-pelvis"):
         xfrc_array = (ctypes.c_double * 6)()
         for i in range(len(xfrc)):
             xfrc_array[i] = xfrc[i]
-        cassie_sim_apply_force(self.c, xfrc_array, body)
+        cassie_sim_apply_force(self.c, xfrc_array, body_name.encode())
 
     def foot_force(self, force):
         frc_array = (ctypes.c_double * 12)()
@@ -135,10 +145,24 @@ class CassieSim:
           ret[i] = ptr[i]
         return ret
 
-    def get_ground_friction(self):
-        ptr = cassie_sim_ground_friction(self.c)
-        ret = np.zeros(3)
-        for i in range(3):
+    def get_geom_friction(self):
+        ptr = cassie_sim_geom_friction(self.c)
+        ret = np.zeros(self.ngeom * 3)
+        for i in range(self.ngeom * 3):
+          ret[i] = ptr[i]
+        return ret
+
+    def get_geom_rgba(self):
+        ptr = cassie_sim_geom_rgba(self.c)
+        ret = np.zeros(self.ngeom * 4)
+        for i in range(self.ngeom * 4):
+          ret[i] = ptr[i]
+        return ret
+
+    def get_geom_quat(self):
+        ptr = cassie_sim_geom_quat(self.c)
+        ret = np.zeros(self.ngeom * 4)
+        for i in range(self.ngeom * 4):
           ret[i] = ptr[i]
         return ret
 
@@ -179,29 +203,61 @@ class CassieSim:
 
         cassie_sim_set_body_ipos(self.c, c_arr)
 
-    def set_ground_friction(self, data):
+    def set_geom_friction(self, data):
         c_arr = (ctypes.c_double * 3)()
 
         if len(data) != 3:
-           print("SIZE MISMATCH SET_GROUND_FRICTION()")
+           print("SIZE MISMATCH SET_GEOM_FRICTION()")
            exit(1)
 
         for i in range(3):
           c_arr[i] = data[i]
 
-        cassie_sim_set_ground_friction(self.c, c_arr)
+        cassie_sim_set_geom_friction(self.c, c_arr)
 
+    def set_geom_rgba(self, data):
+        ngeom = self.ngeom * 4
+
+        if len(data) != ngeom:
+           print("SIZE MISMATCH SET_GEOM_RGBA()")
+           exit(1)
+
+        c_arr = (ctypes.c_float * ngeom)()
+
+        for i in range(ngeom):
+          c_arr[i] = data[i]
+
+        cassie_sim_set_geom_rgba(self.c, c_arr)
+    
+    def set_geom_quat(self, data):
+        ngeom = self.ngeom * 4
+
+        if len(data) != ngeom:
+           print("SIZE MISMATCH SET_GEOM_QUAT()")
+           exit(1)
+
+        c_arr = (ctypes.c_double * ngeom)()
+        #print("SETTING:")
+        #print(c_arr, data)
+
+        for i in range(ngeom):
+          c_arr[i] = data[i]
+
+        cassie_sim_set_geom_quat(self.c, c_arr)
+
+    
     def set_const(self):
         cassie_sim_set_const(self.c)
+
+    def full_reset(self):
+        cassie_sim_full_reset(self.c)
 
     def __del__(self):
         cassie_sim_free(self.c)
 
 class CassieVis:
     def __init__(self, c, modelfile):
-        print("making cassievis")
         self.v = cassie_vis_init(c.c, modelfile.encode('utf-8'))
-        print("made cassievis python")
 
     def draw(self, c):
         state = cassie_vis_draw(self.v, c.c)
@@ -213,6 +269,19 @@ class CassieVis:
 
     def ispaused(self):
         return cassie_vis_paused(self.v)
+
+    # Applies the inputted force to the inputted body. "xfrc_apply" should contain the force/torque to 
+    # apply in Cartesian coords as a 6-long array (first 3 are force, last 3 are torque). "body_name" 
+    # should be a string matching a body name in the XML file. If "body_name" doesn't match an existing
+    # body name, then no force will be applied. 
+    def apply_force(self, xfrc_apply, body_name):
+        xfrc_array = (ctypes.c_double * 6)()
+        for i in range(len(xfrc_apply)):
+            xfrc_array[i] = xfrc_apply[i]
+        cassie_vis_apply_force(self.v, xfrc_array, body_name.encode())
+
+    def reset(self):
+        cassie_vis_full_reset(self.v)
 
     def __del__(self):
         cassie_vis_free(self.v)
