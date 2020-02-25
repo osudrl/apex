@@ -469,13 +469,29 @@ cassie_sim_set_body_ipos = _libraries['./libcassiemujoco.so'].cassie_sim_set_bod
 cassie_sim_set_body_ipos.restype = None
 cassie_sim_set_body_ipos.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
 
-cassie_sim_ground_friction = _libraries['./libcassiemujoco.so'].cassie_sim_ground_friction
-cassie_sim_ground_friction.restype = POINTER_T(ctypes.c_double)
-cassie_sim_ground_friction.argtypes = [POINTER_T(struct_cassie_sim)]
+cassie_sim_geom_friction = _libraries['./libcassiemujoco.so'].cassie_sim_geom_friction
+cassie_sim_geom_friction.restype = POINTER_T(ctypes.c_double)
+cassie_sim_geom_friction.argtypes = [POINTER_T(struct_cassie_sim)]
 
-cassie_sim_set_ground_friction = _libraries['./libcassiemujoco.so'].cassie_sim_set_ground_friction
-cassie_sim_set_ground_friction.restype = None
-cassie_sim_set_ground_friction.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+cassie_sim_set_geom_friction = _libraries['./libcassiemujoco.so'].cassie_sim_set_geom_friction
+cassie_sim_set_geom_friction.restype = None
+cassie_sim_set_geom_friction.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+
+cassie_sim_geom_rgba = _libraries['./libcassiemujoco.so'].cassie_sim_geom_rgba
+cassie_sim_geom_rgba.restype = POINTER_T(ctypes.c_float)
+cassie_sim_geom_rgba.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_set_geom_rgba = _libraries['./libcassiemujoco.so'].cassie_sim_set_geom_rgba
+cassie_sim_set_geom_rgba.restype = None
+cassie_sim_set_geom_rgba.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_float)]
+
+cassie_sim_geom_quat = _libraries['./libcassiemujoco.so'].cassie_sim_geom_quat
+cassie_sim_geom_quat.restype = POINTER_T(ctypes.c_double)
+cassie_sim_geom_quat.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_set_geom_quat = _libraries['./libcassiemujoco.so'].cassie_sim_set_geom_quat
+cassie_sim_set_geom_quat.restype = None
+cassie_sim_set_geom_quat.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
 
 cassie_sim_set_const = _libraries['./libcassiemujoco.so'].cassie_sim_set_const
 cassie_sim_set_const.restype = None
@@ -739,7 +755,8 @@ __all__ = \
     'cassie_sim_dof_damping', 'cassie_sim_set_dof_damping',
     'cassie_sim_body_mass', 'cassie_sim_set_body_mass',
     'cassie_sim_body_ipos', 'cassie_sim_set_body_ipos',
-    'cassie_sim_ground_friction', 'cassie_sim_set_ground_friction',
-    'cassie_sim_set_const']
+    'cassie_sim_geom_friction', 'cassie_sim_set_geom_friction',
+    'cassie_sim_set_const', 'cassie_sim_geom_rgba', 'cassie_sim_set_geom_rgba',
+    'cassie_sim_geom_quat', 'cassie_sim_set_geom_quat']
 
 # 'cassie_sim_set_cassiestate'

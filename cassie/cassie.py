@@ -103,7 +103,7 @@ class CassieEnv_v2:
     self.default_damping = self.sim.get_dof_damping()
     self.default_mass = self.sim.get_body_mass()
     self.default_ipos = self.sim.get_body_ipos()
-    self.default_fric = self.sim.get_ground_friction()
+    self.default_fric = self.sim.get_geom_friction()
 
     self.critic_state = None
 
@@ -253,8 +253,8 @@ class CassieEnv_v2:
       # Randomize dynamics:
       if self.dynamics_randomization:
           damp = self.default_damping
-          weak_factor = 0.8
-          strong_factor = 1.2
+          weak_factor = 0.5
+          strong_factor = 4.0
           pelvis_damp_range = [[damp[0], damp[0]], 
                                [damp[1], damp[1]], 
                                [damp[2], damp[2]], 
@@ -282,8 +282,8 @@ class CassieEnv_v2:
           damp_range = pelvis_damp_range + side_damp + side_damp
           damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
-          hi = 1.1
-          lo = 0.9
+          hi = 1.3
+          lo = 0.7
           m = self.default_mass
           pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
           hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -312,17 +312,22 @@ class CassieEnv_v2:
           delta = 0.0005
           com_noise = [0, 0, 0] + [self.default_ipos[i] + np.random.uniform(-delta, delta) for i in range(3, len(self.default_ipos))]
 
-          fric_noise = [np.random.uniform(0.5, 1.2)] + [np.random.uniform(3e-3, 8e-3)] + list(self.default_fric[2:])
+          fric_noise = []
+          translational = np.random.uniform(0.5, 1.2)
+          torsional = np.random.uniform(3e-4, 3e-3)
+          rolling = np.random.uniform(1e-4, 2e-4)
+          for _ in range(int(len(self.default_fric)/3)):
+            fric_noise += [translational, torsional, rolling]
 
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
           self.sim.set_body_ipos(np.clip(com_noise, 0, None))
-          self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
+          self.sim.set_geom_friction(np.clip(fric_noise, 0, None))
       else:
           self.sim.set_dof_damping(self.default_damping)
           self.sim.set_body_mass(self.default_mass)
           self.sim.set_body_ipos(self.default_ipos)
-          self.sim.set_ground_friction(self.default_fric)
+          self.sim.set_geom_friction(self.default_fric)
 
       self.sim.set_const()
 
@@ -430,12 +435,12 @@ class CassieEnv_v2:
           self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
           self.sim.set_body_mass(np.clip(mass_noise, 0, None))
           self.sim.set_body_ipos(np.clip(com_noise, 0, None))
-          self.sim.set_ground_friction(np.clip(fric_noise, 0, None))
+          self.sim.set_geom_friction(np.clip(fric_noise, 0, None))
       else:
           self.sim.set_dof_damping(self.default_damping)
           self.sim.set_body_mass(self.default_mass)
           self.sim.set_body_ipos(self.default_ipos)
-          self.sim.set_ground_friction(self.default_fric)
+          self.sim.set_geom_friction(self.default_fric)
 
       self.sim.set_const()
 
@@ -582,7 +587,7 @@ class CassieEnv_v2:
   """ Currently unused, commenting out for now.
   def get_omniscient_state(self):
       full_state = self.get_full_state()
-      omniscient_state = np.hstack((full_state, self.sim.get_dof_damping(), self.sim.get_body_mass(), self.sim.get_body_ipos(), self.sim.get_ground_friction))
+      omniscient_state = np.hstack((full_state, self.sim.get_dof_damping(), self.sim.get_body_mass(), self.sim.get_body_ipos(), self.sim.get_geom_friction))
       return omniscient_state
   """
 
