@@ -678,7 +678,18 @@ class CassieEnv_speed_no_delta_neutral_foot:
         if phase > self.phaselen:
             phase = 0
 
-        pos = np.copy(self.trajectory.qpos[int(phase * self.simrate)])
+        desired_ind = phase * self.simrate
+        phase_diff = desired_ind - math.floor(desired_ind)
+        if phase_diff != 0:       # desired ind is an int
+            pos_prev = np.copy(self.trajectory.qpos[math.floor(desired_ind)])
+            vel_prev = np.copy(self.trajectory.qvel[math.floor(desired_ind)])
+            pos_next = np.copy(self.trajectory.qpos[math.ceil(desired_ind)])
+            vel_next = np.copy(self.trajectory.qvel[math.ceil(desired_ind)])
+            pos = pos_prev + phase_diff * (pos_next - pos_prev)
+            vel = vel_prev + phase_diff * (vel_next - vel_prev)
+        else:
+            pos = np.copy(self.trajectory.qpos[int(desired_ind)])
+            vel = np.copy(self.trajectory.qvel[int(desired_ind)])
 
         # this is just setting the x to where it "should" be given the number
         # of cycles
@@ -690,14 +701,12 @@ class CassieEnv_speed_no_delta_neutral_foot:
         ###### Setting variable speed  #########
         pos[0] *= self.speed
         pos[0] += (self.trajectory.qpos[-1, 0]- self.trajectory.qpos[0, 0])* self.counter * self.speed
+        vel[0] *= self.speed
         ######                          ########
 
         # setting lateral distance target to 0?
         # regardless of reference trajectory?
         pos[1] = 0
-
-        vel = np.copy(self.trajectory.qvel[int(phase * self.simrate)])
-        vel[0] *= self.speed
 
         return pos, vel
 
