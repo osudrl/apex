@@ -75,7 +75,7 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 iquaternion = inverse_quaternion(quaternion)
                 if is_stateest:
                     curr_orient = state[1:5]
-                    curr_transvel = state[14:17]
+                    curr_transvel = state[15:18]
                 else:
                     curr_orient = state[2:6]
                     curr_transvel = state[20:23]
@@ -85,8 +85,8 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
                 if is_stateest:
                     state[1:5] = torch.FloatTensor(new_orient)
-                    state[14:17] = torch.FloatTensor(new_translationalVelocity)
-                    state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+                    state[15:18] = torch.FloatTensor(new_translationalVelocity)
+                    # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
                 else:
                     state[2:6] = torch.FloatTensor(new_orient)
                     state[20:23] = torch.FloatTensor(new_translationalVelocity)
