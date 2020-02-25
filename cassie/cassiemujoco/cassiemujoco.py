@@ -72,16 +72,6 @@ class CassieSim:
         # print("got pointer")
         return xquatp[:4]
 
-    def qacc(self):
-        qaccp = cassie_sim_qacc(self.c)
-        return qaccp[:32]
-
-    def xquat(self, body_name):
-        # print("in xquat")
-        xquatp = cassie_sim_xquat(self.c, body_name.encode())
-        # print("got pointer")
-        return xquatp[:4]
-
     def set_time(self, time):
         timep = cassie_sim_time(self.c)
         timep[0] = time
