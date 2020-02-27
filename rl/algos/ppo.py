@@ -191,9 +191,10 @@ class PPO:
 
         return memory
 
-    def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False):
+    def sample_parallel(self, env_fn, policy_cpu, critic_cpu, min_steps, max_traj_len, deterministic=False, device="cpu"):
+
         worker = self.sample
-        args = (self, env_fn, policy, critic, min_steps, max_traj_len, deterministic)
+        args = (self, env_fn, policy_cpu, critic_cpu, min_steps, max_traj_len, deterministic)
 
         # Don't don't bother launching another process for single thread
         if self.n_proc > 1:
@@ -219,6 +220,7 @@ class PPO:
                 merged.ptr      += buf.ptr
 
             return merged
+
         return merge(result)
 
     def update_policy(self, obs_batch, action_batch, return_batch, advantage_batch, mask, env_fn, mirror_observation=None, mirror_action=None):
@@ -286,11 +288,15 @@ class PPO:
               policy,
               critic,
               n_itr,
-              logger=None):
+              logger=None,
+              device="cpu"):
+
+        self.device = device
 
         self.old_policy = deepcopy(policy)
-        self.policy = policy
-        self.critic = critic
+
+        self.policy = policy # move policy to cuda/cpu if needed
+        self.critic = critic # move policy to cuda/cpu if needed
 
         self.actor_optimizer = optim.Adam(policy.parameters(), lr=self.lr, eps=self.eps)
         self.critic_optimizer = optim.Adam(critic.parameters(), lr=self.lr, eps=self.eps)
@@ -342,6 +348,7 @@ class PPO:
                     random_indices = SubsetRandomSampler(range(advantages.numel()))
 
                 sampler = BatchSampler(random_indices, minibatch_size, drop_last=True)
+             
                 for indices in sampler:
                     if self.recurrent:
                         obs_batch       = [observations[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
@@ -381,7 +388,7 @@ class PPO:
 
             if logger is not None:
                 evaluate_start = time.time()
-                test = self.sample_parallel(env_fn, self.policy, self.critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
+                test = self.sample_parallel(env_fn, self.policy, self.critic, 800 // self.n_proc, self.max_traj_len, deterministic=True, device=self.device)
                 print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
 
                 avg_eval_reward = np.mean(test.ep_returns)
@@ -400,13 +407,16 @@ class PPO:
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:
                 self.highest_reward = avg_eval_reward
-                self.save(policy, critic)
+                self.save(self.policy, self.critic)
 
 def run_experiment(args):
     from apex import env_factory, create_logger
 
     torch.set_num_threads(1)
 
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(device)
+    # input()
     # wrapper function for creating parallelized envs
     env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, mirror=args.mirror, clock_based=args.clock_based, history=args.history)
     obs_dim = env_fn().observation_space.shape[0]
@@ -466,4 +476,4 @@ def run_experiment(args):
     print("\tmax traj len:   {}".format(args.max_traj_len))
     print()
 
-    algo.train(env_fn, policy, critic, args.n_itr, logger=logger)
+    algo.train(env_fn, policy, critic, args.n_itr, logger=logger, device=device)
