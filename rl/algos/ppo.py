@@ -418,7 +418,7 @@ def run_experiment(args):
     print(device)
     # input()
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, mirror=args.mirror, clock_based=args.clock_based, history=args.history)
+    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, history=args.history)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 

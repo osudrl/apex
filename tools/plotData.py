@@ -24,25 +24,24 @@ RUN_NAME = run_args.run_name if run_args.run_name != None else "plot"
 
 # Load environment and policy
 # env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
-cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
+cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
 policy = torch.load(args.path + "actor.pt")
-policy.eval()
 
 def avg_pols(policies, state):
     total_act = np.zeros(10)
     for policy in policies:
-        _, action = policy(state, False)
-        total_act += action.data[0].numpy()
+        action = policy.forward(torch.Tensor(state), True).detach().numpy()
+        total_act += action
     return total_act / len(policies)
 
 obs_dim = cassie_env.observation_space.shape[0] # TODO: could make obs and ac space static properties
 action_dim = cassie_env.action_space.shape[0]
 
 do_multi = False
-no_delta = True
+no_delta = cassie_env.no_delta
 limittargs = False
 lininterp = False
-offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+offset = cassie_env.offset
 
 policies = []
 if do_multi:
@@ -58,7 +57,6 @@ if do_multi:
     # policies.append(policy)
     for i in [1, 2, 3, 5]:
         policy = torch.load("./trained_models/stiff_spring/stiff_StateEst_speed{}.pt".format(i))
-        policy.eval()
         policies.append(policy)
 
 num_steps = 100
@@ -83,22 +81,20 @@ pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 # Execute policy and save torques
 with torch.no_grad():
-    state = torch.Tensor(cassie_env.reset_for_test())
+    state = cassie_env.reset_for_test()
     cassie_env.speed = 0
     # cassie_env.side_speed = .2
-    cassie_env.phase_add = 1
     for i in range(pre_steps):
         if not do_multi:
-            action = policy(state, True)
-            state, reward, done, _ = cassie_env.step(action.data.numpy())
+            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+            state, reward, done, _ = cassie_env.step(action)
         else:
             action = avg_pols(policies, state)
             state, reward, done, _ = cassie_env.step(action)
         state = torch.Tensor(state)
     for i in range(num_steps):
         if not do_multi:
-            action = policy(state, True)
-            action = action.data.numpy()
+            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
         else:
             action = avg_pols(policies, state)
             # state, reward, done, _ = cassie_env.step(action)
@@ -166,7 +162,6 @@ with torch.no_grad():
             cassie_env.counter += 1
 
         state = cassie_env.get_full_state()
-        state = torch.Tensor(state)
 
 # Graph torque data
 fig, ax = plt.subplots(2, 5, figsize=(15, 5))
