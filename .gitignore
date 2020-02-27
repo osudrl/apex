@@ -119,11 +119,12 @@ venv.bak/
 ray_timeline.json
 
 # trained models
-/trained_models/*
+# /trained_models/*
 
 # logging directory
 /logs
 ref_qposes.png
+*events.out.tfevents.*
 
 # testing directory files
 /tools/aslip_pipeline/testTS_logs/*
