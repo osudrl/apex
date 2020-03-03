@@ -119,7 +119,7 @@ venv.bak/
 ray_timeline.json
 
 # trained models
-# /trained_models/*
+/trained_models/new_policies/*
 
 # logging directory
 /logs

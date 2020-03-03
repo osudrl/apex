@@ -6,6 +6,7 @@ import ray
 from functools import partial
 import sys
 import matplotlib.pyplot as plt
+import pickle
 
 @ray.remote
 class gen_worker(object):
@@ -237,23 +238,27 @@ def vis_rollout(cassie_env, policy, num_steps, wait_cycles, test_phase, speed, f
     
 
 # Check data
-data_dict = np.load("./5b75b3-seed0_gen_data.npz")
-obs_data = data_dict["total_data"]
-reward_data = data_dict["total_rewards"]
-print("reward shape: ", reward_data.shape)
-print("max reward: ", np.max(reward_data))
-print("min reward: ", np.min(reward_data))
-plt.hist(reward_data)
-plt.savefig("./5b75b3-seed0_gen_data_rewards.png")
-exit()
+# data_dict = np.load("./5b75b3-seed0_gen_data.npz")
+# obs_data = data_dict["total_data"]
+# reward_data = data_dict["total_rewards"]
+# print("reward shape: ", reward_data.shape)
+# print("max reward: ", np.max(reward_data))
+# print("min reward: ", np.min(reward_data))
+# plt.hist(reward_data)
+# plt.savefig("./5b75b3-seed0_gen_data_rewards.png")
+# exit()
 
 # Load policy and env
 # policy = torch.load("./trained_models/new_policies/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2_actor.pt")
-policy = torch.load("./trained_models/ppo/Cassie-v0/5b75b3-seed0/actor.pt")
+exp_dir = "./trained_models/ppo/Cassie-v0/5b75b3-seed0/"
+policy = torch.load(exp_dir + "actor.pt")
 
-policy.eval()
-cassie_env = CassieEnv_v2(clock_based=True, state_est=False, no_delta=True)
-env_fn = partial(CassieEnv_v2, clock_based=True, state_est=False, no_delta=True)
+# policy.eval()
+run_args = pickle.load(open(exp_dir + "experiment.pkl", "rb"))
+cassie_env = CassieEnv_v2(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
+env_fn = partial(CassieEnv_v2, traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
+# cassie_env = CassieEnv_v2(clock_based=True, state_est=False, no_delta=True)
+# env_fn = partial(CassieEnv_v2, clock_based=True, state_est=False, no_delta=True)
 
 # Set data generation parameters
 num_steps = 300
@@ -267,5 +272,5 @@ perturb_duration = 0.0
 # NOTE: There are no checks made for whether Cassie fell down or not. If the policy failed for some reason, data will
 # still be saved. For this reason, make sure that the policy can resist the specified forces
 # gen_data(cassie_env, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration)
-# vis_rollout(cassie_env, policy, 300, 2, 15, .5, 150, 0, perturb_body, perturb_duration)
-gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, 11)
+vis_rollout(cassie_env, policy, 300, 2, 0, .5, 0, 0, perturb_body, perturb_duration)
+# gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, 11)
