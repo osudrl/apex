@@ -4,6 +4,8 @@ from cassie.cassie import CassieEnv_v2
 import numpy as np
 import ray
 from functools import partial
+import sys
+import matplotlib.pyplot as plt
 
 @ray.remote
 class gen_worker(object):
@@ -26,6 +28,7 @@ class gen_worker(object):
 
         start_t = time.time()
         data = np.zeros((num_steps, self.obs_dim))
+        rewards = np.zeros(num_steps)
         force_x = force * np.cos(perturb_dir)
         force_y = force * np.sin(perturb_dir)
         state = self.cassie_env.reset_for_test()
@@ -35,11 +38,13 @@ class gen_worker(object):
         for timestep in range(self.phaselen*wait_cycles):
             action = self.policy.forward(torch.Tensor(state)).detach().numpy()
             state, reward, done, _ = self.cassie_env.step(action)
+            rewards[timestep] = reward
             data[timestep, :] = state
         # Simulate until at current testing phase
         for timestep in range(self.phaselen*wait_cycles, self.phaselen*wait_cycles+test_phase):
             action = self.policy.forward(torch.Tensor(state)).detach().numpy()
             state, reward, done, _ = self.cassie_env.step(action)
+            rewards[timestep] = reward
             data[timestep, :] = state
         # Apply force
         force_start_t = self.cassie_env.sim.time()
@@ -50,15 +55,20 @@ class gen_worker(object):
                 self.cassie_env.sim.apply_force([0, 0, 0, 0, 0, 0], perturb_body)
             action = self.policy.forward(torch.Tensor(state)).detach().numpy()
             state, reward, done, _ = self.cassie_env.step(action)
+            rewards[timestep] = reward
             data[timestep, :] = state
         
-        return data, worker_id, time.time() - start_t
+        return data, rewards, worker_id, time.time() - start_t
 
 def gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, num_procs):
 
+    total_start_t = time.time()
     temp_env = env_fn()
     obs_dim = len(temp_env.observation_space)
-    perturb_dir = -2*np.pi*(1/num_angles)*np.arange(num_angles)
+    if num_angles > 0:
+        perturb_dir = -2*np.pi*(1/num_angles)*np.arange(num_angles)
+    else:
+        perturb_dir = []
     phaselen = temp_env.phaselen + 1
     num_speeds = len(speeds)
     num_forces = len(forces)
@@ -81,9 +91,12 @@ def gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_a
 
     print("num args should be: ", num_speeds*(1+num_forces*num_angles*phaselen))
     print("Number of args: ", len(args))
-    # total_data = np.zeros((len(args)*num_steps, obs_dim))
-    total_data = None
+    num_args = len(args)
+    total_data = np.zeros((num_args*num_steps, obs_dim))
+    total_rewards = np.zeros(num_args*num_steps)
+    # total_data = None
     avg_time = None
+    avg_iter_time = None
     done_count = 0
 
     # Make ray workers
@@ -96,23 +109,29 @@ def gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_a
     job_ids = [workers[i].sim_rollout.remote(*(args[i] + (i,))) for i in range(num_procs)]
     print("Started initial jobs")
     arg_ind = num_procs
-    while arg_ind < len(args):
+    while done_count < num_args:
+        iter_start_t = time.time()
         done_id = ray.wait(job_ids, num_returns=1, timeout=None)[0][0]
         done_data = ray.get(done_id)
+        total_data[done_count*num_steps:(done_count+1)*num_steps, :] = done_data[0]
+        total_rewards[done_count*num_steps:(done_count+1)*num_steps] = done_data[1]
         done_count += 1
-        if total_data is None:
-            total_data = done_data[0]
-            # avg_time = done_data[2]
+        curr_id = done_data[2]
+        if arg_ind < num_args: # Still jobs to submit
+            job_ids.append(workers[curr_id].sim_rollout.remote(*(args[arg_ind]) + (curr_id,)))
+            arg_ind += 1
+        if avg_time is None:
+            avg_time = done_data[3]
+            avg_iter_time = time.time() - iter_start_t
         else:
-            total_data = np.vstack((total_data, done_data[0]))
-            # avg_time += (done_data[2] - avg_time) / done_count
-            # print("total data shape: ", total_data.shape)
-        # print("done data: ", done_data[0].shape)
-        curr_id = done_data[1]
-        curr_time = done_data[2]
-        job_ids.append(workers[curr_id].sim_rollout.remote(*(args[arg_ind]) + (curr_id,)))
-        print("curr avg time: ", curr_time)
+            avg_time += (done_data[3] - avg_time) / done_count
+            avg_iter_time += (time.time() - iter_start_t - avg_iter_time) / done_count
+        print("\rFinished arg {} out of {}\tAvg sim time: {:.4f}\tTime left: {:.4f}".format(done_count, 
+                    num_args, avg_time, (num_args - done_count)*(avg_iter_time)), end='')
         # exit()
+    print("")
+    np.savez("./5b75b3-seed0_gen_data.npz", total_data=total_data, total_rewards=total_rewards)
+    print("Total time: ", time.time() - total_start_t)
 
 
 def gen_data(cassie_env, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration):
@@ -217,24 +236,36 @@ def vis_rollout(cassie_env, policy, num_steps, wait_cycles, test_phase, speed, f
         time.sleep(0.05/3)
     
 
-# Load policy and env
-policy = torch.load("./trained_models/new_policies/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2_actor.pt")
-policy.eval()
-cassie_env = CassieEnv_v2(clock_based=True, state_est=True, no_delta=True)
-env_fn = partial(CassieEnv_v2, clock_based=True, state_est=True, no_delta=True)
+# Check data
+data_dict = np.load("./5b75b3-seed0_gen_data.npz")
+obs_data = data_dict["total_data"]
+reward_data = data_dict["total_rewards"]
+print("reward shape: ", reward_data.shape)
+print("max reward: ", np.max(reward_data))
+print("min reward: ", np.min(reward_data))
+plt.hist(reward_data)
+plt.savefig("./5b75b3-seed0_gen_data_rewards.png")
+exit()
 
+# Load policy and env
+# policy = torch.load("./trained_models/new_policies/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2_actor.pt")
+policy = torch.load("./trained_models/ppo/Cassie-v0/5b75b3-seed0/actor.pt")
+
+policy.eval()
+cassie_env = CassieEnv_v2(clock_based=True, state_est=False, no_delta=True)
+env_fn = partial(CassieEnv_v2, clock_based=True, state_est=False, no_delta=True)
 
 # Set data generation parameters
 num_steps = 300
 wait_cycles = 2
-num_angles = 4
+num_angles = 0
 speeds = np.linspace(0, 1, 11)
-forces = [50, 75, 100]
+forces = []
 perturb_body = "cassie-pelvis"
-perturb_duration = 0.2
+perturb_duration = 0.0
 
 # NOTE: There are no checks made for whether Cassie fell down or not. If the policy failed for some reason, data will
 # still be saved. For this reason, make sure that the policy can resist the specified forces
 # gen_data(cassie_env, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration)
 # vis_rollout(cassie_env, policy, 300, 2, 15, .5, 150, 0, perturb_body, perturb_duration)
-gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, 4)
+gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, 11)
