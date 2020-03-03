@@ -469,13 +469,41 @@ cassie_sim_set_body_ipos = _libraries['./libcassiemujoco.so'].cassie_sim_set_bod
 cassie_sim_set_body_ipos.restype = None
 cassie_sim_set_body_ipos.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
 
+cassie_sim_geom_friction = _libraries['./libcassiemujoco.so'].cassie_sim_geom_friction
+cassie_sim_geom_friction.restype = POINTER_T(ctypes.c_double)
+cassie_sim_geom_friction.argtypes = [POINTER_T(struct_cassie_sim)]
+
 cassie_sim_ground_friction = _libraries['./libcassiemujoco.so'].cassie_sim_ground_friction
 cassie_sim_ground_friction.restype = POINTER_T(ctypes.c_double)
 cassie_sim_ground_friction.argtypes = [POINTER_T(struct_cassie_sim)]
 
-cassie_sim_set_ground_friction = _libraries['./libcassiemujoco.so'].cassie_sim_set_ground_friction
-cassie_sim_set_ground_friction.restype = None
-cassie_sim_set_ground_friction.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+cassie_sim_set_geom_friction = _libraries['./libcassiemujoco.so'].cassie_sim_set_geom_friction
+cassie_sim_set_geom_friction.restype = None
+cassie_sim_set_geom_friction.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+
+cassie_sim_set_geom_name_friction = _libraries['./libcassiemujoco.so'].cassie_sim_set_geom_name_friction
+cassie_sim_set_geom_name_friction.restype = None
+cassie_sim_set_geom_name_friction.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_char_p, POINTER_T(ctypes.c_double)]
+
+cassie_sim_geom_rgba = _libraries['./libcassiemujoco.so'].cassie_sim_geom_rgba
+cassie_sim_geom_rgba.restype = POINTER_T(ctypes.c_float)
+cassie_sim_geom_rgba.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_set_geom_rgba = _libraries['./libcassiemujoco.so'].cassie_sim_set_geom_rgba
+cassie_sim_set_geom_rgba.restype = None
+cassie_sim_set_geom_rgba.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_float)]
+
+cassie_sim_geom_quat = _libraries['./libcassiemujoco.so'].cassie_sim_geom_quat
+cassie_sim_geom_quat.restype = POINTER_T(ctypes.c_double)
+cassie_sim_geom_quat.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_set_geom_quat = _libraries['./libcassiemujoco.so'].cassie_sim_set_geom_quat
+cassie_sim_set_geom_quat.restype = None
+cassie_sim_set_geom_quat.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+
+cassie_sim_set_geom_name_quat = _libraries['./libcassiemujoco.so'].cassie_sim_set_geom_name_quat
+cassie_sim_set_geom_name_quat.restype = None
+cassie_sim_set_geom_name_quat.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_char_p, POINTER_T(ctypes.c_double)]
 
 cassie_sim_set_const = _libraries['./libcassiemujoco.so'].cassie_sim_set_const
 cassie_sim_set_const.restype = None
@@ -722,7 +750,7 @@ __all__ = \
     'state_foot_out_t', 'state_output_t', 'cassie_sim_time',
     'cassie_sim_step_ethercat', 'cassie_sim_check_obstacle_collision',
     'elmo_out_t', 'pack_cassie_in_t', 'cassie_sim_apply_force','cassie_sim_full_reset',
-    'cassie_leg_out_t', 'wait_for_packet',
+    'cassie_leg_out_t', 'wait_for_packet', 'cassie_vis_apply_force', 
     'struct_c__SA_cassie_leg_in_t', 'struct_c__SA_state_joint_out_t',
     'process_packet_header', 'cassie_sim_release', 'cassie_sim_foot_forces', 
     'cassie_sim_foot_positions', 'struct_c__SA_state_foot_out_t',
@@ -739,7 +767,9 @@ __all__ = \
     'cassie_sim_dof_damping', 'cassie_sim_set_dof_damping',
     'cassie_sim_body_mass', 'cassie_sim_set_body_mass',
     'cassie_sim_body_ipos', 'cassie_sim_set_body_ipos',
-    'cassie_sim_ground_friction', 'cassie_sim_set_ground_friction',
-    'cassie_sim_set_const']
+    'cassie_sim_geom_friction', 'cassie_sim_set_geom_friction',
+    'cassie_sim_set_const', 'cassie_sim_geom_rgba', 'cassie_sim_set_geom_rgba',
+    'cassie_sim_geom_quat', 'cassie_sim_set_geom_quat', 'cassie_sim_set_geom_name_quat',
+    'cassie_sim_set_geom_name_friction', 'cassie_sim_ground_friction']
 
 # 'cassie_sim_set_cassiestate'

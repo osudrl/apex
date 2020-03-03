@@ -22,6 +22,8 @@ _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # Initialize libcassiesim
 cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
+# cassie_mujoco_init(str.encode("../model/cassie.xml"))
+
 
 # Interface classes
 class CassieSim:
@@ -30,6 +32,7 @@ class CassieSim:
         self.nv = 32
         self.nbody = 26
         self.nq = 35
+        self.ngeom = 35
 
     def step(self, u):
         y = cassie_out_t()
@@ -71,16 +74,6 @@ class CassieSim:
         # print("got pointer")
         return xquatp[:4]
 
-    def qacc(self):
-        qaccp = cassie_sim_qacc(self.c)
-        return qaccp[:32]
-
-    def xquat(self, body_name):
-        # print("in xquat")
-        xquatp = cassie_sim_xquat(self.c, body_name.encode())
-        # print("got pointer")
-        return xquatp[:4]
-
     def set_time(self, time):
         timep = cassie_sim_time(self.c)
         timep[0] = time
@@ -94,6 +87,14 @@ class CassieSim:
         qvelp = cassie_sim_qvel(self.c)
         for i in range(min(len(qvel), 32)):
             qvelp[i] = qvel[i]
+    
+    def set_xquat(self, xquat, body_name):
+        xquatp = cassie_sim_xquat(self.c, body_name.encode())
+        for i in range(4):
+            xquatp[i] = xquat[i]
+        # Check
+        # for i in range(4):
+        #     print("xquat: ", xquatp[:4])
 
     # def set_cassie_state(self, copy_state):
     #     cassie_sim_set_cassiestate(self.c, copy_state)
@@ -154,10 +155,31 @@ class CassieSim:
           ret[i] = ptr[i]
         return ret
 
+    def get_geom_friction(self):
+        ptr = cassie_sim_geom_friction(self.c)
+        ret = np.zeros(self.ngeom * 3)
+        for i in range(self.ngeom * 3):
+          ret[i] = ptr[i]
+        return ret
+
     def get_ground_friction(self):
         ptr = cassie_sim_ground_friction(self.c)
         ret = np.zeros(3)
         for i in range(3):
+          ret[i] = ptr[i]
+        return ret
+
+    def get_geom_rgba(self):
+        ptr = cassie_sim_geom_rgba(self.c)
+        ret = np.zeros(self.ngeom * 4)
+        for i in range(self.ngeom * 4):
+          ret[i] = ptr[i]
+        return ret
+
+    def get_geom_quat(self):
+        ptr = cassie_sim_geom_quat(self.c)
+        ret = np.zeros(self.ngeom * 4)
+        for i in range(self.ngeom * 4):
           ret[i] = ptr[i]
         return ret
 
@@ -198,18 +220,66 @@ class CassieSim:
 
         cassie_sim_set_body_ipos(self.c, c_arr)
 
+    def set_geom_friction(self, data, name=None):
+        if name is None:
+            c_arr = (ctypes.c_double * 3)()
+
+            if len(data) != 3:
+                print("SIZE MISMATCH SET_GEOM_FRICTION()")
+                exit(1)
+
+            for i in range(3):
+                c_arr[i] = data[i]
+
+            cassie_sim_set_geom_friction(self.c, c_arr)
+        else:
+            fric_array = (ctypes.c_double * 3)()
+            for i in range(3):
+                fric_array[i] = data[i]
+            cassie_sim_set_geom_name_friction(self.c, name.encode(), fric_array)
+        
     def set_ground_friction(self, data):
-        c_arr = (ctypes.c_double * 3)()
-
-        if len(data) != 3:
-           print("SIZE MISMATCH SET_GROUND_FRICTION()")
-           exit(1)
-
+        fric_array = (ctypes.c_double * 3)()
         for i in range(3):
-          c_arr[i] = data[i]
+            fric_array[i] = data[i]
+        cassie_sim_set_geom_name_friction(self.c, "floor".encode(), fric_array)
 
-        cassie_sim_set_ground_friction(self.c, c_arr)
+    def set_geom_rgba(self, data):
+        ngeom = self.ngeom * 4
+
+        if len(data) != ngeom:
+            print("SIZE MISMATCH SET_GEOM_RGBA()")
+            exit(1)
+
+        c_arr = (ctypes.c_float * ngeom)()
+
+        for i in range(ngeom):
+            c_arr[i] = data[i]
+
+        cassie_sim_set_geom_rgba(self.c, c_arr)
     
+    def set_geom_quat(self, data, name=None):
+        if name is None:
+            ngeom = self.ngeom * 4
+
+            if len(data) != ngeom:
+                print("SIZE MISMATCH SET_GEOM_QUAT()")
+                exit(1)
+
+            c_arr = (ctypes.c_double * ngeom)()
+            #print("SETTING:")
+            #print(c_arr, data)
+
+            for i in range(ngeom):
+                c_arr[i] = data[i]
+
+            cassie_sim_set_geom_quat(self.c, c_arr)
+        else:
+            quat_array = (ctypes.c_double * 4)()
+            for i in range(4):
+                quat_array[i] = data[i]
+            cassie_sim_set_geom_name_quat(self.c, name.encode(), quat_array)
+
     def set_const(self):
         cassie_sim_set_const(self.c)
 
