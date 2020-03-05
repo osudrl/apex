@@ -26,6 +26,8 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
+parser.add_argument('--latent_size', type=int, default=20, metavar='N', help='size of latent space')
+parser.add_argument('--test_model', type=str, default=None, help='path to model to load')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -64,7 +66,7 @@ np.savez("./data_norm_params.npz", data_max=data_max, data_min=data_min)
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
-model = VAE().to(device)
+model = VAE(args.latent_size).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 recon_loss_cri = nn.MSELoss()
 
@@ -138,19 +140,26 @@ def test(epoch):
 
 # if __name__ == "__main__":
 
-# for epoch in range(1, args.epochs + 1):
-#     train(epoch)
-#     test(epoch)    
-# PATH = "./vae_model/"+now.strftime("%Y%m%d-%H%M%S")
-# torch.save(model.state_dict(), PATH)
+if args.test_model is None:
+    # train and save new model
+    for epoch in range(1, args.epochs + 1):
+        train(epoch)
+        test(epoch)    
+    PATH = "./vae_model/"+now.strftime("%Y%m%d-%H%M%S")
+    torch.save(model.state_dict(), PATH)
 
-MODEL_NAME = "20200305-143659"
-PATH = "./vae_model/"+MODEL_NAME
+# Test trained model (or loaded model)
+print("Testing model.")
+if args.test_model is not None:
+    PATH = args.test_model
 model.cpu()
 model.load_state_dict(torch.load(PATH))
 model.eval()
 print(model)
-
+print()
 recon_x, mu, logvar = model(norm_data[0,:])
+print("reconstructed data:")
 print(recon_x)
+print()
+print("normalized test data:")
 print(norm_data[0,:])
