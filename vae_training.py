@@ -28,6 +28,7 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--latent_size', type=int, default=20, metavar='N', help='size of latent space')
 parser.add_argument('--test_model', type=str, default=None, help='path to model to load')
+parser.add_argument('--run_name', type=str, default=None, help='name of model to save and associated log data')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -35,7 +36,7 @@ torch.manual_seed(args.seed)
 
 device = torch.device("cuda" if args.cuda else "cpu")
 now = datetime.now()
-log_path = "./logs/"+now.strftime("%Y%m%d-%H%M%S")
+log_path = "./logs/"+args.run_name
 logger = SummaryWriter(log_path, flush_secs=0.1) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
@@ -145,7 +146,7 @@ if args.test_model is None:
     for epoch in range(1, args.epochs + 1):
         train(epoch)
         test(epoch)    
-    PATH = "./vae_model/"+now.strftime("%Y%m%d-%H%M%S")
+    PATH = "./vae_model/"+args.run_name+".pt"
     torch.save(model.state_dict(), PATH)
 
 # Test trained model (or loaded model)
