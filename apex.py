@@ -44,13 +44,15 @@ def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics
       raise NotImplementedError
 
     # Custom Cassie Environment
-    if path in ['Cassie-v0', 'CassieStandingEnv-v0']:
-        from cassie import CassieEnv, CassieStandingEnv
+    if path in ['Cassie-v0', 'CassieStandingEnv-v0', 'Cassie-latent']:
+        from cassie import CassieEnv, CassieStandingEnv, CassieEnv_latent
 
         if path == 'Cassie-v0':
             env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, history=history)
         elif path == 'CassieStandingEnv-v0':
             env_fn = partial(CassieStandingEnv, state_est=state_est)
+        elif path == 'Cassie-latent':
+            env_fn = partial(CassieEnv_latent, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, history=history)
 
         # TODO for Yesh: make mirrored_obs an attribute of environment, configured based on setup parameters
         if mirror:
@@ -493,6 +495,9 @@ if __name__ == "__main__":
         args.state_est = False
         args.dynamics_randomization=False
         args.no_delta=False
+        args.env_name = "Cassie-latent"
+        # args.input_norm_steps = 100
+        args.logdir =  "./trained_models/latent_space/test"
         run_experiment(args)
 
     elif sys.argv[1] == 'eval':

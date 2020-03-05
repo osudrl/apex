@@ -10,6 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
+from .cassie.vae import VAE
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -38,8 +39,11 @@ logger = SummaryWriter(log_path, flush_secs=0.1) # flush_secs=0.1 actually slows
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 
 dataset_np = np.load("./5b75b3-seed0_gen_data/total_data.npy")
-# dataset_np = torch.Tensor(dataset_np)
 X_train, X_test = train_test_split(dataset_np, test_size=0.05, random_state=42, shuffle=True)
+
+# remove clock and speed commands, only dynamics
+X_train = X_train[:, 0:-3]
+X_test = X_test[:, 0:-3]
 
 data_min = np.min(X_train, axis=0)
 data_max = np.max(X_train-data_min, axis=0)
@@ -48,47 +52,23 @@ norm_test_data = np.divide((X_test-data_min), data_max)
 
 norm_data = torch.Tensor(norm_data)
 norm_test_data = torch.Tensor(norm_test_data)
+# norm_data = torch.Tensor(X_train)
+# norm_test_data = torch.Tensor(X_test)
+# print()
 
-print("norm data: ", norm_data.shape)
+np.savez("./data_norm_params.npz", data_max=data_max, data_min=data_min)
+# exit()
 
-
-class VAE(nn.Module):
-    def __init__(self):
-        super(VAE, self).__init__()
-
-        self.fc1 = nn.Linear(43, 100)
-        self.fc21 = nn.Linear(100, 100)
-        self.fc22 = nn.Linear(100, 100)
-
-        self.fc3 = nn.Linear(100, 100)
-        self.fc4 = nn.Linear(100, 43)
-
-    def encode(self, x):
-        h1 = F.relu(self.fc1(x))
-        return self.fc21(h1), self.fc22(h1)
-
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5*logvar)
-        eps = torch.randn_like(std)
-        return mu + eps*std
-
-    def decode(self, z):
-        h3 = F.relu(self.fc3(z))
-        return torch.sigmoid(self.fc4(h3))
-
-    def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, 43))
-        z = self.reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
-
+data_max = torch.Tensor(data_max).to(device)
+data_min = torch.Tensor(data_min).to(device)
 
 model = VAE().to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
-
+recon_loss_cri = nn.MSELoss()
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy(recon_x, x.view(-1, 43), reduction='sum')
+    MSE = recon_loss_cri(recon_x, x.view(-1, 40))
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -96,7 +76,7 @@ def loss_function(recon_x, x, mu, logvar):
     # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return BCE + KLD
+    return MSE + KLD
 
 def train(epoch):
     model.train()
@@ -123,7 +103,8 @@ def train(epoch):
     print('====> Epoch: {} Average loss: {:.4f}'.format(
           epoch, train_loss / train_len))
     logger.add_scalar("Train/Loss", train_loss / train_len, epoch)
-
+    for name, param in model.named_parameters():
+        logger.add_histogram("Model Params/"+name, param.data, epoch)
 
 def test(epoch):
     model.eval()
@@ -139,23 +120,35 @@ def test(epoch):
             data = data.to(device)
             recon_batch, mu, logvar = model(data)
             test_loss += loss_function(recon_batch, data, mu, logvar).item()
-            # if i == 0:
-            #     n = min(data.size(0), 8)
-            #     comparison = torch.cat([data[:n],
-            #                           recon_batch.view(args.batch_size, 1, 28, 28)[:n]])
-            #     save_image(comparison.cpu(),
-            #              './results/reconstruction_' + str(epoch) + '.png', nrow=n)
-
+            # Un-normalize data
+            orig_batch = recon_batch*data_max + data_min
+            orig_data = data*data_max + data_min
+            percent_error = torch.div((orig_data-orig_batch), (orig_data+1e-6))
+            percent_error = torch.mean(percent_error, axis=0)
+            if batch_idx == 0:
+                print(orig_batch[0,:])
+                print(orig_data[0,:])
+                print("percent error: ", percent_error*100)
+            
     test_loss /= test_len
     print('====> Test set loss: {:.4f}'.format(test_loss))
     logger.add_scalar("Test/Loss", test_loss, epoch)
- 
+
 if __name__ == "__main__":
-    for epoch in range(1, args.epochs + 1):
-        train(epoch)
-        test(epoch)
-        # with torch.no_grad():
-        #     sample = torch.randn(64, 20).to(device)
-        #     sample = model.decode(sample).cpu()
-        #     save_image(sample.view(64, 1, 28, 28),
-        #                './results/sample_' + str(epoch) + '.png')
+    # for epoch in range(1, args.epochs + 1):
+    #     train(epoch)
+    #     test(epoch)    
+    # PATH = "./vae_model/"+now.strftime("%Y%m%d-%H%M%S")
+    # torch.save(model.state_dict(), PATH)
+    
+    MODEL_NAME = "20200304-173701"
+    PATH = "./vae_model/"+MODEL_NAME
+    model.cpu()
+    model.load_state_dict(torch.load(PATH))
+    model.eval()
+    print(model)
+
+    recon_x, mu, logvar = model(norm_data[0,:])
+    print(recon_x)
+    print(norm_data[0,:])
+    
