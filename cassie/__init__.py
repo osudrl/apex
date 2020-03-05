@@ -2,7 +2,7 @@ from .cassie import CassieEnv_v2 as CassieEnv
 from .cassie_standing_env import CassieStandingEnv
 from .cassie import CassieEnv_v2
 from .cassie_latent import CassieEnv_latent
-
+from .vae import *
 
 from .cassiemujoco import *
 

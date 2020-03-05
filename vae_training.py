@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-from .cassie.vae import VAE
+from cassie.vae import VAE
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 parser = argparse.ArgumentParser(description='VAE Cassie')
 parser.add_argument('--batch_size', type=int, default=2048, metavar='N',
                     help='input batch size for training (default: 128)')
-parser.add_argument('--epochs', type=int, default=10, metavar='N',
+parser.add_argument('--epochs', type=int, default=50, metavar='N',
                     help='number of epochs to train (default: 10)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
@@ -45,6 +45,8 @@ X_train, X_test = train_test_split(dataset_np, test_size=0.05, random_state=42, 
 X_train = X_train[:, 0:-3]
 X_test = X_test[:, 0:-3]
 
+input_dim = 40
+
 data_min = np.min(X_train, axis=0)
 data_max = np.max(X_train-data_min, axis=0)
 norm_data = np.divide((X_train-data_min), data_max)
@@ -68,7 +70,7 @@ recon_loss_cri = nn.MSELoss()
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
-    MSE = recon_loss_cri(recon_x, x.view(-1, 40))
+    MSE = input_dim * recon_loss_cri(recon_x, x.view(-1, 40))
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -126,29 +128,29 @@ def test(epoch):
             percent_error = torch.div((orig_data-orig_batch), (orig_data+1e-6))
             percent_error = torch.mean(percent_error, axis=0)
             if batch_idx == 0:
-                print(orig_batch[0,:])
-                print(orig_data[0,:])
+                # print(orig_batch[0,:])
+                # print(orig_data[0,:])
                 print("percent error: ", percent_error*100)
             
     test_loss /= test_len
     print('====> Test set loss: {:.4f}'.format(test_loss))
     logger.add_scalar("Test/Loss", test_loss, epoch)
 
-if __name__ == "__main__":
-    # for epoch in range(1, args.epochs + 1):
-    #     train(epoch)
-    #     test(epoch)    
-    # PATH = "./vae_model/"+now.strftime("%Y%m%d-%H%M%S")
-    # torch.save(model.state_dict(), PATH)
-    
-    MODEL_NAME = "20200304-173701"
-    PATH = "./vae_model/"+MODEL_NAME
-    model.cpu()
-    model.load_state_dict(torch.load(PATH))
-    model.eval()
-    print(model)
+# if __name__ == "__main__":
 
-    recon_x, mu, logvar = model(norm_data[0,:])
-    print(recon_x)
-    print(norm_data[0,:])
-    
+# for epoch in range(1, args.epochs + 1):
+#     train(epoch)
+#     test(epoch)    
+# PATH = "./vae_model/"+now.strftime("%Y%m%d-%H%M%S")
+# torch.save(model.state_dict(), PATH)
+
+MODEL_NAME = "20200305-143659"
+PATH = "./vae_model/"+MODEL_NAME
+model.cpu()
+model.load_state_dict(torch.load(PATH))
+model.eval()
+print(model)
+
+recon_x, mu, logvar = model(norm_data[0,:])
+print(recon_x)
+print(norm_data[0,:])
