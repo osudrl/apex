@@ -27,7 +27,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, history=0, **kwargs):
+def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, history=0, hidden_size=20, latent_size=20, **kwargs):
     from functools import partial
 
     """
@@ -52,7 +52,7 @@ def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics
         elif path == 'CassieStandingEnv-v0':
             env_fn = partial(CassieStandingEnv, state_est=state_est)
         elif path == 'Cassie-latent':
-            env_fn = partial(CassieEnv_latent, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, history=history)
+            env_fn = partial(CassieEnv_latent, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, history=history, hidden_size=hidden_size, latent_size=latent_size)
 
         # TODO for Yesh: make mirrored_obs an attribute of environment, configured based on setup parameters
         if mirror:
@@ -146,7 +146,7 @@ def eval_policy(policy, args, run_args):
     import termios
     import select
     import numpy as np
-    from cassie import CassieEnv, CassieStandingEnv
+    from cassie import CassieEnv, CassieEnv_latent, CassieStandingEnv
 
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
@@ -156,6 +156,8 @@ def eval_policy(policy, args, run_args):
 
     if run_args.env_name == "Cassie-v0":
         env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
+    elif run_args.env_name == 'Cassie-latent':
+        env = CassieEnv_latent(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dynamics_randomization, no_delta=run_args.no_delta, history=run_args.history, hidden_size=run_args.hidden_size, latent_size=run_args.latent_size)
     else:
         env = CassieStandingEnv(state_est=run_args.state_est)
     
@@ -270,8 +272,10 @@ if __name__ == "__main__":
     parser.add_argument("--state_est", default=True, action='store_true')
     parser.add_argument("--dyn_random", default=False, action='store_true')
     parser.add_argument("--no_delta", default=False, action='store_true')
-    parser.add_argument("--reward", default="iros_paper", )
+    parser.add_argument("--reward", default="iros_paper")
     parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
+    parser.add_argument("--hidden_size", type=int, default=20)
+    parser.add_argument("--latent_size", type=int, default=20)
 
     """
         General arguments for configuring the logger
@@ -463,7 +467,7 @@ if __name__ == "__main__":
 
         # general args
         parser.add_argument("--algo_name", default="ppo")                                   # algo name
-        parser.add_argument("--env_name", "-e",   default="Cassie-v0")
+        parser.add_argument("--env_name", "-e",   default="Cassie-latent")
         parser.add_argument("--logdir", type=str, default="./trained_models/ppo/")          # Where to log diagnostics to
         parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
         parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
@@ -496,8 +500,8 @@ if __name__ == "__main__":
         args.dynamics_randomization=False
         args.no_delta=False
         args.env_name = "Cassie-latent"
-        # args.input_norm_steps = 100
-        args.logdir =  "./trained_models/latent_space/test"
+        # # args.input_norm_steps = 100
+        # args.logdir =  "./trained_models/latent_space/test"
         run_experiment(args)
 
     elif sys.argv[1] == 'eval':
@@ -505,7 +509,7 @@ if __name__ == "__main__":
         sys.argv.remove(sys.argv[1])
 
         parser.add_argument("--path", type=str, default="./trained_models/ppo/Cassie-v0/7b7e24-seed0/", help="path to folder containing policy and run details")
-        parser.add_argument("--env_name", default="Cassie-v0", type=str)
+        parser.add_argument("--env_name", default="Cassie-latent", type=str)
         parser.add_argument("--traj_len", default=400, type=str)
         parser.add_argument("--history", default=0, type=int)                                         # number of previous states to use as input
         args = parser.parse_args()

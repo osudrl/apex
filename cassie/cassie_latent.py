@@ -17,18 +17,21 @@ import torch
 from .vae import VAE
 
 class CassieEnv_latent:
-    def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, reward="iros_paper", history=0):
+    def __init__(self, traj='walking', simrate=60, clock_based=False, state_est=False, dynamics_randomization=False, no_delta=False, reward="iros_paper", history=0, hidden_size=20, latent_size=20):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
 
-        self.latent_model = VAE().cpu()
-        MODEL_NAME = "20200304-173701"
-        PATH = "/home/helei/apex/vae_model/"+MODEL_NAME
+        self.latent_size = latent_size
+        self.hidden_size = hidden_size
+
+        self.latent_model = VAE(hidden_size, latent_size).cpu()
+        MODEL_NAME = "run_" + str(self.latent_size) + "_" + str(self.hidden_size) + "_50_4096.pt"
+        PATH = "/home/yg/latent_space/vae_model/"+MODEL_NAME
         self.latent_model.load_state_dict(torch.load(PATH, map_location='cpu'))
         # self.latent_model.cpu()
         self.latent_model.eval()
 
-        norm_data = np.load("/home/helei/apex/data_norm_params.npz")
+        norm_data = np.load("/home/yg/latent_space/data_norm_params.npz")
         self.data_max = norm_data["data_max"]
         self.data_min = norm_data["data_min"]
 
@@ -58,7 +61,7 @@ class CassieEnv_latent:
             self.trajectory = CassieTrajectory(traj_path)
             self.speed = 0
 
-        self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
+        self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space(self.latent_size)
 
         # Adds option for state history for FF nets
         self._obs = len(self.observation_space)
@@ -123,7 +126,7 @@ class CassieEnv_latent:
 
         self.debug = False
 
-    def set_up_state_space(self):
+    def set_up_state_space(self, latent_size):
 
         mjstate_size   = 40
         state_est_size = 46
@@ -166,7 +169,7 @@ class CassieEnv_latent:
                 mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32] + mirrored_traj
             clock_inds = None
 
-        observation_space = np.zeros(23)
+        observation_space = np.zeros(latent_size + clock_size + speed_size)
 
         return observation_space, clock_inds, mirrored_obs
 
