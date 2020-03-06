@@ -26,7 +26,8 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
-parser.add_argument('--latent_size', type=int, default=20, metavar='N', help='size of latent space')
+parser.add_argument('--latent_size', type=int, default=20, help='size of latent space')
+parser.add_argument('--hidden_size', type=int, default=40, help='size of hidden space')
 parser.add_argument('--test_model', type=str, default=None, help='path to model to load')
 parser.add_argument('--run_name', type=str, default=None, help='name of model to save and associated log data')
 args = parser.parse_args()
@@ -36,8 +37,10 @@ torch.manual_seed(args.seed)
 
 device = torch.device("cuda" if args.cuda else "cpu")
 now = datetime.now()
-log_path = "./logs/"+args.run_name
-logger = SummaryWriter(log_path, flush_secs=0.1) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
+
+if args.test_model is None:
+    log_path = "./logs/"+args.run_name
+    logger = SummaryWriter(log_path, flush_secs=0.1) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 
@@ -67,7 +70,7 @@ np.savez("./data_norm_params.npz", data_max=data_max, data_min=data_min)
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
-model = VAE(args.latent_size).to(device)
+model = VAE(args.hidden_size, args.latent_size).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 recon_loss_cri = nn.MSELoss()
 

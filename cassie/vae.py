@@ -4,15 +4,15 @@ from torch.nn import functional as F
 
 
 class VAE(nn.Module):
-    def __init__(self, latent_size):
+    def __init__(self, hidden_size, latent_size):
         super(VAE, self).__init__()
 
-        self.fc1 = nn.Linear(40, 30)
-        self.fc21 = nn.Linear(30, latent_size)
-        self.fc22 = nn.Linear(30, latent_size)
+        self.fc1 = nn.Linear(40, hidden_size)
+        self.fc21 = nn.Linear(hidden_size, latent_size)
+        self.fc22 = nn.Linear(hidden_size, latent_size)
 
-        self.fc3 = nn.Linear(latent_size, 30)
-        self.fc4 = nn.Linear(30, 40)
+        self.fc3 = nn.Linear(latent_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, 40)
 
     def encode(self, x):
         h1 = F.relu(self.fc1(x))
