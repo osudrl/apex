@@ -2,6 +2,7 @@ from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
 from .trajectory import CassieTrajectory
 from cassie.quaternion_function import *
+from .rewards import *
 
 from math import floor
 
@@ -108,6 +109,10 @@ class CassieEnv_speed_no_delta_neutral_foot:
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
+
+        self.base_mirror_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15,
+                            16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24,
+                            25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42]
 
         self.speed = 1
         # maybe make ref traj only send relevant idxs?
@@ -541,180 +546,10 @@ class CassieEnv_speed_no_delta_neutral_foot:
     # NOTE: this reward is slightly different from the one in Xie et al
     # see notes for details
     def compute_reward(self):
-        qpos = np.copy(self.sim.qpos())
-        qvel = np.copy(self.sim.qvel())
-        # phase_diff = self.phase - np.floor(self.phase)
-        # ref_pos_prev, ref_vel_prev = self.get_ref_state(int(np.floor(self.phase)))
-        # if phase_diff != 0:
-        #     ref_pos_next, ref_vel_next = self.get_ref_state(int(np.ceil(self.phase)))
-        #     ref_pos_diff = ref_pos_next - ref_pos_prev
-        #     ref_vel_diff = ref_vel_next - ref_vel_prev
-        #     ref_pos = ref_pos_prev + phase_diff*ref_pos_diff
-        #     ref_vel = ref_vel_prev + phase_diff*ref_vel_diff
-        # else:
-        #     ref_pos = ref_pos_prev
-        #     ref_vel = ref_vel_prev
-
-        # ref_pos, ref_vel = self.get_ref_state(self.phase)
-
-        # # TODO: should be variable; where do these come from?
-        # # TODO: see magnitude of state variables to gauge contribution to reward
-        # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
-
-        # joint_error       = 0
-        # com_error         = 0
-        # orientation_error = 0
-        # spring_error      = 0
-
-        # # each joint pos
-        # for i, j in enumerate(self.pos_idx):
-        #     target = ref_pos[j]
-        #     actual = qpos[j]
-
-        #     joint_error += 30 * weight[i] * (target - actual) ** 2
-
-        # # center of mass: x, y, z
-        # for j in [0, 1, 2]:
-        #     target = ref_pos[j]
-        #     actual = qpos[j]
-
-        #     # NOTE: in Xie et al y target is 0
-
-        #     com_error += (target - actual) ** 2
-        
-        # # COM orientation: qx, qy, qz
-        # for j in [4, 5, 6]:
-        #     target = ref_pos[j] # NOTE: in Xie et al orientation target is 0
-        #     actual = qpos[j]
-
-        #     orientation_error += (target - actual) ** 2
-
-        # # left and right shin springs
-        # for i in [15, 29]:
-        #     target = ref_pos[i] # NOTE: in Xie et al spring target is 0
-        #     actual = qpos[i]
-
-        #     spring_error += 1000 * (target - actual) ** 2      
-        
-        # reward = 0.5 * np.exp(-joint_error) +       \
-        #          0.3 * np.exp(-com_error) +         \
-        #          0.1 * np.exp(-orientation_error) + \
-        #          0.1 * np.exp(-spring_error)
-
-        # orientation error does not look informative
-        # maybe because it's comparing euclidean distance on quaternions
-        # print("reward: {8}\njoint:\t{0:.2f}, % = {1:.2f}\ncom:\t{2:.2f}, % = {3:.2f}\norient:\t{4:.2f}, % = {5:.2f}\nspring:\t{6:.2f}, % = {7:.2f}\n\n".format(
-        #             0.5 * np.exp(-joint_error),       0.5 * np.exp(-joint_error) / reward * 100,
-        #             0.3 * np.exp(-com_error),         0.3 * np.exp(-com_error) / reward * 100,
-        #             0.1 * np.exp(-orientation_error), 0.1 * np.exp(-orientation_error) / reward * 100,
-        #             0.1 * np.exp(-spring_error),      0.1 * np.exp(-spring_error) / reward * 100,
-        #             reward
-        #         )
-        #     )  
-
-        orient_targ = np.array([1, 0, 0, 0])
-        speed_targ = np.array([self.speed, 0, 0])
-        if self.time >= self.orient_time:
-            orient_targ = euler2quat(z=self.orient_add, y=0, x=0)
-            iquaternion = inverse_quaternion(orient_targ)
-            speed_targ = rotate_by_quaternion(speed_targ, iquaternion)
-            new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
-            if new_orient[0] < 0:
-                new_orient = -new_orient
-        forward_diff = np.abs(qvel[0] - speed_targ[0])
-        orient_diff = 1 - np.inner(orient_targ, qpos[3:7]) ** 2
-        # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
-        y_vel = np.abs(qvel[1] - speed_targ[1])
-        if forward_diff < 0.05:
-           forward_diff = 0
-        if y_vel < 0.05:
-            y_vel = 0
-        straight_diff = 8*np.abs(qpos[1] - self.y_offset)
-        if np.abs(qpos[1] - self.y_offset) < 0.05:
-            straight_diff = 0
-        if orient_diff < 5e-3:
-            orient_diff = 0
-        else:
-            orient_diff *= 30
-        # ######## Pelvis z accel penalty #########
-        # pelaccel = np.abs(self.cassie_state.pelvis.translationalAcceleration[2])
-        # pelaccel_penalty = 0
-        # if pelaccel > 5:
-        #     pelaccel_penalty = (pelaccel - 5) / 10
-        # pelbonus = 0
-        # if 8 < pelaccel < 10:
-        #     pelbonus = 0.2
-        # ######## Foot position penalty ########
-        # foot_pos = np.zeros(6)
-        # self.sim.foot_pos(foot_pos)
-        # foot_dist = np.linalg.norm(foot_pos[0:2]-foot_pos[3:5])
-        # foot_penalty = 0
-        # if foot_dist < 0.14:
-        #    foot_penalty = 0.2
-        # ######## Foot force penalty ########
-        # foot_forces = self.sim.get_foot_forces()
-        # lforce = max((foot_forces[0] - 350)/1000, 0)
-        # rforce = max((foot_forces[1] - 350)/1000, 0)
-        # forcebonus = 0
-        # # print("foot force: ", lforce, rforce)
-        # # lbonus = max((800 - foot_forces[0])/1000, 0)
-        # if foot_forces[0] <= 1000 and foot_forces[1] <= 1000:
-        #     forcebonus = foot_forces[0] / 5000 + foot_forces[1] / 5000
-        # ######## Foot velocity penalty ########
-        # lfoot_vel_bonus = 0     
-        # rfoot_vel_bonus = 0
-        # # if self.prev_foot is not None and foot_pos[2] < 0.3 and foot_pos[5] < 0.3:
-        # #     lfoot_vel = np.abs(foot_pos[2] - self.prev_foot[2]) / 0.03 * 0.03
-        # #     rfoot_vel = np.abs(foot_pos[5] - self.prev_foot[5]) / 0.03 * 0.03
-        # # if self.l_high:
-        # #     lfoot_vel_bonus = self.lfoot_vel * 0.3
-        # # if self.r_high:
-        # #     rfoot_vel_bonus = self.rfoot_vel * 0.3
-        # ######## Foot orientation ########
-        # lfoot_orient = 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.leftFoot.orientation[:]) ** 2
-        # rfoot_orient = 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.rightFoot.orientation[:]) ** 2
-        ######## Hip yaw ########
-        # rhipyaw = np.abs(qpos[22])
-        # lhipyaw = np.abs(qpos[8])
-        # if lhipyaw < 0.05:
-        #     lhipyaw = 0
-        # if rhipyaw < 0.05:
-        #     rhipyaw = 0
-        ######## Hip roll penalty #########
-        # lhiproll = np.abs(qpos[7])
-        # rhiproll = np.abs(qpos[21])
-        # if lhiproll < 0.05:
-        #     lhiproll = 0
-        # if rhiproll < 0.05:
-        #     rhiproll = 0
-        ######## Prev action penalty ########
-        # if self.prev_action is not None:
-        #     prev_penalty = np.linalg.norm(self.curr_action - self.prev_action) / 10 #* (30/self.simrate)
-        # else:
-        #     prev_penalty = 0
-
-        # reward = .2*np.exp(-self.com_vel_error) + .1*np.exp(-self.com_error) + .1*np.exp(-self.orientation_error) \
-        #         + .1*np.exp(-20*self.l_foot_diff) + .1*np.exp(-5*self.l_footvel_diff) \
-        #         + .1*np.exp(-20*self.r_foot_diff) + .1*np.exp(-5*self.r_footvel_diff) \
-                # + .1*np.exp(-lfoot_orient) + .1*np.exp(-rfoot_orient)
-        # print("forward diff: ", np.exp(-forward_diff))
-        # print("orient diff: ", np.exp(-orient_diff))
-        # print("straight diff: ", np.exp(-straight_diff))
-        # print("l foot orient: ", np.exp(-self.l_foot_orient))
-        # print("r foot orinet: ", np.exp(-self.r_foot_orient))
-        reward = .4*np.exp(-forward_diff) + .3*np.exp(-orient_diff) \
-                    + .15*np.exp(-straight_diff) + .15*np.exp(-y_vel) \
-                    # + .1*np.exp(-self.l_foot_orient) + .1*np.exp(-self.r_foot_orient) \
-                    # + .1*np.exp(-self.smooth_cost) \
-                    # + .15*np.exp(-self.joint_error) 
-                    # + .1*np.exp(-self.torque_cost) + .1*np.exp(-self.smooth_cost) #\
-                    #
-                    #  + .075*np.exp(-10*lhipyaw) + .075*np.exp(-10*rhipyaw) + .075*np.exp(-10*lhiproll) + .075*np.exp(-10*rhiproll)
-        #         + .1*np.exp(-20*self.l_foot_diff) + .1*np.exp(-20*self.r_foot_diff) \
-        #         + .1*np.exp(-5*self.l_footvel_diff) + .1*np.exp(-5*self.r_footvel_diff)
-        # - lfoot_vel_bonus - rfoot_vel_bonus - foot_penalty
-        # - lforce - rforce
-        #+ pelbonus- pelaccel_penalty - foot_penalty
+    
+        # reward = trajmatch_reward(self)
+        # reward = speedmatch_reward(self)
+        reward = speedmatch_footorient_joint_smooth_reward(self)
 
         return reward
 
