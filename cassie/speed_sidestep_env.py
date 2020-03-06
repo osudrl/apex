@@ -291,7 +291,7 @@ class CassieEnv_speed_sidestep:
             curr_torques = np.array(self.cassie_state.motor.torque[:])
             self.torque_cost += 0.0001*np.linalg.norm(np.square(curr_torques))
             if self.prev_torque is not None:
-                self.smooth_cost += 0.01*np.linalg.norm(np.square(curr_torques - self.prev_torque))
+                self.smooth_cost += 0.001*np.linalg.norm(np.square(curr_torques - self.prev_torque))
             else:
                 self.smooth_cost += 0
             self.prev_torque = curr_torques 
@@ -370,7 +370,7 @@ class CassieEnv_speed_sidestep:
 
         
         self.speed = (random.randint(-5, 10)) / 10
-        self.side_speed = 0.4*random.random() - 0.2
+        self.side_speed = 0.6*random.random() - 0.3
         self.phase_add = 1# + random.random()
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.prev_action = None
@@ -595,10 +595,11 @@ class CassieEnv_speed_sidestep:
         #     footheight_penalty = 0.2
 
         # reward = .35*np.exp(-20*self.l_foot_diff) + .35*np.exp(-20*self.r_foot_diff) + .15*np.exp(-5*self.l_footvel_diff) + .15*np.exp(-5*self.r_footvel_diff)
-        reward = .15*np.exp(-forward_diff) + .15*np.exp(-side_diff) + .1*np.exp(-orient_diff) \
-                    + .1*np.exp(-20*self.l_foot_diff) + .1*np.exp(-20*self.r_foot_diff) + \
-                    + .1*np.exp(-self.ltdvel_cost) * .1*np.exp(-self.rtdvel_cost) \
-                    + .1*np.exp(-self.torque_cost) + .1*np.exp(-self.smooth_cost)
+        reward = .25*np.exp(-forward_diff) + .25*np.exp(-side_diff) + .2*np.exp(-orient_diff) \
+                    + .1*np.exp(-self.torque_cost) + .2*np.exp(-self.smooth_cost)
+                    # + .1*np.exp(-20*self.l_foot_diff) + .1*np.exp(-20*self.r_foot_diff) + \
+                    # + .1*np.exp(-self.ltdvel_cost) * .1*np.exp(-self.rtdvel_cost) \
+                    
                     # + .1*np.exp(-self.lf_heightvel) + .1*np.exp(-self.rf_heightvel) \
                     #+ .1*np.exp(-self.lfoot_orient_cost) + .1*np.exp(-self.rfoot_orient_cost) \
                     

@@ -94,16 +94,17 @@ args.minibatch_size = 2048
 args.lr = 1e-4
 args.epochs = 5
 args.max_traj_len = 300 * int(60/simrate)
-args.seed = int(time.time())
+# args.seed = 40#int(time.time())
 args.max_grad_norm = 0.05
 args.use_gae = False
-args.name = "5k_freq1-1.7_torquecost_smoothcost"
-# args.name = "fwrd_walk_StateEst_origtrajmatch"
+# args.name = "5k_footorient_smoothcost_jointreward_randjoint_seed{}".format(args.seed)
+# args.name = "5k_randjoint"
+args.name = "noheightaccel_StateEst_trajmatch"
 # args.name = "sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.4_vels_avgdiff_simrate15_savedvels_cont"#_pelaccel_hipyaw_footxypenalty"
 # args.name = "sidestep_StateEst_foottrajmatchz_speed1.0_fixedheightfreq_fixedtdvel_avgdiff_minnegzvel_torquecost_smoothcost"
-# args.name = "sidestep_StateEst_speedmatch_footheightnegzvel"
-args.logdir = "./logs/5k/"
-# args.name = "test"
+# args.name = "sidestep_StateEst_speedmatch_torquesmoothbigcost_(1)"
+args.logdir = "./logs/test/"
+# args.name = "test_save_seed{}".format(args.seed)
 # args.logdir = "./logs/test/"
 # Check if policy name already exists. If it does, increment filename
 index = ''
@@ -142,10 +143,12 @@ if __name__ == "__main__":
         from cassie.speed_no_delta_neutral_foot_env import CassieEnv_speed_no_delta_neutral_foot
         from cassie.standing_env import CassieEnv_stand
         from cassie.speed_sidestep_env import CassieEnv_speed_sidestep
+        from cassie.speed_no_delta_noheight_noaccel_env import CassieEnv_speed_no_delta_noheight_noaccel
 
         # set up cassie environment
         # env_fn = functools.partial(CassieEnv, "walking", clock_based=True, state_est=args.state_est)
-        env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv_speed_no_delta_noheight_noaccel, "walking", simrate=simrate, state_est=args.state_est)
+        # env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
         # env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
@@ -154,9 +157,12 @@ if __name__ == "__main__":
         if args.mirror:
             if args.state_est:
                 # with state estimator
-                mirror_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15,
-                            16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24,
-                            25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42]
+                # mirror_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15,
+                #             16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24,
+                #             25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42]
+                mirror_obs = [0.1, 1, 2, 3, -9, -10, 11, 12, 13, -4, -5, 6, 7, 8, 14, 15,
+                            16, 17, 18, 19, -25, -26, 27, 28, 29, -20, -21, 22, 23, 24,
+                            32, 33, 30, 31, 36, 37, 34, 35]
             else:
                 # without state estimator
                 print("no state est")
@@ -176,22 +182,23 @@ if __name__ == "__main__":
         max_episode_steps = 1000
 
     #env.seed(args.seed)
-    #torch.manual_seed(args.seed)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
-    # policy = GaussianMLP(
-    #     obs_dim, action_dim, 
-    #     nonlinearity="relu", 
-    #     bounded=False, 
-    #     init_std=np.exp(-2), 
-    #     learn_std=False,
-    #     normc_init=False
-    # )
+    policy = GaussianMLP(
+        obs_dim, action_dim, 
+        nonlinearity="relu", 
+        bounded=False, 
+        init_std=np.exp(-2), 
+        learn_std=False,
+        normc_init=False
+    )
     # policy = torch.load("./trained_models/fwrd_walk_StateEst_speed-05-1_freq1_foottraj_land0.2_simrate15_(1).pt")
     # policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_(3).pt")
     # policy = torch.load("./trained_models/sidestep_StateEst_iktrajmatch_fixedheightfreq_avgdiff.pt")
     # policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.4_vels_avgdiff_simrate15_savedvels.pt")
 
-    # policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
+    policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=2, policy=policy, env_fn=env_fn))
     # normalizer = PreNormalizer(iter=args.input_norm_steps, noise_std=2, policy=policy, online=False)
     # env = normalizer(Vectorize([env_fn]))
     # mean, std = env.ob_rms.mean, np.sqrt(env.ob_rms.var + 1E-8)
@@ -199,11 +206,11 @@ if __name__ == "__main__":
     # policy.obs_std = torch.Tensor(std)
 
     # Load previous policy
-    policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
-    # policy = torch.load("./trained_models/5k_footorient_crown_width2_(1).pt")
+    # policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
+    # policy = torch.load("./trained_models/5k_randfric_footorient_yvel_seed50.pt")
     # policy = torch.load("./trained_models/sidestep_StateEst_foottrajmatchz_speed1.0_fixedheightfreq_fixedtdvel_avgdiff_footorient_actpenalty.pt")
-    # policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_(3).pt")
-    policy.bounded = False
+    # policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_torquesmoothcost.pt")
+    # policy.bounded = False
     
     policy.train(0)
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
