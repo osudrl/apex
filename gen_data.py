@@ -14,6 +14,7 @@ class gen_worker(object):
         self.cassie_env = env_fn()
         self.policy = policy
         self.obs_dim = len(self.cassie_env.observation_space)
+        self.state_dim = self.cassie_env.sim.nq + self.cassie_env.sim.nv
         self.phaselen = self.cassie_env.phaselen + 1
 
     # Simulates a single rollout of "num_steps" long at "speed" speed, will simulate "wait_cycles" number of cycles to stabilize
@@ -28,7 +29,8 @@ class gen_worker(object):
             exit()
 
         start_t = time.time()
-        data = np.zeros((num_steps, self.obs_dim))
+        # data = np.zeros((num_steps, self.obs_dim))
+        data = np.zeros((num_steps, self.state_dim))
         rewards = np.zeros(num_steps)
         force_x = force * np.cos(perturb_dir)
         force_y = force * np.sin(perturb_dir)
@@ -39,14 +41,16 @@ class gen_worker(object):
         for timestep in range(self.phaselen*wait_cycles):
             action = self.policy.forward(torch.Tensor(state)).detach().numpy()
             state, reward, done, _ = self.cassie_env.step(action)
+            mj_state = np.concatenate([self.cassie_env.sim.qpos(), self.cassie_env.sim.qvel()])
             rewards[timestep] = reward
-            data[timestep, :] = state
+            data[timestep, :] = mj_state
         # Simulate until at current testing phase
         for timestep in range(self.phaselen*wait_cycles, self.phaselen*wait_cycles+test_phase):
             action = self.policy.forward(torch.Tensor(state)).detach().numpy()
             state, reward, done, _ = self.cassie_env.step(action)
+            mj_state = np.concatenate([self.cassie_env.sim.qpos(), self.cassie_env.sim.qvel()])
             rewards[timestep] = reward
-            data[timestep, :] = state
+            data[timestep, :] = mj_state
         # Apply force
         force_start_t = self.cassie_env.sim.time()
         for timestep in range(self.phaselen*wait_cycles+test_phase, num_steps):
@@ -56,16 +60,18 @@ class gen_worker(object):
                 self.cassie_env.sim.apply_force([0, 0, 0, 0, 0, 0], perturb_body)
             action = self.policy.forward(torch.Tensor(state)).detach().numpy()
             state, reward, done, _ = self.cassie_env.step(action)
+            mj_state = np.concatenate([self.cassie_env.sim.qpos(), self.cassie_env.sim.qvel()])
             rewards[timestep] = reward
-            data[timestep, :] = state
+            data[timestep, :] = mj_state
         
         return data, rewards, worker_id, time.time() - start_t
 
-def gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, num_procs):
+def gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, num_procs, filename):
 
     total_start_t = time.time()
     temp_env = env_fn()
     obs_dim = len(temp_env.observation_space)
+    state_dim = temp_env.sim.nq + temp_env.sim.nv
     if num_angles > 0:
         perturb_dir = -2*np.pi*(1/num_angles)*np.arange(num_angles)
     else:
@@ -93,9 +99,9 @@ def gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_a
     print("num args should be: ", num_speeds*(1+num_forces*num_angles*phaselen))
     print("Number of args: ", len(args))
     num_args = len(args)
-    total_data = np.zeros((num_args*num_steps, obs_dim))
+    # total_data = np.zeros((num_args*num_steps, obs_dim))
+    total_data = np.zeros((num_args*num_steps, state_dim))
     total_rewards = np.zeros(num_args*num_steps)
-    # total_data = None
     avg_time = None
     avg_iter_time = None
     done_count = 0
@@ -131,11 +137,11 @@ def gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_a
                     num_args, avg_time, (num_args - done_count)*(avg_iter_time)), end='')
         # exit()
     print("")
-    np.savez("./5b75b3-seed0_gen_data.npz", total_data=total_data, total_rewards=total_rewards)
+    np.savez(filename, total_data=total_data, total_rewards=total_rewards)
     print("Total time: ", time.time() - total_start_t)
 
 
-def gen_data(cassie_env, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration):
+def gen_data(cassie_env, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, filename):
 
     obs_dim = len(cassie_env.observation_space)
     perturb_dir = -2*np.pi*(1/num_angles)*np.arange(num_angles)
@@ -193,7 +199,7 @@ def gen_data(cassie_env, policy, num_steps, wait_cycles, speeds, forces, num_ang
                         data[timestep+ind_offset, :] = state
         print("sim time for single speed: ", time.time() - start_t)
 
-    np.save("./test_obs_data.npy", data)
+    np.save(filename, data)
 
 def vis_rollout(cassie_env, policy, num_steps, wait_cycles, test_phase, speed, force, perturb_dir, perturb_body, perturb_duration):
 
@@ -238,7 +244,7 @@ def vis_rollout(cassie_env, policy, num_steps, wait_cycles, test_phase, speed, f
     
 
 # Check data
-# data_dict = np.load("./5b75b3-seed0_gen_data.npz")
+# data_dict = np.load("./5b75b3-seed0_full_mjdata.npz")
 # obs_data = data_dict["total_data"]
 # reward_data = data_dict["total_rewards"]
 # print("reward shape: ", reward_data.shape)
@@ -260,17 +266,18 @@ env_fn = partial(CassieEnv_v2, traj=run_args.traj, state_est=run_args.state_est,
 # cassie_env = CassieEnv_v2(clock_based=True, state_est=False, no_delta=True)
 # env_fn = partial(CassieEnv_v2, clock_based=True, state_est=False, no_delta=True)
 
+
 # Set data generation parameters
 num_steps = 300
 wait_cycles = 2
-num_angles = 0
+num_angles = 4
 speeds = np.linspace(0, 1, 11)
-forces = []
+forces = [20, 35, 50]
 perturb_body = "cassie-pelvis"
 perturb_duration = 0.0
 
 # NOTE: There are no checks made for whether Cassie fell down or not. If the policy failed for some reason, data will
 # still be saved. For this reason, make sure that the policy can resist the specified forces
 # gen_data(cassie_env, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration)
-vis_rollout(cassie_env, policy, 300, 2, 0, .5, 0, 0, perturb_body, perturb_duration)
-# gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, 11)
+# vis_rollout(cassie_env, policy, 300, 2, 0, .5, 0, 0, perturb_body, perturb_duration)
+gen_data_multi(env_fn, policy, num_steps, wait_cycles, speeds, forces, num_angles, perturb_body, perturb_duration, 100, "./5b75b3-seed0_full_mjdata.npz")
