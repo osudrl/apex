@@ -44,14 +44,14 @@ if args.test_model is None:
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 
-dataset_np = np.load("./5b75b3-seed0_gen_data/total_data.npy")
+dataset_np = np.load("./5b75b3-seed0_full_mjdata/total_data.npy")
 X_train, X_test = train_test_split(dataset_np, test_size=0.05, random_state=42, shuffle=True)
 
 # remove clock and speed commands, only dynamics
 X_train = X_train[:, 0:-3]
 X_test = X_test[:, 0:-3]
 
-input_dim = 40
+input_dim = 35 + 32 - 3
 
 data_min = np.min(X_train, axis=0)
 data_max = np.max(X_train-data_min, axis=0)
@@ -70,13 +70,13 @@ np.savez("./data_norm_params.npz", data_max=data_max, data_min=data_min)
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
-model = VAE(args.hidden_size, args.latent_size).to(device)
+model = VAE(input_dim, args.hidden_size, args.latent_size).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 recon_loss_cri = nn.MSELoss()
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
-    MSE = input_dim * recon_loss_cri(recon_x, x.view(-1, 40))
+    MSE = input_dim * recon_loss_cri(recon_x, x.view(-1, input_dim))
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
