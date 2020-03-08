@@ -3,6 +3,7 @@ from cassie.trajectory import CassieTrajectory
 import numpy as np
 import time
 import matplotlib.pyplot as plt
+from cassie.speed_no_delta_neutral_foot_env import CassieEnv_speed_no_delta_neutral_foot
 
 sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
 vis = CassieVis(sim, "./cassie/cassiemujoco/cassie.xml")
@@ -13,6 +14,8 @@ render_state = vis.draw(sim)
 trajectory = CassieTrajectory("./cassie/trajectory/stepdata.bin")
 traj = trajectory.qpos
 start_ind = 0
+cassie_env = CassieEnv_speed_no_delta_neutral_foot("walking", clock_based=True, state_est=True)
+
 # traj[0:200, 20] += 0.2
 # traj[200:250, 20] += 0.1
 # traj[300:350, 20] -= 0.1
@@ -73,19 +76,28 @@ foot_vel = np.zeros((traj.shape[0], 6))
 
 print(traj.shape)
 i = start_ind
-while render_state:
-    if (not vis.ispaused()) and (start_ind <= i < traj.shape[0]):
+phase_add = 28/1680
+cassie_env.speed = 1
+while render_state:# and i < cassie_env.phaselen:
+    if (not vis.ispaused()):# and (start_ind <= i < traj.shape[0]):
 # for i in range(0, traj.shape[0]):
-        print(i)
+        # print(i)
         
-        sim.set_qpos(traj[i, :])
-        sim.step_pd(u)
-        sim.foot_pos(curr_foot)
-        foot_pos[i, :] = curr_foot
-        if i > 0:
-            foot_vel[i, :] = (foot_pos[i, :] - foot_pos[i-1, :]) / 0.0005
+        # sim.set_qpos(traj[i, :])
+        # sim.set_qpos(cassie_env.trajectory.qpos[i])
+        curr_qpos, _ = cassie_env.get_ref_state(i)
+        sim.set_qpos(curr_qpos)
+        sim.set_qvel(np.zeros(32))
+        # sim.step_pd(u)
+        # sim.foot_pos(curr_foot)
+        # foot_pos[i, :] = curr_foot
+        # if i > 0:
+            # foot_vel[i, :] = (foot_pos[i, :] - foot_pos[i-1, :]) / 0.0005
         
-        i += 1
+        i += phase_add
+        if i > cassie_env.phaselen:
+            i = 0
+            cassie_env.counter += 1
     render_state = vis.draw(sim)
     time.sleep(0.005)
 

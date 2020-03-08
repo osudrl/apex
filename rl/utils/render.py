@@ -38,28 +38,28 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 c = sys.stdin.read(1)
                 if c == 'w':
                     env.speed += .1
-                    print("Increasing speed to: ", env.speed)
+                    print("Increasing speed to: {:.1f}".format(env.speed))
                 elif c == 's':
                     env.speed -= .1
-                    print("Decreasing speed to: ", env.speed)
+                    print("Decreasing speed to: {:.1f}".format(env.speed))
                 elif c == 'a':
                     env.side_speed += .1
-                    print("Increasing side speed to: ", env.side_speed)
+                    print("Increasing side speed to: {:.1f}".format(env.side_speed))
                 elif c == 'd':
                     env.side_speed -= .1
-                    print("Decreasing side speed to: ", env.side_speed)
+                    print("Decreasing side speed to: {:.1f}".format(env.side_speed))
                 elif c == 'j':
                     env.phase_add += .1
-                    print("Increasing frequency to: ", env.phase_add)
+                    print("Increasing frequency to: {:.1f}".format(env.phase_add))
                 elif c == 'h':
                     env.phase_add -= .1
-                    print("Decreasing frequency to: ", env.phase_add)
+                    print("Decreasing frequency to: {:.1f}".format(env.phase_add))
                 elif c == 'l':
                     orient_add += .1
-                    print("Increasing orient_add to: ", orient_add)
+                    print("Increasing orient_add to: {:.1f}".format(orient_add))
                 elif c == 'k':
                     orient_add -= .1
-                    print("Decreasing orient_add to: ", orient_add)
+                    print("Decreasing orient_add to: {:.1f}".format(orient_add))
                 elif c == 'p':
                     print("Applying force")
                     push = 100
@@ -70,6 +70,8 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 else:
                     pass
             if (not env.vis.ispaused()):
+                # print("lfoot orient: ", env.sim.xquat("left-foot"))
+                # print("rfoot orient: ", env.sim.xquat("right-foot"))
                 # Update orientation
                 quaternion = euler2quat(z=orient_add, y=0, x=0)
                 iquaternion = inverse_quaternion(quaternion)
@@ -92,6 +94,8 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                     state[20:23] = torch.FloatTensor(new_translationalVelocity)
                
                 # Get action
+                # state[36] = 0
+                # state[9] = 0
                 _, action = policy.act(state, deterministic)
                 if deterministic:
                     action = action.data.numpy()
@@ -111,6 +115,9 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 prev_foot = copy.copy(foot_pos)
                 # print("Foot force norm: ", foot_forces[0])
                 # print("foot distance: ", np.linalg.norm(foot_pos[0:2]-foot_pos[3:5]))
+                # print("foot orient: ", env.cassie_state.leftFoot.orientation[:])
+                # print("lfoot orient: ", env.sim.xquat("left-foot"))
+                # print("rfoot orient: ", env.sim.xquat("right-foot"))
                 # print("speed: ", env.sim.qvel()[0])
                 # print("Frequency: ", env.phase_add)
                 # print("Speed: ", env.speed)
@@ -175,15 +182,19 @@ def renderpolicy(env, policy, deterministic=False, speedup=1, dt=0.05):
     print("mean inference time: ", total_time / count)
 
 def avg_pols(policies, state, deterministic):
-    total_act = np.zeros(10)
-    for policy in policies:
+    # total_act = np.zeros(10)
+    total_act = np.zeros((10, len(policies)))
+    for i in range(len(policies)):
+        policy = policies[i]
         _, action = policy.act(state, deterministic)
         if deterministic:
             action = action.data.numpy()
         else:
             action = action.data[0].numpy()
-        total_act += action
-    return total_act / len(policies)
+        # total_act += action
+        total_act[:, i] = action
+    # return total_act / len(policies)
+    return np.mean(total_act, axis=1), np.std(total_act, axis=1)
 
 @torch.no_grad()
 def rendermultipolicy(env, policies, deterministic=False, speedup=1, dt=0.05):
@@ -219,8 +230,19 @@ def rendermultipolicy(env, policies, deterministic=False, speedup=1, dt=0.05):
 @torch.no_grad()
 def rendermultipolicy_speedinput(env, policies, deterministic=False, speedup=1, dt=0.05):
     state = torch.Tensor(env.reset_for_test())
-    env.speed = 3
+    env.speed = 0
+    env.side_speed = 0
     env.phase_add = 1
+    orient_add = 0
+    prev_foot = None
+    total_stddev = 0
+    count = 0
+
+    # Check if using StateEst or not
+    if env.observation_space.shape[0] >= 48:
+        is_stateest = True
+    else:
+        is_stateest = False
 
     render_state = env.render()
     old_settings = termios.tcgetattr(sys.stdin)
@@ -229,21 +251,90 @@ def rendermultipolicy_speedinput(env, policies, deterministic=False, speedup=1, 
         tty.setcbreak(sys.stdin.fileno())
         while render_state:
             if isData():
-                c = sys.stdin.read(3)
-                if c == '\x1b[A':
+                c = sys.stdin.read(1)
+                if c == 'w':
                     env.speed += .1
                     print("Increasing speed to: ", env.speed)
-                elif c == '\x1b[B':
+                elif c == 's':
                     env.speed -= .1
                     print("Decreasing speed to: ", env.speed)
+                elif c == 'a':
+                    env.side_speed += .1
+                    print("Increasing side speed to: ", env.side_speed)
+                elif c == 'd':
+                    env.side_speed -= .1
+                    print("Decreasing side speed to: ", env.side_speed)
+                elif c == 'j':
+                    env.phase_add += .1
+                    print("Increasing frequency to: ", env.phase_add)
+                elif c == 'h':
+                    env.phase_add -= .1
+                    print("Decreasing frequency to: ", env.phase_add)
+                elif c == 'l':
+                    orient_add += .1
+                    print("Increasing orient_add to: ", orient_add)
+                elif c == 'k':
+                    orient_add -= .1
+                    print("Decreasing orient_add to: ", orient_add)
+                elif c == 'p':
+                    print("Applying force")
+                    push = 100
+                    push_dir = 2
+                    force_arr = np.zeros(6)
+                    force_arr[push_dir] = push
+                    env.sim.apply_force(force_arr)
                 else:
                     pass
             if (not env.vis.ispaused()):
-                action = avg_pols(policies, state, deterministic)
-                # print("action:", action)
+                # Update orientation
+                quaternion = euler2quat(z=orient_add, y=0, x=0)
+                iquaternion = inverse_quaternion(quaternion)
+                if is_stateest:
+                    curr_orient = state[1:5]
+                    curr_transvel = state[15:18]
+                else:
+                    curr_orient = state[2:6]
+                    curr_transvel = state[20:23]
+                new_orient = quaternion_product(iquaternion, curr_orient)
+                if new_orient[0] < 0:
+                    new_orient = -new_orient
+                new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+                if is_stateest:
+                    state[1:5] = torch.FloatTensor(new_orient)
+                    state[15:18] = torch.FloatTensor(new_translationalVelocity)
+                    # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+                else:
+                    state[2:6] = torch.FloatTensor(new_orient)
+                    state[20:23] = torch.FloatTensor(new_translationalVelocity)
+               
+                # Get action
+                # _, action = policy.act(state, deterministic)
+                # if deterministic:
+                #     action = action.data.numpy()
+                # else:
+                #     action = action.data[0].numpy()
+                action, stddev = avg_pols(policies, state, deterministic)
+                total_stddev += stddev
+                count += 1
 
                 state, reward, done, _ = env.step(action)
+                foot_pos = np.zeros(6)
+                env.sim.foot_pos(foot_pos)
+                foot_forces = env.sim.get_foot_forces()
+                lfoot_vel = 0     
+                rfoot_vel = 0
+                if prev_foot is not None:
+                    lfoot_vel = (foot_pos[2] - prev_foot[2]) / 0.03
+                    rfoot_vel = (foot_pos[5] - prev_foot[5]) / 0.03
+                # print("Foot speed: ", lfoot_vel)#, rfoot_vel)
+                prev_foot = copy.copy(foot_pos)
+                # print("Foot force norm: ", foot_forces[0])
+                # print("foot distance: ", np.linalg.norm(foot_pos[0:2]-foot_pos[3:5]))
                 # print("speed: ", env.sim.qvel()[0])
+                # print("Frequency: ", env.phase_add)
+                # print("Speed: ", env.speed)
+                # print("desired speed: ", env.speed)
+                # print("pelvis accel: ", np.linalg.norm(env.cassie_state.pelvis.translationalAcceleration))
 
                 # if done:
                 #     state = env.reset()
@@ -254,6 +345,8 @@ def rendermultipolicy_speedinput(env, policies, deterministic=False, speedup=1, 
             time.sleep(dt / speedup)
     finally:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    
+    print("Avg stddev: ", total_stddev / count)
 
 def renderloop(env, policy, deterministic=False, speedup=1):
     while True:

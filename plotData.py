@@ -18,8 +18,8 @@ from rl.policies import GaussianMLP
 def avg_pols(policies, state):
     total_act = np.zeros(10)
     for policy in policies:
-        _, action = policy.act(state, False)
-        total_act += action.data[0].numpy()
+        _, action = policy.act(state, True)
+        total_act += action.data.numpy()
     return total_act / len(policies)
 
 # Load environment and policy
@@ -40,11 +40,12 @@ limittargs = False
 lininterp = False
 offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
-# file_prefix = "fwrd_walk_StateEst_speed-05-3_freq1-2_footvelpenalty_heightflag_footxypenalty"
-file_prefix = "sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.4_vels_avgdiff_simrate60_bigweight"#_actpenalty_retrain"
+# file_prefix = "5k_footorient_smoothcost_jointreward_randjoint_seed10"
+# file_prefix = "sidestep_StateEst_speedmatch_(3)"#_actpenalty_retrain"
+file_prefix = "sidestep_StateEst_speedmatch_torquesmoothcost"
 # file_prefix = "nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2"
 policy = torch.load("./trained_models/{}.pt".format(file_prefix))
-# policy.bounded = False
+policy.bounded = False
 # policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
 policy.eval()
 
@@ -60,8 +61,8 @@ if do_multi:
     # policy = torch.load("./trained_models/stiff_StateEst_step.pt")
     # policy.eval()
     # policies.append(policy)
-    for i in [1, 2, 3, 5]:
-        policy = torch.load("./trained_models/stiff_spring/stiff_StateEst_speed{}.pt".format(i))
+    for i in [10, 20, 30, 40, 50]:
+        policy = torch.load("./trained_models/5k_randfric_footorient_yvel_seed{}.pt".format(i))
         policy.eval()
         policies.append(policy)
 
@@ -82,13 +83,27 @@ pelheight = np.zeros(num_steps*simrate)
 act_diff = np.zeros(num_steps*simrate)
 actuated_pos = np.zeros((num_steps*simrate, 10))
 actuated_vel = np.zeros((num_steps*simrate, 10))
+foot_orient_cost = np.zeros((num_steps*simrate, 2))
+pel_orient_cost = np.zeros(num_steps*simrate)
+straight_cost = np.zeros(num_steps*simrate)
+forward_cost = np.zeros(num_steps*simrate)
+torque_cost = np.zeros(num_steps*simrate)
+smooth_cost = np.zeros(num_steps*simrate)
+torque_diff = np.zeros((num_steps*simrate, 10))
+yvel_cost = np.zeros(num_steps*simrate)
+footheightvel_cost = np.zeros((num_steps*simrate, 2))
+diff_foot_vel = np.zeros((num_steps*simrate, 6))
 prev_action = None
+prev_torques = None
+prev_foot = None
 pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
+neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
+orient_targ = np.array([1, 0, 0, 0])
 # Execute policy and save torques
 with torch.no_grad():
     state = torch.Tensor(cassie_env.reset_for_test())
-    cassie_env.speed = 0
+    cassie_env.speed = 0.5
     # cassie_env.side_speed = .2
     cassie_env.phase_add = 1
     for i in range(pre_steps):
@@ -109,6 +124,7 @@ with torch.no_grad():
         # targets[i, :] = action
         lin_steps = int(60 * 3/4)  # Number of steps to interpolate over. Should be between 0 and self.simrate
         alpha = 1 / lin_steps
+        cassie_env.speed = 0.5
         for j in range(simrate):
             if no_delta:
                 target = action + offset
@@ -135,7 +151,6 @@ with torch.no_grad():
                 real_action = action
                 actions[i*simrate+j, :] = action
             targets[i*simrate+j, :] = target
-            # print(target)
 
             cassie_env.step_simulation(real_action)
             curr_qpos = cassie_env.sim.qpos()
@@ -160,6 +175,39 @@ with torch.no_grad():
                 act_diff[i*simrate+j] = np.linalg.norm(action - prev_action)
             else:
                 act_diff[i*simrate+j] = 0
+            if prev_foot is not None:
+                diff_foot_vel[i*simrate+j, :] = (mj_foot - prev_foot) / 0.0005
+            else: 
+                diff_foot_vel[i*simrate+j, :] = np.zeros(6)
+            # Calculate costs for reward
+            foot_orient_cost[i*simrate+j, :] = 100*(1 - np.array([np.inner(neutral_foot_orient, cassie_env.sim.xquat("left-foot")) ** 2, np.inner(neutral_foot_orient, cassie_env.sim.xquat("right-foot")) ** 2]))
+            pel_orient_cost[i*simrate+j] = (1 - np.inner(orient_targ, curr_qpos[3:7]) ** 2)
+            forward_cost[i*simrate+j] = np.abs(curr_qvel[0] - cassie_env.speed)
+            yvel_cost[i*simrate+j] = np.abs(curr_qvel[1] - 0)
+            if forward_cost[i*simrate+j] < 0.05:
+                forward_cost[i*simrate+j] = 0
+            straight_cost[i*simrate+j] = 8*np.abs(curr_qpos[1] - 0)
+            if np.abs(curr_qpos[1] - 0) < 0.05:
+                straight_cost[i*simrate+j] = 0
+            if (1 - np.inner(orient_targ, curr_qpos[3:7]) ** 2) < 5e-3:
+                pel_orient_cost[i*simrate+j] = 0
+            else:
+                pel_orient_cost[i*simrate+j] *= 30
+            if yvel_cost[i*simrate+j] < 0.05:
+                yvel_cost[i*simrate+j] = 0
+            torque_cost[i*simrate+j] = 0.00004*np.linalg.norm(np.square(torques[i*simrate+j]))
+            if prev_torques is not None:
+                torque_diff[i*simrate+j, :] = torques[i*simrate+j] - prev_torques
+                # smooth_cost[i*simrate+j] = 0.00075*np.linalg.norm(np.square(torques[i*simrate+j] - prev_torques))
+            else:
+                torque_diff[i*simrate+j, :] = np.zeros(10)
+                # smooth_cost[i*simrate+j] = 0
+            smooth_cost[i*simrate+j] = 0.0001*np.linalg.norm(np.square(torque_diff[i*simrate+j, :]))
+            prev_torques = torques[i*simrate+j]
+            footheightvel_cost[i*simrate+j, 0] = 20 * (0.2 - mj_foot[2])**2 * np.linalg.norm(diff_foot_vel[i*simrate+j, 0:2])
+            footheightvel_cost[i*simrate+j, 1] = 20 * (0.2 - mj_foot[5])**2 * np.linalg.norm(diff_foot_vel[i*simrate+j, 3:5])
+            prev_foot = mj_foot
+
         prev_action = action
 
         cassie_env.time  += 1
@@ -269,7 +317,7 @@ for i in range(2):
     ax[1][i].set_title(sides[i] + " mj foot z pos")
     ax[1][i].set_ylabel("Z Position (m)")
     for j in range(3):
-        ax[j+2][i].plot(t, foot_vel[:, 3*i+j])
+        ax[j+2][i].plot(t, diff_foot_vel[:, 3*i+j])
         ax[j+2][i].set_title(sides[i] + titles[j+1])
         ax[j+2][i].set_ylabel("Velocity (m/s)")    
 
@@ -302,3 +350,59 @@ ax.set_ylabel("Height (m)")
 ax.set_title("Pelvis Height")
 ax.plot(t, pelheight)
 plt.savefig("./apex_plots/"+file_prefix+"_misc.png")
+
+# Cost Plotting
+fig, ax = plt.subplots(5, 2, figsize=(15, 8))
+t = np.linspace(0, num_steps*simrate*0.0005, num_steps*simrate)
+# ax.set_ylabel("norm")
+# ax.set_title("Action - Prev Action Norm")
+# ax.plot(t, act_diff)
+ax[0][0].plot(t, forward_cost)
+ax[0][0].set_title("Forward Cost")
+
+ax[0][1].plot(t, pel_orient_cost)
+ax[0][1].set_title("Pelvis Orient Cost")
+
+ax[1][1].plot(t, yvel_cost)
+ax[1][1].set_title("Y Velocity Cost")
+
+ax[1][0].plot(t, straight_cost)
+ax[1][0].set_title("Straight Cost")
+
+ax[2][0].set_ylabel("Cost")
+ax[2][0].set_title("Left Foot Orient Cost")
+ax[2][0].plot(t, foot_orient_cost[:, 0])
+ax[2][1].set_ylabel("Cost")
+ax[2][1].set_title("Right Foot Orient Cost")
+ax[2][1].plot(t, foot_orient_cost[:, 1])
+
+ax[3][0].plot(t, torque_cost)
+ax[3][0].set_title("Torque Cost")
+ax[3][1].plot(t, smooth_cost)
+ax[3][1].set_title("Smooth Cost")
+
+ax[4][0].plot(t, footheightvel_cost[:, 0])
+ax[4][0].set_title("Left Foot Height Vel Cost")
+ax[4][1].plot(t, footheightvel_cost[:, 1])
+ax[4][1].set_title("Right Foot Height Vel Cost")
+
+plt.tight_layout()
+plt.savefig("./apex_plots/"+file_prefix+"_costs.png")
+
+# Torque diff plotting
+
+fig, ax = plt.subplots(2, 5, figsize=(15, 6))
+t = np.linspace(0, num_steps*simrate*0.0005, num_steps*simrate)
+
+titles = ["Hip Roll", "Hip Yaw", "Hip Pitch", "Knee", "Foot"]
+ax[0][0].set_ylabel("Torque Difference")
+ax[1][0].set_ylabel("Torque Difference")
+for i in range(5):
+    ax[0][i].plot(t, torque_diff[:, i])
+    ax[0][i].set_title("Left " + titles[i])
+    ax[1][i].plot(t, torque_diff[:, i+5])
+    ax[1][i].set_title("Right " + titles[i])
+    ax[1][i].set_xlabel("Time (sec)")
+
+plt.tight_layout()
+plt.savefig("./apex_plots/"+file_prefix+"_torquediff.png")
