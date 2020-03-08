@@ -45,7 +45,7 @@ def side_speedmatch_heuristic_reward(self):
 
     reward = .25*np.exp(-forward_diff) + .25*np.exp(-side_diff) + .1*np.exp(-orient_diff) \
             + .1*np.exp(-self.torque_cost) + .1*np.exp(-self.smooth_cost) \
-            + .1*np.exp(-self.lfoot_orient_cost) + .1*np.exp(-self.rfoot_orient_cost) \   
+            + .1*np.exp(-self.lfoot_orient_cost) + .1*np.exp(-self.rfoot_orient_cost) \
             - pelaccel_penalty \
             - foot_penalty \
             - lforce - rforce \

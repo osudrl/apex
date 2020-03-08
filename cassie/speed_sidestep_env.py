@@ -99,6 +99,10 @@ class CassieEnv_speed_sidestep:
 
         self.u = pd_in_t()
 
+        self.base_mirror_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15,
+                            16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24,
+                            25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42]
+
         # TODO: should probably initialize this to current state
         self.cassie_state = state_out_t()
 
@@ -293,7 +297,7 @@ class CassieEnv_speed_sidestep:
             curr_torques = np.array(self.cassie_state.motor.torque[:])
             self.torque_cost += 0.0001*np.linalg.norm(np.square(curr_torques))
             if self.prev_torque is not None:
-                self.smooth_cost += 0.001*np.linalg.norm(np.square(curr_torques - self.prev_torque))
+                self.smooth_cost += 0.0001*np.linalg.norm(np.square(curr_torques - self.prev_torque))
             else:
                 self.smooth_cost += 0
             self.prev_torque = curr_torques 
@@ -373,9 +377,12 @@ class CassieEnv_speed_sidestep:
         self.cassie_state = self.sim.step_pd(self.u)
 
         
-        self.speed = (random.randint(-5, 10)) / 10
+        self.speed = (random.randint(-5, 30)) / 10
         self.side_speed = 0.6*random.random() - 0.3
-        self.phase_add = 1# + random.random()
+        if self.speed > 1.5:
+            self.phase_add = 1.3 + 0.7*random.random()
+        else:
+            self.phase_add = 1 + random.random()
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         self.prev_action = None
         self.prev_torque = None
@@ -469,9 +476,9 @@ class CassieEnv_speed_sidestep:
 
         # reward = side_speedmatch_reward(self)
         # reward = side_speedmatch_foottraj_reward(self)
-        reward = side_speedmatch_heightvel_reward(self)
+        # reward = side_speedmatch_heightvel_reward(self)
         # reward = side_speedmatch_heuristic_reward(self)
-        # reward = side_speedmatch_torquemsooth_reward(self)
+        reward = side_speedmatch_torquesmooth_reward(self)
 
         return reward
 

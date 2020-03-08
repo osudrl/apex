@@ -87,7 +87,7 @@ simrate = 60
 args.n_itr = 20000
 args.mirror = True
 args.state_est = True
-args.num_procs = 64 - 16*int(np.log2(60 / simrate))
+args.num_procs = 48#64 - 16*int(np.log2(60 / simrate))
 args.num_steps = (12000 + 8000*(int(60/simrate)-1)) // args.num_procs
 args.input_norm_steps = 10000
 args.minibatch_size = 2048
@@ -97,15 +97,15 @@ args.max_traj_len = 300 * int(60/simrate)
 # args.seed = 40#int(time.time())
 args.max_grad_norm = 0.05
 args.use_gae = False
-# args.name = "5k_footorient_smoothcost_jointreward_randjoint_seed{}".format(args.seed)
-# args.name = "5k_randjoint"
+# args.name = "5k_randjoint_footorient_randfric_seed{}".format(args.seed)
+# args.name = "5k_randjoint_footorient_randfric"
 # args.name = "noheightaccel_StateEst_trajmatch"
 # args.name = "sidestep_StateEst_speedmatch_footytraj_doublestance_time0.4_land0.4_vels_avgdiff_simrate15_savedvels_cont"#_pelaccel_hipyaw_footxypenalty"
 # args.name = "sidestep_StateEst_foottrajmatchz_speed1.0_fixedheightfreq_fixedtdvel_avgdiff_minnegzvel_torquecost_smoothcost"
-# args.name = "sidestep_StateEst_speedmatch_torquesmoothbigcost_(1)"
-# args.logdir = "./logs/test/"
-args.name = "test_save_seed{}".format(args.seed)
-args.logdir = "./logs/test/"
+args.name = "sidestep_StateEst_speedmatch_torquesmoothcost_speed-05-3_freq1-2"
+args.logdir = "./logs/sidestep/"
+# args.name = "test_save_seed{}".format(args.seed)
+# args.logdir = "./logs/dump/"
 # Check if policy name already exists. If it does, increment filename
 index = ''
 while os.path.isfile(os.path.join("./trained_models/", args.name + index + ".pt")):
@@ -148,8 +148,8 @@ if __name__ == "__main__":
         # set up cassie environment
         # env_fn = functools.partial(CassieEnv, "walking", clock_based=True, state_est=args.state_est)
         # env_fn = functools.partial(CassieEnv_speed_no_delta_noheight_noaccel, "walking", simrate=simrate, state_est=args.state_est)
-        env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
-        # env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
+        # env_fn = functools.partial(CassieEnv_speed_no_delta_neutral_foot, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
+        env_fn = functools.partial(CassieEnv_speed_sidestep, "walking", simrate=simrate, clock_based=True, state_est=args.state_est)
         obs_dim = env_fn().observation_space.shape[0]
         action_dim = env_fn().action_space.shape[0]
 
@@ -207,11 +207,11 @@ if __name__ == "__main__":
     # policy.obs_std = torch.Tensor(std)
 
     # Load previous policy
-    policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
-    # policy = torch.load("./trained_models/5k_randfric_footorient_yvel_seed50.pt")
+    # policy = torch.load("./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2.pt")
+    # policy = torch.load("./trained_models/5k_randjoint.pt")
     # policy = torch.load("./trained_models/sidestep_StateEst_foottrajmatchz_speed1.0_fixedheightfreq_fixedtdvel_avgdiff_footorient_actpenalty.pt")
-    # policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_torquesmoothcost.pt")
-    policy.bounded = False
+    policy = torch.load("./trained_models/sidestep_StateEst_speedmatch_torquesmoothcost.pt")
+    # policy.bounded = False
     
     policy.train(0)
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
