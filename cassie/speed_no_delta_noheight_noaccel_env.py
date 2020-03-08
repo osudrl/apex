@@ -485,7 +485,7 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
             self.sim.set_dof_damping(self.default_damping)
             # self.sim.set_body_mass(self.default_mass)
             # self.sim.set_body_ipos(self.default_ipos)
-            # self.sim.set_ground_friction(self.default_fric)
+            # self.sim.set_geom_friction(self.default_fric)
             self.sim.set_const()
         if self.slope_rand:
             self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
@@ -674,7 +674,6 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
         # Update orientation
         new_orient = self.cassie_state.pelvis.orientation[:]
         new_translationalVelocity = self.cassie_state.pelvis.translationalVelocity[:]
-        new_translationalVelocity[0:2] += self.com_vel_offset
         if self.time >= self.orient_time:
             quaternion = euler2quat(z=self.orient_add, y=0, x=0)
             iquaternion = inverse_quaternion(quaternion)

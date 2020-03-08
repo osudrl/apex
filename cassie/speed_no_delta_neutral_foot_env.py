@@ -520,7 +520,7 @@ class CassieEnv_speed_no_delta_neutral_foot:
             # self.sim.set_dof_damping(self.default_damping)
             # self.sim.set_body_mass(self.default_mass)
             # self.sim.set_body_ipos(self.default_ipos)
-            self.sim.set_ground_friction(self.default_fric)
+            self.sim.set_geom_friction(self.default_fric)
             self.sim.set_const()
 
         if self.slope_rand:

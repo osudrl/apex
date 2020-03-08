@@ -207,13 +207,14 @@ class CassieSim:
 
     def set_geom_friction(self, data, name=None):
         if name is None:
-            c_arr = (ctypes.c_double * 3)()
+            ngeom = 3*self.ngeom
+            c_arr = (ctypes.c_double * ngeom)()
 
-            if len(data) != 3:
+            if len(data) != ngeom:
                 print("SIZE MISMATCH SET_GEOM_FRICTION()")
                 exit(1)
 
-            for i in range(3):
+            for i in range(ngeom):
                 c_arr[i] = data[i]
 
             cassie_sim_set_geom_friction(self.c, c_arr)
