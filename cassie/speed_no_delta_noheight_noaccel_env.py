@@ -105,6 +105,10 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
+        self.base_mirror_obs = [0.1, 1, 2, 3, -9, -10, 11, 12, 13, -4, -5, 6, 7, 8, 14, 15,
+                            16, 17, 18, 19, -25, -26, 27, 28, 29, -20, -21, 22, 23, 24,
+                            32, 33, 30, 31, 36, 37, 34, 35]
+
         self.speed = 1
         # maybe make ref traj only send relevant idxs?
         ref_pos, ref_vel = self.get_ref_state(self.phase)
@@ -370,9 +374,8 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
         self.prev_action = action
 
         # TODO: make 0.3 a variable/more transparent
-        # if reward < 0.3:
-            # done = True
-            # print("reward too low")
+        if reward < 0.3:
+            done = True
 
         return self.get_full_state(), reward, done, {}
 
@@ -529,8 +532,8 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
     # see notes for details
     def compute_reward(self):
 
-        reward = trajmatch_reward(self)
-        # reward = speedmatch_reward(self)
+        # reward = trajmatch_reward(self)
+        reward = speedmatch_reward(self)
         # reward = speedmatch_footorient_joint_smooth_reward(self)
 
         return reward
