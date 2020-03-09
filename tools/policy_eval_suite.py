@@ -1,6 +1,9 @@
 import time
 import numpy as np
 import torch
+import pickle
+import argparse
+from cassie import CassieEnv_v2
 #validate the sensitivity of policy to environment parameters
 
 ##########To do#########
@@ -35,18 +38,18 @@ def iterativeValidation(cassie_env, policy):
                         [damp[5], damp[5]]]                 # 0->5
 
     hip_damp_range = [[damp[6]*weak_factor, damp[6]*strong_factor],
-                    [damp[7]*weak_factor, damp[7]*strong_factor],
-                    [damp[8]*weak_factor, damp[8]*strong_factor]]  # 6->8 and 19->21
+                     [damp[7]*weak_factor, damp[7]*strong_factor],
+                     [damp[8]*weak_factor, damp[8]*strong_factor]]  # 6->8 and 19->21
 
-    #achilles_damp_range = [[damp[9]*weak_factor,  damp[9]*strong_factor],
-    #                       [damp[10]*weak_factor, damp[10]*strong_factor], 
-    #                       [damp[11]*weak_factor, damp[11]*strong_factor]] # 9->11 and 22->24
+    #achilles_damp_range = [[damp[9],  damp[9]],
+    #                       [damp[10], damp[10]], 
+    #                       [damp[11], damp[11]]] # 9->11 and 22->24
 
     knee_damp_range     = [[damp[12]*weak_factor, damp[12]*strong_factor]]   # 12 and 25
     shin_damp_range     = [[damp[13]*weak_factor, damp[13]*strong_factor]]   # 13 and 26
     tarsus_damp_range   = [[damp[14], damp[14]]]             # 14 and 27
     #heel_damp_range     = [[damp[15], damp[15]]]                           # 15 and 28
-    #fcrank_damp_range   = [[damp[16]*weak_factor, damp[16]*strong_factor]]   # 16 and 29
+    #fcrank_damp_range   = [[damp[16], damp[16]]]   # 16 and 29
     #prod_damp_range     = [[damp[17], damp[17]]]                           # 17 and 30
     foot_damp_range     = [[damp[18]*weak_factor, damp[18]*strong_factor]]   # 18 and 31
 
@@ -54,13 +57,53 @@ def iterativeValidation(cassie_env, policy):
     damp_range = pelvis_damp_range + side_damp + side_damp
     damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
 
+    d1 = damp
+    d2 = damp
+    for i in range(6, 8):
+        d1[i] = damp[i] * weak_factor
+        d2[i] = damp[i] * strong_factor
+    
+    for i in range(19, 21):
+        d1[i] = damp[i] * weak_factor
+        d2[i] = damp[i] * strong_factor
+
+    d3 = damp
+    d4 = damp
+    d3[12] = damp[12] * weak_factor
+    d4[12] = damp[12] * strong_factor
+
+    d3[25] = damp[25] * weak_factor
+    d4[25] = damp[25] * strong_factor
+
+    d5 = damp
+    d6 = damp
+    d5[13] = damp[13] * weak_factor
+    d6[13] = damp[13] * strong_factor
+
+
+    d5[26] = damp[26] * weak_factor
+    d6[26] = damp[26] * strong_factor
+    
+    d7 = damp
+    d8 = damp
+    d7[18] = damp[18] * weak_factor
+    d8[18] = damp[18] * strong_factor
+    
+    d5[31] = damp[31] * weak_factor
+    d5[31] = damp[31] * strong_factor
+
+    # Kinda gooney, need to fix later...
+    dof_damping = [d1, d2, d3, d4, d5, d6, d7, d8, d1, d2, d3, d4, d5, d6, d7,
+            d8]
+    
+    '''
     hi = 1.3
     lo = 0.7
-    m = env.default_mass
+    m = cassie_env.default_mass
     pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
     hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
-                            [lo*m[3],  hi*m[3]], 
-                            [lo*m[4],  hi*m[4]]] 
+                             [lo*m[3],  hi*m[3]], 
+                             [lo*m[4],  hi*m[4]]] 
 
     achilles_mass_range    = [[lo*m[5],  hi*m[5]]]  # 5 and 17
     knee_mass_range        = [[lo*m[6],  hi*m[6]]]  # 6 and 18
@@ -91,12 +134,15 @@ def iterativeValidation(cassie_env, policy):
     cassie_env.sim.set_body_mass(np.clip(mass_noise, 0, None))
     cassie_env.sim.set_body_ipos(com_noise)
     cassie_env.sim.set_ground_friction(np.clip(fric_noise, 0, None))
-    
+   ''' 
     #TODO: Set a range of values to sweep for dof damping
+    
 
-    for i in range(10):             # 10 is just a placeholder for how granular
+    for i in range(16):             # 10 is just a placeholder for how granular
                                     # our sweep will be.
-
+        # Set values for params
+        cassie_env.sim.set_dof_damping(np.clip(dof_damping[i], 0, None))
+        done = False
         while not done:
             reset(cassie_env, policy)
             curr_time = cassie_env.sim.time()
@@ -108,83 +154,17 @@ def iterativeValidation(cassie_env, policy):
                 state = torch.Tensor(state)
                 curr_time = cassie_env.sim.time()
                 if casse_env.sim.qpos()[2] < 0.4:
+                    print("Cassie Fell")
                     done = True
                     break
 
 # Testing to see if the above is even working
 
-from apex import env_factory
-import torch
-env = env_factory("CassieIK-v0")
-#policy = torch.load("./trained_models/ddpg/ddpg_actor.pt")
-policy = torch.load("./logs/ddpg/Hopper-v3/538e63-seed0/actor.pt")
-iterativeValidation(policy, env)
-
-#nbody layout:
-# 0:  worldbody (zero)
-# 1:  pelvis
-
-# 2:  left hip roll 
-# 3:  left hip yaw
-# 4:  left hip pitch
-# 5:  left achilles rod
-# 6:  left knee
-# 7:  left knee spring
-# 8:  left shin
-# 9:  left tarsus
-# 10: left heel spring
-# 12: left foot crank
-# 12: left plantar rod
-# 13: left foot
-
-# 14: right hip roll 
-# 15: right hip yaw
-# 16: right hip pitch
-# 17: right achilles rod
-# 18: right knee
-# 19: right knee spring
-# 20: right shin
-# 21: right tarsus
-# 22: right heel spring
-# 23: right foot crank
-# 24: right plantar rod
-# 25: right foot
-
-
-# qpos layout
-# [ 0] Pelvis x
-# [ 1] Pelvis y
-# [ 2] Pelvis z
-# [ 3] Pelvis orientation qw
-# [ 4] Pelvis orientation qx
-# [ 5] Pelvis orientation qy
-# [ 6] Pelvis orientation qz
-# [ 7] Left hip roll         (Motor [0])
-# [ 8] Left hip yaw          (Motor [1])
-# [ 9] Left hip pitch        (Motor [2])
-# [10] Left achilles rod qw
-# [11] Left achilles rod qx
-# [12] Left achilles rod qy
-# [13] Left achilles rod qz
-# [14] Left knee             (Motor [3])
-# [15] Left shin                        (Joint [0])
-# [16] Left tarsus                      (Joint [1])
-# [17] Left heel spring
-# [18] Left foot crank
-# [19] Left plantar rod
-# [20] Left foot             (Motor [4], Joint [2])
-# [21] Right hip roll        (Motor [5])
-# [22] Right hip yaw         (Motor [6])
-# [23] Right hip pitch       (Motor [7])
-# [24] Right achilles rod qw
-# [25] Right achilles rod qx
-# [26] Right achilles rod qy
-# [27] Right achilles rod qz
-# [28] Right knee            (Motor [8])
-# [29] Right shin                       (Joint [3])
-# [30] Right tarsus                     (Joint [4])
-# [31] Right heel spring
-# [32] Right foot crank
-# [33] Right plantar rod
-# [34] Right foot            (Motor [9], Joint [5])
-
+import argparse
+import pickle
+path = "trained_models/ppo/Cassie-v0/1ce9b0-seed0/"
+run_args = pickle.load(open(path + "experiment.pkl", "rb")) 
+POLICY_PATH = path + "actor.pt"
+policy = torch.load(POLICY_PATH)
+cassie_env = CassieEnv_v2(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
+iterativeValidation(cassie_env, policy)
