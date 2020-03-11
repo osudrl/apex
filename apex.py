@@ -157,7 +157,7 @@ def eval_policy(policy, args, run_args):
     if run_args.env_name == "Cassie-v0":
         env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
     elif run_args.env_name == 'Cassie-latent':
-        env = CassieEnv_latent(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dynamics_randomization, no_delta=run_args.no_delta, history=run_args.history, hidden_size=run_args.hidden_size, latent_size=run_args.latent_size)
+        env = CassieEnv_latent(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dynamics_randomization, no_delta=run_args.no_delta, history=run_args.history, hidden_size=30, latent_size=20)
     else:
         env = CassieStandingEnv(state_est=run_args.state_est)
     
@@ -206,6 +206,11 @@ def eval_policy(policy, args, run_args):
                     # env.sim.apply_force(force_arr)
                     perturb_start = env.sim.time()
             
+            # If model is reset (pressing backspace while in vis window) then need to reset
+            # perturb_start as well
+            if env.sim.time() == 0:
+                perturb_start = -100
+
             if (not env.vis.ispaused()):
                 # Update Orientation
                 quaternion = euler2quat(z=orient_add, y=0, x=0)

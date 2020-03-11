@@ -4,15 +4,20 @@ from torch.nn import functional as F
 
 
 class VAE(nn.Module):
-    def __init__(self, hidden_size, latent_size):
+    def __init__(self, hidden_size, latent_size, mj_state=False):
         super(VAE, self).__init__()
 
-        self.fc1 = nn.Linear(40, hidden_size)
+        if mj_state:
+            self.input_size = 35
+        else:
+            self.input_size = 40
+
+        self.fc1 = nn.Linear(self.input_size, hidden_size)
         self.fc21 = nn.Linear(hidden_size, latent_size)
         self.fc22 = nn.Linear(hidden_size, latent_size)
 
         self.fc3 = nn.Linear(latent_size, hidden_size)
-        self.fc4 = nn.Linear(hidden_size, 40)
+        self.fc4 = nn.Linear(hidden_size, self.input_size)
 
     def encode(self, x):
         h1 = F.relu(self.fc1(x))
@@ -29,6 +34,6 @@ class VAE(nn.Module):
         return self.fc4(h3)
 
     def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, 40))
+        mu, logvar = self.encode(x.view(-1, self.input_size))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
