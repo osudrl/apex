@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-from cassie.vae import VAE
+from cassie.vae import VAE, VAE_output_dist
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -31,7 +31,13 @@ parser.add_argument('--hidden_size', type=int, default=40, help='size of hidden 
 parser.add_argument('--test_model', type=str, default=None, help='path to model to load')
 parser.add_argument('--run_name', type=str, default=None, help='name of model to save and associated log data')
 args = parser.parse_args()
+
+args.hidden_size = 40
+args.latent_size = 35
+args.run_name = "mj_state_qpos_varreg_latent{}_hidden{}".format(args.latent_size, args.hidden_size)
+
 args.cuda = not args.no_cuda and torch.cuda.is_available()
+do_log = True
 
 torch.manual_seed(args.seed)
 
@@ -44,14 +50,14 @@ if args.test_model is None:
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 
-dataset_np = np.load("./5b75b3-seed0_full_mjdata/total_data.npy")
+dataset_np = np.load("./5b75b3-seed0_full_mjdata.npz")["total_data"]
 X_train, X_test = train_test_split(dataset_np, test_size=0.05, random_state=42, shuffle=True)
 
 # remove clock and speed commands, only dynamics
-X_train = X_train[:, 0:-3]
-X_test = X_test[:, 0:-3]
+X_train = X_train[:, 0:-32]
+X_test = X_test[:, 0:-32]
 
-input_dim = 35 + 32 - 3
+input_dim = 35
 
 data_min = np.min(X_train, axis=0)
 data_max = np.max(X_train-data_min, axis=0)
@@ -64,27 +70,54 @@ norm_test_data = torch.Tensor(norm_test_data)
 # norm_test_data = torch.Tensor(X_test)
 # print()
 
-np.savez("./data_norm_params.npz", data_max=data_max, data_min=data_min)
+np.savez("./data_norm_params_qpos_varreg.npz", data_max=data_max, data_min=data_min)
 # exit()
 
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
 model = VAE(input_dim, args.hidden_size, args.latent_size).to(device)
+# model = VAE_output_dist(input_dim, args.hidden_size, args.latent_size).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 recon_loss_cri = nn.MSELoss()
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
     MSE = input_dim * recon_loss_cri(recon_x, x.view(-1, input_dim))
-
+    prob_dist = torch.distributions.Normal(mu, logvar.exp())
+    entropy_loss = -10*torch.mean(prob_dist.entropy())
+    var_reg = torch.mean(logvar)
+    # print(var_reg)
+    
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
     # https://arxiv.org/abs/1312.6114
     # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    # print("mu shape; ", mu.shape)
+    # print("entropy: ", entropy)
+    # print("MSE: ", MSE)
+    # print("KLD: ", KLD)
 
-    return MSE + KLD
+    return MSE + KLD + var_reg#entropy_loss
+
+def elbo_loss(model, data, mu, logvar):
+    posterior = torch.distributions.Normal(mu, logvar.exp())
+    # print(posterior.sample().shape)
+    # prior = torch.distributions.Normal(torch.zeros(mu.shape), torch.ones(logvar.shape))
+    code = posterior.sample()
+    decode_mu, decode_logvar = model.decode(code)
+    decode_dist = torch.distributions.Normal(decode_mu, decode_logvar.exp())
+
+    likelihood = decode_dist.log_prob(data)
+    KLD = torch.log(decode_logvar.exp()/1) + (1+(0-decode_mu)**2)/(2*decode_logvar.exp()**2) - 1/2
+    # print("KLD shape; ", KLD.shape)
+    # print(torch.sum(KLD))
+    elbo = torch.sum(likelihood - KLD)
+    # print(elbo)
+    # print("elbo shape; ", elbo.shape)
+
+    return -elbo
 
 def train(epoch):
     model.train()
@@ -99,6 +132,7 @@ def train(epoch):
         optimizer.zero_grad()
         recon_batch, mu, logvar = model(data)
         loss = loss_function(recon_batch, data, mu, logvar)
+        # loss = elbo_loss(model, data, mu, logvar)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -110,9 +144,10 @@ def train(epoch):
 
     print('====> Epoch: {} Average loss: {:.4f}'.format(
           epoch, train_loss / train_len))
-    logger.add_scalar("Train/Loss", train_loss / train_len, epoch)
-    for name, param in model.named_parameters():
-        logger.add_histogram("Model Params/"+name, param.data, epoch)
+    if do_log:
+        logger.add_scalar("Train/Loss", train_loss / train_len, epoch)
+        for name, param in model.named_parameters():
+            logger.add_histogram("Model Params/"+name, param.data, epoch)
 
 def test(epoch):
     model.eval()
@@ -128,6 +163,7 @@ def test(epoch):
             data = data.to(device)
             recon_batch, mu, logvar = model(data)
             test_loss += loss_function(recon_batch, data, mu, logvar).item()
+            # test_loss += elbo_loss(model, data, mu, logvar)
             # Un-normalize data
             orig_batch = recon_batch*data_max + data_min
             orig_data = data*data_max + data_min
@@ -140,17 +176,18 @@ def test(epoch):
             
     test_loss /= test_len
     print('====> Test set loss: {:.4f}'.format(test_loss))
-    logger.add_scalar("Test/Loss", test_loss, epoch)
+    if do_log:
+        logger.add_scalar("Test/Loss", test_loss, epoch)
 
 # if __name__ == "__main__":
 
 if args.test_model is None:
     # train and save new model
+    PATH = "./vae_model/"+args.run_name+".pt"
     for epoch in range(1, args.epochs + 1):
         train(epoch)
         test(epoch)    
-    PATH = "./vae_model/"+args.run_name+".pt"
-    torch.save(model.state_dict(), PATH)
+        torch.save(model.state_dict(), PATH)
 
 # Test trained model (or loaded model)
 print("Testing model.")
