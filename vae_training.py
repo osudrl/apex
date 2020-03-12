@@ -15,6 +15,8 @@ from cassie.vae import VAE, VAE_output_dist
 import numpy as np
 from sklearn.model_selection import train_test_split
 
+now = datetime.now()
+
 parser = argparse.ArgumentParser(description='VAE Cassie')
 parser.add_argument('--batch_size', type=int, default=2048, metavar='N',
                     help='input batch size for training (default: 128)')
@@ -30,11 +32,16 @@ parser.add_argument('--latent_size', type=int, default=20, help='size of latent 
 parser.add_argument('--hidden_size', type=int, default=40, help='size of hidden space')
 parser.add_argument('--test_model', type=str, default=None, help='path to model to load')
 parser.add_argument('--run_name', type=str, default=None, help='name of model to save and associated log data')
+parser.add_argument('--debug', default=False, action="store_true", help='print debug output')
+
 args = parser.parse_args()
 
+args.epochs = 100
 args.hidden_size = 40
-args.latent_size = 35
-args.run_name = "mj_state_qpos_varreg_latent{}_hidden{}".format(args.latent_size, args.hidden_size)
+args.latent_size = 25
+# args.run_name = "mj_state_qpos_sse2_latent{}_hidden{}".format(args.latent_size, args.hidden_size)
+args.run_name = "test"+now
+
 
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 do_log = True
@@ -42,7 +49,6 @@ do_log = True
 torch.manual_seed(args.seed)
 
 device = torch.device("cuda" if args.cuda else "cpu")
-now = datetime.now()
 
 if args.test_model is None:
     log_path = "./logs/"+args.run_name
@@ -59,8 +65,18 @@ X_test = X_test[:, 0:-32]
 
 input_dim = 35
 
-data_min = np.min(X_train, axis=0)
-data_max = np.max(X_train-data_min, axis=0)
+# data_min = np.min(dataset_np, axis=0)
+# data_max = np.max(dataset_np-data_min, axis=0)
+# np.savez("./total_mjdata_norm_params.npz", data_max=data_max, data_min=data_min)
+# exit()
+
+
+# data_min = np.min(X_train, axis=0)
+# data_max = np.max(X_train-data_min, axis=0)
+norm_params = np.load("./total_mjdata_norm_params.npz")
+data_min = norm_params["data_min"][0:35]
+data_max = norm_params["data_max"][0:35]
+
 norm_data = np.divide((X_train-data_min), data_max)
 norm_test_data = np.divide((X_test-data_min), data_max)
 
@@ -70,13 +86,12 @@ norm_test_data = torch.Tensor(norm_test_data)
 # norm_test_data = torch.Tensor(X_test)
 # print()
 
-np.savez("./data_norm_params_qpos_varreg.npz", data_max=data_max, data_min=data_min)
-# exit()
+# np.savez("./data_norm_params_qpos_varreg.npz", data_max=data_max, data_min=data_min)
 
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
-model = VAE(input_dim, args.hidden_size, args.latent_size).to(device)
+model = VAE(args.hidden_size, args.latent_size, mj_state=True).to(device)
 # model = VAE_output_dist(input_dim, args.hidden_size, args.latent_size).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 recon_loss_cri = nn.MSELoss()
@@ -84,6 +99,7 @@ recon_loss_cri = nn.MSELoss()
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
     MSE = input_dim * recon_loss_cri(recon_x, x.view(-1, input_dim))
+    SSE = torch.sum(torch.pow(recon_x - x.view(-1, input_dim), 2)) # SSE Loss
     prob_dist = torch.distributions.Normal(mu, logvar.exp())
     entropy_loss = -10*torch.mean(prob_dist.entropy())
     var_reg = torch.mean(logvar)
@@ -99,7 +115,7 @@ def loss_function(recon_x, x, mu, logvar):
     # print("MSE: ", MSE)
     # print("KLD: ", KLD)
 
-    return MSE + KLD + var_reg#entropy_loss
+    return SSE# + KLD# + var_reg#entropy_loss
 
 def elbo_loss(model, data, mu, logvar):
     posterior = torch.distributions.Normal(mu, logvar.exp())
@@ -123,10 +139,11 @@ def train(epoch):
     model.train()
     train_loss = 0
     train_len = len(norm_data)
-
     sampler = BatchSampler(SubsetRandomSampler(range(train_len)), args.batch_size, drop_last=True)
+    num_batch = len(list(sampler))
 
-    for batch_idx, indices in enumerate(sampler):
+    batch_idx = 0
+    for indices in sampler:
         data = norm_data[indices]
         data = data.to(device)
         optimizer.zero_grad()
@@ -136,16 +153,19 @@ def train(epoch):
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
+        if batch_idx % args.log_interval == 0 and args.debug:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), train_len,
-                100. * batch_idx / args.batch_size,
-                loss.item() / len(data)))
-
-    print('====> Epoch: {} Average loss: {:.4f}'.format(
-          epoch, train_loss / train_len))
+                epoch, 
+                batch_idx * len(data), 
+                train_len,
+                100. * batch_idx / num_batch,
+                loss.item()))
+        batch_idx+=1
+    if args.debug:
+        print('====> Epoch: {} Average loss: {:.4f}'.format(
+            epoch, train_loss / batch_idx))
     if do_log:
-        logger.add_scalar("Train/Loss", train_loss / train_len, epoch)
+        logger.add_scalar("Train/Loss", train_loss / batch_idx, epoch)
         for name, param in model.named_parameters():
             logger.add_histogram("Model Params/"+name, param.data, epoch)
 
@@ -169,15 +189,15 @@ def test(epoch):
             orig_data = data*data_max + data_min
             percent_error = torch.div((orig_data-orig_batch), (orig_data+1e-6))
             percent_error = torch.mean(percent_error, axis=0)
-            if batch_idx == 0:
+            if batch_idx == 0 and args.debug:
                 # print(orig_batch[0,:])
                 # print(orig_data[0,:])
                 print("percent error: ", percent_error*100)
             
-    test_loss /= test_len
-    print('====> Test set loss: {:.4f}'.format(test_loss))
+    if args.debug:
+        print('====> Test set loss: {:.4f}'.format(test_loss / batch_idx))
     if do_log:
-        logger.add_scalar("Test/Loss", test_loss, epoch)
+        logger.add_scalar("Test/Loss", test_loss / batch_idx, epoch)
 
 # if __name__ == "__main__":
 
