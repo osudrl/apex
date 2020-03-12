@@ -138,14 +138,16 @@ def vis_policy(latent_model, norm_params):
                 state, reward, done, _ = env.step(action)
                 
                 # Update reconstruct state
+                curr_qpos = env.sim.qpos()
                 # mj_state = env.sim.qpos()#np.concatenate([env.sim.qpos(), env.sim.qvel()])
                 norm_state = np.divide((np.array(env.sim.qpos()) - data_min), data_max)
-                norm_state = np.random.rand(35)
+                # norm_state = np.random.rand(35)
                 decode_state, mu, logvar = latent_model.forward(torch.Tensor(norm_state))
-                decode_state = decode_state.detach().numpy()[0]
+                decode_state = latent_model.decode(mu).detach().numpy()[0]
                 reconstruct_state = (decode_state*data_max) + data_min
+                reconstruct_state[0:2] = curr_qpos[0:2]
                 # reconstruct_state += data_min
-                print("reconstruct state: ", reconstruct_state)
+                # print("reconstruct state: ", reconstruct_state)
                 # print("mj state: ", mj_state)
                 # print("mu: ", mu)
                 # reconstruct_state[3:7] = mj_state[3:7]
@@ -169,8 +171,8 @@ def vis_policy(latent_model, norm_params):
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
-    print("recon shape:", recon_x.shape)
-    print("x shape: ", x.flatten().shape)
+    # print("recon shape:", recon_x.shape)
+    # print("x shape: ", x.flatten().shape)
     recon_loss_cri = nn.MSELoss()
 
     MSE = 35 * recon_loss_cri(recon_x, x.view(-1, 35))
@@ -183,13 +185,12 @@ def loss_function(recon_x, x, mu, logvar):
 
     return MSE + KLD
 
-def eval_recon(recon_data, data):
-    
 
 def vis_traj(latent_model, norm_params):
     data = np.load("./5b75b3-seed0_full_mjdata.npz")
     state_data = data["total_data"]
     state_data = state_data[:, 0:-32]
+    print("state data std dev: ", np.std(state_data, axis=0))
     data_len =  state_data.shape[0]
     # norm_params = np.load("./data_norm_params_qpos_entropyloss.npz")
     data_max = norm_params["data_max"]
@@ -207,17 +208,131 @@ def vis_traj(latent_model, norm_params):
 
     decode, mu, log_var = latent_model.forward(norm_data)
     print("log_var shape: ", torch.mean(log_var, axis=0))
+    print("mu std dev: ", np.std(mu.detach().numpy(), axis=0))
     loss = loss_function(decode, norm_data, mu, log_var)
     print("loss: ", loss/data_len)
+    recon_data = decode.data.numpy()*data_max + data_min
+    percent_error = np.divide((recon_data-state_data), state_data)
+    print("avg percent error: ", np.mean(percent_error, axis=0))
+    print("recon data var: ", np.std(recon_data, axis=0))
+
+    num_trajs = state_data.shape[0] // 300
+    print("num_trajs: ", num_trajs)
+
+    # Build both sims and vis
+    sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+    vis = CassieVis(sim, "./cassie/cassiemujoco/cassie.xml")
+    reconstruct_sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+    reconstruct_vis = CassieVis(reconstruct_sim, "./cassie/cassiemujoco/cassie.xml")
+
+    render_state = vis.draw(sim)
+    recon_render_state = reconstruct_vis.draw(reconstruct_sim)
+
+    done = False
+    while (not done) and render_state and recon_render_state:
+        traj_ind = input("Render what trajectory? (between 0 and {}) ".format(num_trajs-1))
+        if traj_ind == "q":
+            done = True
+            continue
+        update_t = time.time()
+        timestep = 0
+        traj_ind = int(traj_ind)
+        while render_state and recon_render_state and timestep < 300:
+            if (not vis.ispaused()) and (not reconstruct_vis.ispaused()) and time.time() - update_t >= 1/30:
+                curr_qpos = state_data[300*traj_ind+timestep, :]
+                recon_qpos = recon_data[300*traj_ind+timestep, :]
+                sim.set_qpos(curr_qpos)
+                reconstruct_sim.set_qpos(recon_qpos)
+                timestep += 1
+                update_t = time.time()
+            vis.draw(sim)
+            reconstruct_vis.draw(reconstruct_sim)
+            time.sleep(0.005)
+
+@torch.no_grad()
+def interpolate_latent(latent_model, norm_params):
+    def isData():
+        return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
+    old_settings = termios.tcgetattr(sys.stdin)
+
+    ind1 = 0
+    ind2 = 15
+    data = np.load("./5b75b3-seed0_full_mjdata.npz")
+    state_data = data["total_data"]
+    state_data = state_data[:, 0:-32]
+    data_len =  state_data.shape[0]
+    data_max = norm_params["data_max"]
+    data_min = norm_params["data_min"]
+    norm_data = np.divide((state_data-data_min), data_max)
+    norm_data = torch.Tensor(norm_data)
+    decode1, mu1, logvar1 = latent_model.forward(norm_data[ind1, :])
+    decode2, mu2, logvar2 = latent_model.forward(norm_data[ind2, :])
+
+    num_points = 20
+    mu_diff = mu2 - mu1
+    mu_interp = [mu1+(i/num_points)*mu_diff for i in range(num_points+1)]
+
+    sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+    vis = CassieVis(sim, "./cassie/cassiemujoco/cassie.xml")
+    # print("decode mu: ", latent_model.decode(mu1))
+    recon_state = latent_model.decode(mu1)[0].detach().numpy()
+    recon_state = np.multiply(recon_state,data_max) + data_min
+    sim.set_qpos(recon_state)
+    render_state = vis.draw(sim)
+    mu_ind = 0
+    try:
+        tty.setcbreak(sys.stdin.fileno())
+        while render_state:
+            if isData():
+                c = sys.stdin.read(1)
+                if c == 'w':
+                    mu_ind += 1
+                    mu_ind = min(num_points, mu_ind)
+                    recon_state = latent_model.decode(mu_interp[mu_ind])[0].detach().numpy()
+                    recon_state = np.multiply(recon_state,data_max) + data_min
+                    sim.set_qpos(recon_state)
+                    print("mu_ind: ", mu_ind)
+                elif c == 's':
+                    mu_ind -= 1
+                    mu_ind = max(0, mu_ind)
+                    recon_state = latent_model.decode(mu_interp[mu_ind])[0].detach().numpy()
+                    recon_state = np.multiply(recon_state,data_max) + data_min
+                    sim.set_qpos(recon_state)
+                    print("mu_ind: ", mu_ind)
+                elif c == 'a':
+                    recon_state = latent_model.decode(mu1)[0].detach().numpy()
+                    recon_state = np.multiply(recon_state,data_max) + data_min
+                    sim.set_qpos(recon_state)
+                    print("Setting to mu1 state")
+                elif c == 'd':
+                    recon_state = latent_model.decode(mu2)[0].detach().numpy()
+                    recon_state = np.multiply(recon_state,data_max) + data_min
+                    sim.set_qpos(recon_state)
+                    print("Setting to mu2 state")
+                elif c == 'q':
+                    sim.set_qpos(state_data[ind1, :])
+                    print("Setting to orig state 1")
+                elif c == 'e':
+                    sim.set_qpos(state_data[ind2, :])
+                    print("Setting to orig state 2")
+            
+            render_state = vis.draw(sim)
+    finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+
+
+
 
 # Load latent model
 latent_size = 35
 hidden_size = 40
 latent_model = VAE(hidden_size, latent_size, mj_state=True)
-saved_state_dict = torch.load("./vae_model/mj_state_qpos_entropyloss_latent{}_hidden{}.pt".format(latent_size, hidden_size), map_location=torch.device('cpu'))
+saved_state_dict = torch.load("./vae_model/mj_state_qpos_sse2_latent{}_hidden{}.pt".format(latent_size, hidden_size), map_location=torch.device('cpu'))
 latent_model.load_state_dict(saved_state_dict)
-norm_params = np.load("./data_norm_params_qpos_entropyloss.npz")
+norm_params = np.load("./data_norm_params_qpos_varreg.npz")
 
 
-vis_traj(latent_model, norm_params)
+# vis_traj(latent_model, norm_params)
 # vis_policy(latent_model, norm_params)
+interpolate_latent(latent_model, norm_params)
