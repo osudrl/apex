@@ -38,6 +38,90 @@ class VAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
 
+# Should predict/reconstruct next step in sequence
+# NOTE: Encoder and Decoder should be separate RNN's right? Meaning that when doing the full sequence
+# of encoding then decoding hidden/cell states are not carried through encoding forward to decoding
+# forward. So after encoding, when doing decoding foward hidden and cell states for decoder are reset
+class RNN_VAE(nn.Module):
+    def __init__(self, hidden_size, latent_size, mj_state=False):
+        super(RNN_VAE, self).__init__()
+
+        if mj_state:
+            self.input_size = 35
+        else:
+            self.input_size = 40
+
+        self.hidden_size = hidden_size
+        self.latent_size = latent_size
+        self.encode_LSTM_hidden = torch.nn.LSTMCell(input_size=self.input_size, hidden_size=hidden_size)
+        self.encode_LSTM_mu = torch.nn.LSTMCell(input_size=hidden_size, hidden_size=latent_size)
+        self.encode_LSTM_logvar = torch.nn.LSTMCell(input_size=hidden_size, hidden_size=latent_size)
+
+        self.decode_LSTM1 = torch.nn.LSTMCell(input_size=latent_size, hidden_size=hidden_size)
+        self.decode_LSTM2 = torch.nn.LSTMCell(input_size=hidden_size, hidden_size=self.input_size)
+        
+
+    # Assumes that "x" is a sequence of data of shape (batch_size, seq_len, feature_size)
+    # Takes in a sequence of states, and will output encoded sequence
+    def encode(self, x):
+        batch_size = x.shape[0]
+        seq_len = x.shape[1]
+        
+        # Initialize hidden and cell state to be zero (NOTE: could try init as random as well)
+        hx_hidden = torch.zeros(batch_size, self.hidden_size)
+        cx_hidden = torch.zeros(batch_size, self.hidden_size)
+        hx_mu = torch.zeros(batch_size, self.latent_size)
+        cx_mu = torch.zeros(batch_size, self.latent_size)
+        hx_logvar = torch.zeros(batch_size, self.latent_size)
+        cx_logvar = torch.zeros(batch_size, self.latent_size)
+        mu_output = torch.zeros(batch_size, seq_len, self.latent_size)
+        logvar_output = torch.zeros(batch_size, seq_len, self.latent_size)
+        # Loop through sequence
+        for i in range(seq_len):
+            hx_hidden, cx_hidden = self.encode_LSTM_hidden(x[:, i, :], (hx_hidden, cx_hidden))
+            hx_mu, cx_mu = self.encode_LSTM_mu(hx_hidden, (hx_mu, cx_mu))
+            hx_logvar, cx_logvar = self.encode_LSTM_logvar(hx_hidden, (hx_logvar, cx_logvar))
+            mu_output[:, i, :] = hx_mu
+            logvar_output[:, i, :] = hx_logvar
+       
+        return mu_output, logvar_output
+
+    # Given the mean and log variance for a sequence of states, returns a sample from
+    # the distribution at each timestep
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar) # 0.5 because stddev is square root of var 
+        eps = torch.randn_like(std)
+        # NOTE: I think does does mu + std scaled normal tensor because this is faster than making
+        # a torch dist for every single element, and should do the same thing
+        return mu + eps*std
+
+    # Decodes a sequence of latent states back into a sequence of reconstructed states
+    # Similar to encode function, assumes z is of shape (batch_size, seq_len, latent_size)
+    def decode(self, z):
+        batch_size = z.shape[0]
+        seq_len = z.shape[1]
+        
+        # Initialize hidden and cell state to be zero (NOTE: could try init as random as well)
+        hx1 = torch.zeros(batch_size, self.hidden_size)
+        cx1 = torch.zeros(batch_size, self.hidden_size)
+        hx2 = torch.zeros(batch_size, self.input_size)
+        cx2 = torch.zeros(batch_size, self.input_size)
+
+        decode_output = torch.zeros(batch_size, seq_len, self.input_size)
+        # Loop through sequence
+        for i in range(seq_len):
+            hx1, cx1 = self.decode_LSTM1(z[:, i, :], (hx1, cx1))
+            hx2, cx2 = self.decode_LSTM2(hx1, (hx2, cx2))
+            decode_output[:, i, :] = hx2
+       
+        return decode_output
+
+    def forward(self, x):
+        # print(x.size())
+        mu_seq, logvar_seq = self.encode(x)
+        z = self.reparameterize(mu_seq, logvar_seq)
+        return self.decode(z), mu_seq, logvar_seq
+
 class VAE_output_dist(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size):
         super(VAE_output_dist, self).__init__()
