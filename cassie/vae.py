@@ -3,6 +3,9 @@ from torch import nn, optim
 from torch.nn import functional as F
 
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 class VAE(nn.Module):
     def __init__(self, hidden_size, latent_size, mj_state=False):
         super(VAE, self).__init__()
@@ -68,16 +71,17 @@ class RNN_VAE(nn.Module):
         seq_len = x.shape[1]
         
         # Initialize hidden and cell state to be zero (NOTE: could try init as random as well)
-        hx_hidden = torch.zeros(batch_size, self.hidden_size)
-        cx_hidden = torch.zeros(batch_size, self.hidden_size)
-        hx_mu = torch.zeros(batch_size, self.latent_size)
-        cx_mu = torch.zeros(batch_size, self.latent_size)
-        hx_logvar = torch.zeros(batch_size, self.latent_size)
-        cx_logvar = torch.zeros(batch_size, self.latent_size)
-        mu_output = torch.zeros(batch_size, seq_len, self.latent_size)
-        logvar_output = torch.zeros(batch_size, seq_len, self.latent_size)
+        hx_hidden = torch.zeros(batch_size, self.hidden_size).to(device)
+        cx_hidden = torch.zeros(batch_size, self.hidden_size).to(device)
+        hx_mu = torch.zeros(batch_size, self.latent_size).to(device)
+        cx_mu = torch.zeros(batch_size, self.latent_size).to(device)
+        hx_logvar = torch.zeros(batch_size, self.latent_size).to(device)
+        cx_logvar = torch.zeros(batch_size, self.latent_size).to(device)
+        mu_output = torch.zeros(batch_size, seq_len, self.latent_size).to(device)
+        logvar_output = torch.zeros(batch_size, seq_len, self.latent_size).to(device)
         # Loop through sequence
         for i in range(seq_len):
+            # print(i)
             hx_hidden, cx_hidden = self.encode_LSTM_hidden(x[:, i, :], (hx_hidden, cx_hidden))
             hx_mu, cx_mu = self.encode_LSTM_mu(hx_hidden, (hx_mu, cx_mu))
             hx_logvar, cx_logvar = self.encode_LSTM_logvar(hx_hidden, (hx_logvar, cx_logvar))
@@ -102,12 +106,12 @@ class RNN_VAE(nn.Module):
         seq_len = z.shape[1]
         
         # Initialize hidden and cell state to be zero (NOTE: could try init as random as well)
-        hx1 = torch.zeros(batch_size, self.hidden_size)
-        cx1 = torch.zeros(batch_size, self.hidden_size)
-        hx2 = torch.zeros(batch_size, self.input_size)
-        cx2 = torch.zeros(batch_size, self.input_size)
+        hx1 = torch.zeros(batch_size, self.hidden_size).to(device)
+        cx1 = torch.zeros(batch_size, self.hidden_size).to(device)
+        hx2 = torch.zeros(batch_size, self.input_size).to(device)
+        cx2 = torch.zeros(batch_size, self.input_size).to(device)
 
-        decode_output = torch.zeros(batch_size, seq_len, self.input_size)
+        decode_output = torch.zeros(batch_size, seq_len, self.input_size).to(device)
         # Loop through sequence
         for i in range(seq_len):
             hx1, cx1 = self.decode_LSTM1(z[:, i, :], (hx1, cx1))
