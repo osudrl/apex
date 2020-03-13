@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-from cassie.vae import VAE, VAE_output_dist, RNN_VAE
+from cassie.vae import *
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -87,7 +87,8 @@ for i in range(num_traj_test):
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
-model = RNN_VAE(args.hidden_size, args.latent_size, mj_state=True).to(device)
+# model = RNN_VAE(args.hidden_size, args.latent_size, mj_state=True).to(device)
+model = RNN_VAE_FULL(args.hidden_size, args.latent_size, 3, mj_state=True).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
 # Reconstruction + KL divergence losses summed over all elements and batch

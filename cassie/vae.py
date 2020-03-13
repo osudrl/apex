@@ -126,6 +126,71 @@ class RNN_VAE(nn.Module):
         z = self.reparameterize(mu_seq, logvar_seq)
         return self.decode(z), mu_seq, logvar_seq
 
+
+class RNN_VAE_FULL(nn.Module):
+    def __init__(self, hidden_size, latent_size, num_layers, mj_state=False):
+        super(RNN_VAE_FULL, self).__init__()
+
+        if mj_state:
+            self.input_size = 35
+        else:
+            self.input_size = 40
+
+        self.hidden_size = hidden_size
+        self.latent_size = latent_size
+        self.num_layers = num_layers
+        self.encode_LSTM = torch.nn.LSTM(input_size=self.input_size, hidden_size=hidden_size, batch_first=True, num_layers=num_layers)
+        self.encode_mu = nn.Linear(hidden_size, latent_size)
+        self.encode_logvar = nn.Linear(hidden_size, latent_size)
+
+        self.decode_LSTM = torch.nn.LSTM(input_size=latent_size, hidden_size=self.input_size, batch_first=True, num_layers=num_layers)
+
+    # Assumes that "x" is a sequence of data of shape (batch_size, seq_len, feature_size)
+    # Takes in a sequence of states, and will output encoded sequence
+    def encode(self, x):
+
+        [batch_size, seq_len, _] = x.shape
+
+        
+        h0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+        c0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+        
+        lstm_output, (_, _) = self.encode_LSTM(x, (h0, c0))
+
+        return self.encode_mu(lstm_output), self.encode_logvar(lstm_output)
+       
+
+    # Given the mean and log variance for a sequence of states, returns a sample from
+    # the distribution at each timestep
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar) # 0.5 because stddev is square root of var 
+        eps = torch.randn_like(std)
+        # NOTE: I think does does mu + std scaled normal tensor because this is faster than making
+        # a torch dist for every single element, and should do the same thing
+        return mu + eps*std
+
+    # Decodes a sequence of latent states back into a sequence of reconstructed states
+    # Similar to encode function, assumes z is of shape (batch_size, seq_len, latent_size)
+    def decode(self, z):
+        
+        [batch_size, seq_len, _] = z.shape
+        
+        # Initialize hidden and cell state to be zero (NOTE: could try init as random as well)
+        h0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(device)
+        c0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(device)
+
+        decode_output, (_, _) = self.decode_LSTM(z, (h0, c0))
+
+        return decode_output
+
+    def forward(self, x):
+        # print(x.size())
+        mu_seq, logvar_seq = self.encode(x)
+        z = self.reparameterize(mu_seq, logvar_seq)
+        return self.decode(z), mu_seq, logvar_seq
+
+
+
 class VAE_output_dist(nn.Module):
     def __init__(self, input_size, hidden_size, latent_size):
         super(VAE_output_dist, self).__init__()
