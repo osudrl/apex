@@ -64,9 +64,9 @@ X_train_all, X_test_all = train_test_split(dataset_np, test_size=0.05, random_st
 
 # remove clock and speed commands, velocity terms, and X,Y pos of the robot
 # only left Z height and orientations, and all joint pos
-X_train = X_train_all[:, 2:32] # index from 2 to 32 in all 67 dims
-X_test = X_test_all[:, 2:32]
-input_dim = 30
+X_train = X_train_all[:, 2:35] # index from 2 to 32 in all 67 dims
+X_test = X_test_all[:, 2:35]
+input_dim = 33
 if input_dim != X_train.shape[1]:
     raise Exception("check input dimension!")
 print("Data Dim Checked!")
@@ -78,8 +78,8 @@ print("Data Dim Checked!")
 # data_max = np.max(X_train-data_min, axis=0)
 
 norm_params = np.load("./total_mjdata_norm_params.npz")
-data_min = norm_params["data_min"][2:32]
-data_max = norm_params["data_max"][2:32]
+data_min = norm_params["data_min"][2:35]
+data_max = norm_params["data_max"][2:35]
 
 norm_data = np.divide((X_train-data_min), data_max)
 norm_test_data = np.divide((X_test-data_min), data_max)
@@ -90,7 +90,7 @@ norm_test_data = torch.Tensor(norm_test_data)
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
-model = VAE(args.hidden_size, args.latent_size, mj_state=True).to(device)
+model = VAE(hidden_size=args.hidden_size, latent_size=args.latent_size, input_size=input_dim, mj_state=True).to(device)
 # model = VAE_output_dist(input_dim, args.hidden_size, args.latent_size).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 recon_loss_cri = nn.MSELoss()

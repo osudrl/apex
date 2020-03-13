@@ -36,15 +36,14 @@ parser.add_argument('--debug', default=False, action="store_true", help='print d
 
 args = parser.parse_args()
 
-args.epochs = 100
+args.epochs = 500
 args.hidden_size = 40
 args.latent_size = 25
 # args.run_name = "mj_state_qpos_sse2_latent{}_hidden{}".format(args.latent_size, args.hidden_size)
 args.run_name = "test"+str(now)
-
+LSTM_layer = 1
 
 args.cuda = not args.no_cuda and torch.cuda.is_available()
-args.debug = True
 do_log = True
 
 torch.manual_seed(args.seed)
@@ -64,14 +63,15 @@ num_traj_train = int(0.9 * num_traj)
 num_traj_test = num_traj - num_traj_train
 
 # Only use qpos
-dataset_np = dataset_np[:, 0:-32]
-input_dim = 35
+dataset_np = dataset_np[:, 2:35]
+input_dim = 33
 
 # Normalize data
 norm_params = np.load("./total_mjdata_norm_params.npz")
-data_min = norm_params["data_min"][0:35]
-data_max = norm_params["data_max"][0:35]
+data_min = norm_params["data_min"][2:35]
+data_max = norm_params["data_max"][2:35]
 norm_data = np.divide((dataset_np-data_min), data_max)
+
 
 # Form training/testing data into 3-D tensors
 train_data = torch.zeros(num_traj_train, 300, input_dim).to(device)
@@ -82,13 +82,13 @@ for i in range(num_traj_test):
     curr_ind = rand_inds[i+num_traj_train]
     test_data[i, :, :] = torch.Tensor(norm_data[300*curr_ind:300*(curr_ind+1), :])
 
-
-
+# print(train_data[0,0,:].view(1, 1, -1))
+# exit()
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
 # model = RNN_VAE(args.hidden_size, args.latent_size, mj_state=True).to(device)
-model = RNN_VAE_FULL(args.hidden_size, args.latent_size, 3, mj_state=True).to(device)
+model = RNN_VAE_FULL(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, mj_state=True).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
 # Reconstruction + KL divergence losses summed over all elements and batch
@@ -133,8 +133,8 @@ def train(epoch):
     
     train_loss = 0
     train_len = len(norm_data)
-    print("norm data shape: ", norm_data.shape)
-    print("train_len: ", train_len)
+    # print("norm data shape: ", norm_data.shape)
+    # print("train_len: ", train_len)
     sampler = BatchSampler(SubsetRandomSampler(range(num_traj_train)), args.batch_size, drop_last=True)
     num_batch = len(list(sampler))
 
@@ -159,9 +159,9 @@ def train(epoch):
         batch_idx+=1
     if args.debug:
         print('====> Epoch: {} Average loss: {:.4f}'.format(
-            epoch, train_loss / batch_idx))
+            epoch, train_loss / batch_idx / 300))
     if do_log:
-        logger.add_scalar("Train/Loss", train_loss / batch_idx, epoch)
+        logger.add_scalar("Train/Loss", train_loss / batch_idx / 300, epoch)
         for name, param in model.named_parameters():
             logger.add_histogram("Model Params/"+name, param.data, epoch)
 
@@ -179,12 +179,12 @@ def test(epoch):
         orig_data = data*data_max + data_min
         percent_error = torch.div((orig_data-orig_batch), (orig_data+1e-6))
         percent_error = torch.mean(percent_error, axis=0)
-        print("percent error: ", percent_error*100)
+        # print("percent error: ", percent_error*100)
             
     if args.debug:
-        print('====> Test set loss: {:.4f}'.format(test_loss / num_traj_test))
+        print('====> Test set loss: {:.4f}'.format(test_loss / num_traj_test / 300))
     if do_log:
-        logger.add_scalar("Test/Loss", test_loss / num_traj_test, epoch)
+        logger.add_scalar("Test/Loss", test_loss / num_traj_test / 300, epoch)
 
 # if __name__ == "__main__":
 
@@ -200,14 +200,14 @@ if args.test_model is None:
 print("Testing model.")
 if args.test_model is not None:
     PATH = args.test_model
-model.cpu()
+
 model.load_state_dict(torch.load(PATH))
 model.eval()
 print(model)
 print()
-recon_x, mu, logvar = model(norm_data[0,:])
+recon_x, mu, logvar = model(train_data[0,0,:].view(1, 1, -1))
 print("reconstructed data:")
 print(recon_x)
 print()
 print("normalized test data:")
-print(norm_data[0,:])
+print(train_data[0,0,:].view(1, 1, -1))

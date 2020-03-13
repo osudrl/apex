@@ -7,11 +7,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class VAE(nn.Module):
-    def __init__(self, hidden_size, latent_size, mj_state=False):
+    def __init__(self, hidden_size, latent_size, input_size, mj_state=False):
         super(VAE, self).__init__()
 
         if mj_state:
-            self.input_size = 35
+            self.input_size = input_size
         else:
             self.input_size = 40
 
@@ -128,11 +128,11 @@ class RNN_VAE(nn.Module):
 
 
 class RNN_VAE_FULL(nn.Module):
-    def __init__(self, hidden_size, latent_size, num_layers, mj_state=False):
+    def __init__(self, hidden_size, latent_size, num_layers, input_size, mj_state=False):
         super(RNN_VAE_FULL, self).__init__()
 
         if mj_state:
-            self.input_size = 35
+            self.input_size = input_size
         else:
             self.input_size = 40
 
