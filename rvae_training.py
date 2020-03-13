@@ -45,7 +45,7 @@ args.run_name = "test"+str(now)
 
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 args.debug = True
-do_log = False
+do_log = True
 
 torch.manual_seed(args.seed)
 
@@ -74,13 +74,15 @@ data_max = norm_params["data_max"][0:35]
 norm_data = np.divide((dataset_np-data_min), data_max)
 
 # Form training/testing data into 3-D tensors
-train_data = torch.zeros(num_traj_train, 300, input_dim)
-test_data = torch.zeros(num_traj_test, 300, input_dim)
+train_data = torch.zeros(num_traj_train, 300, input_dim).to(device)
+test_data = torch.zeros(num_traj_test, 300, input_dim).to(device)
 for i in range(num_traj_train):
     train_data[i, :, :] = torch.Tensor(norm_data[300*rand_inds[i]:300*(rand_inds[i]+1), :])
 for i in range(num_traj_test):
     curr_ind = rand_inds[i+num_traj_train]
     test_data[i, :, :] = torch.Tensor(norm_data[300*curr_ind:300*(curr_ind+1), :])
+
+
 
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
@@ -127,6 +129,7 @@ def elbo_loss(model, data, mu, logvar):
 
 def train(epoch):
     model.train()
+    
     train_loss = 0
     train_len = len(norm_data)
     print("norm data shape: ", norm_data.shape)
