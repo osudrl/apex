@@ -11,6 +11,7 @@ from datetime import datetime
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from cassie.vae import VAE, VAE_output_dist
+from torch.distributions.kl import kl_divergence
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -36,12 +37,12 @@ parser.add_argument('--debug', default=False, action="store_true", help='print d
 
 args = parser.parse_args()
 
-args.epochs = 100
+args.epochs = 500
 args.hidden_size = 40
-args.latent_size = 25
+# args.latent_size = 25
 # args.run_name = "mj_state_qpos_sse2_latent{}_hidden{}".format(args.latent_size, args.hidden_size)
-args.run_name = "test"+now
-
+# args.run_name = "mj_state_SSE_KL_NoXY_500epoch_latent{}_hidden{}".format(args.latent_size, args.hidden_size)
+# args.run_name = "test"
 
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 do_log = True
@@ -54,39 +55,37 @@ if args.test_model is None:
     log_path = "./logs/"+args.run_name
     logger = SummaryWriter(log_path, flush_secs=0.1) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
 
+print("Starting Tensorboard ...")
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
 
+print("Loading Data ...")
 dataset_np = np.load("./5b75b3-seed0_full_mjdata.npz")["total_data"]
-X_train, X_test = train_test_split(dataset_np, test_size=0.05, random_state=42, shuffle=True)
+X_train_all, X_test_all = train_test_split(dataset_np, test_size=0.05, random_state=42, shuffle=True)
 
-# remove clock and speed commands, only dynamics
-X_train = X_train[:, 0:-32]
-X_test = X_test[:, 0:-32]
-
-input_dim = 35
+# remove clock and speed commands, velocity terms, and X,Y pos of the robot
+# only left Z height and orientations, and all joint pos
+X_train = X_train_all[:, 2:32] # index from 2 to 32 in all 67 dims
+X_test = X_test_all[:, 2:32]
+input_dim = 30
+if input_dim != X_train.shape[1]:
+    raise Exception("check input dimension!")
+print("Data Dim Checked!")
 
 # data_min = np.min(dataset_np, axis=0)
 # data_max = np.max(dataset_np-data_min, axis=0)
 # np.savez("./total_mjdata_norm_params.npz", data_max=data_max, data_min=data_min)
-# exit()
-
-
 # data_min = np.min(X_train, axis=0)
 # data_max = np.max(X_train-data_min, axis=0)
+
 norm_params = np.load("./total_mjdata_norm_params.npz")
-data_min = norm_params["data_min"][0:35]
-data_max = norm_params["data_max"][0:35]
+data_min = norm_params["data_min"][2:32]
+data_max = norm_params["data_max"][2:32]
 
 norm_data = np.divide((X_train-data_min), data_max)
 norm_test_data = np.divide((X_test-data_min), data_max)
 
 norm_data = torch.Tensor(norm_data)
 norm_test_data = torch.Tensor(norm_test_data)
-# norm_data = torch.Tensor(X_train)
-# norm_test_data = torch.Tensor(X_test)
-# print()
-
-# np.savez("./data_norm_params_qpos_varreg.npz", data_max=data_max, data_min=data_min)
 
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
@@ -100,22 +99,18 @@ recon_loss_cri = nn.MSELoss()
 def loss_function(recon_x, x, mu, logvar):
     MSE = input_dim * recon_loss_cri(recon_x, x.view(-1, input_dim))
     SSE = torch.sum(torch.pow(recon_x - x.view(-1, input_dim), 2)) # SSE Loss
-    prob_dist = torch.distributions.Normal(mu, logvar.exp())
-    entropy_loss = -10*torch.mean(prob_dist.entropy())
-    var_reg = torch.mean(logvar)
-    # print(var_reg)
-    
+
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
     # https://arxiv.org/abs/1312.6114
     # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - torch.exp(logvar))
     # print("mu shape; ", mu.shape)
     # print("entropy: ", entropy)
     # print("MSE: ", MSE)
+    # print("SSE: ", SSE)
     # print("KLD: ", KLD)
-
-    return SSE# + KLD# + var_reg#entropy_loss
+    return KLD + SSE, KLD, SSE
 
 def elbo_loss(model, data, mu, logvar):
     posterior = torch.distributions.Normal(mu, logvar.exp())
@@ -138,6 +133,8 @@ def elbo_loss(model, data, mu, logvar):
 def train(epoch):
     model.train()
     train_loss = 0
+    train_loss_kl = 0
+    train_loss_recon = 0
     train_len = len(norm_data)
     sampler = BatchSampler(SubsetRandomSampler(range(train_len)), args.batch_size, drop_last=True)
     num_batch = len(list(sampler))
@@ -148,10 +145,12 @@ def train(epoch):
         data = data.to(device)
         optimizer.zero_grad()
         recon_batch, mu, logvar = model(data)
-        loss = loss_function(recon_batch, data, mu, logvar)
+        loss, kl_loss, sse_loss = loss_function(recon_batch, data, mu, logvar)
         # loss = elbo_loss(model, data, mu, logvar)
         loss.backward()
         train_loss += loss.item()
+        train_loss_kl += kl_loss.item()
+        train_loss_recon += sse_loss.item()
         optimizer.step()
         if batch_idx % args.log_interval == 0 and args.debug:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -166,6 +165,9 @@ def train(epoch):
             epoch, train_loss / batch_idx))
     if do_log:
         logger.add_scalar("Train/Loss", train_loss / batch_idx, epoch)
+        logger.add_scalar("Train/Loss_KL", train_loss_kl / batch_idx, epoch)
+        logger.add_scalar("Train/Loss_SSE", train_loss_recon / batch_idx, epoch)
+
         for name, param in model.named_parameters():
             logger.add_histogram("Model Params/"+name, param.data, epoch)
 
@@ -182,7 +184,8 @@ def test(epoch):
             data = norm_data[indices]
             data = data.to(device)
             recon_batch, mu, logvar = model(data)
-            test_loss += loss_function(recon_batch, data, mu, logvar).item()
+            test_loss_temp, test_loss_kl, test_loss_sse = loss_function(recon_batch, data, mu, logvar)
+            test_loss += test_loss_temp.item()
             # test_loss += elbo_loss(model, data, mu, logvar)
             # Un-normalize data
             orig_batch = recon_batch*data_max + data_min
