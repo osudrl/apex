@@ -90,7 +90,7 @@ optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
-    SSE = torch.sum(torch.pow(recon_x - x.view(-1, input_dim), 2)) # SSE Loss
+    SSE = torch.sum(torch.pow(recon_x - x, 2)) # SSE Loss
     # prob_dist = torch.distributions.Normal(mu, logvar.exp())
     # entropy_loss = -10*torch.mean(prob_dist.entropy())
     # var_reg = torch.mean(logvar)
@@ -131,34 +131,28 @@ def train(epoch):
     train_len = len(norm_data)
     print("norm data shape: ", norm_data.shape)
     print("train_len: ", train_len)
-    sampler = BatchSampler(SubsetRandomSampler(num_traj_train), args.batch_size, drop_last=True)
-    # Split up training trajectories into batches
-    rand_inds = np.random.permutation(num_traj_train)
-    batch_inds = [ran]
-
-    # num_batch = len(list(sampler))
+    sampler = BatchSampler(SubsetRandomSampler(range(num_traj_train)), args.batch_size, drop_last=True)
+    num_batch = len(list(sampler))
 
     batch_idx = 0
     for indices in sampler:
-        print("indicies: ", indices)
-    #     data = norm_data[indices]
-    #     data = data.to(device)
-    #     optimizer.zero_grad()
-    #     recon_batch, mu, logvar = model(data)
-    #     loss = loss_function(recon_batch, data, mu, logvar)
-    #     # loss = elbo_loss(model, data, mu, logvar)
-    #     loss.backward()
-    #     train_loss += loss.item()
-    #     optimizer.step()
-    #     if batch_idx % args.log_interval == 0 and args.debug:
-    #         print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-    #             epoch, 
-    #             batch_idx * len(data), 
-    #             train_len,
-    #             100. * batch_idx / num_batch,
-    #             loss.item()))
-    #     batch_idx+=1
-    exit()
+        data = train_data[indices, :, :]
+        data = data.to(device)
+        optimizer.zero_grad()
+        recon_batch, mu, logvar = model(data)
+        loss = loss_function(recon_batch, data, mu, logvar)
+        # loss = elbo_loss(model, data, mu, logvar)
+        loss.backward()
+        train_loss += loss.item()
+        optimizer.step()
+        if batch_idx % args.log_interval == 0 and args.debug:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, 
+                batch_idx * len(data), 
+                train_len,
+                100. * batch_idx / num_batch,
+                loss.item()))
+        batch_idx+=1
     if args.debug:
         print('====> Epoch: {} Average loss: {:.4f}'.format(
             epoch, train_loss / batch_idx))
@@ -172,30 +166,21 @@ def test(epoch):
     test_loss = 0
 
     with torch.no_grad():
-        test_len = len(norm_test_data)
-
-        sampler = BatchSampler(SubsetRandomSampler(range(test_len)), args.batch_size, drop_last=True)
-
-        for batch_idx, indices in enumerate(sampler):
-            data = norm_data[indices]
-            data = data.to(device)
-            recon_batch, mu, logvar = model(data)
-            test_loss += loss_function(recon_batch, data, mu, logvar).item()
-            # test_loss += elbo_loss(model, data, mu, logvar)
-            # Un-normalize data
-            orig_batch = recon_batch*data_max + data_min
-            orig_data = data*data_max + data_min
-            percent_error = torch.div((orig_data-orig_batch), (orig_data+1e-6))
-            percent_error = torch.mean(percent_error, axis=0)
-            if batch_idx == 0 and args.debug:
-                # print(orig_batch[0,:])
-                # print(orig_data[0,:])
-                print("percent error: ", percent_error*100)
+        data = test_data.to(device)
+        recon_batch, mu, logvar = model(data)
+        test_loss += loss_function(recon_batch, data, mu, logvar).item()
+        # test_loss += elbo_loss(model, data, mu, logvar)
+        # Un-normalize data
+        orig_batch = recon_batch*data_max + data_min
+        orig_data = data*data_max + data_min
+        percent_error = torch.div((orig_data-orig_batch), (orig_data+1e-6))
+        percent_error = torch.mean(percent_error, axis=0)
+        print("percent error: ", percent_error*100)
             
     if args.debug:
-        print('====> Test set loss: {:.4f}'.format(test_loss / batch_idx))
+        print('====> Test set loss: {:.4f}'.format(test_loss / num_traj_test))
     if do_log:
-        logger.add_scalar("Test/Loss", test_loss / batch_idx, epoch)
+        logger.add_scalar("Test/Loss", test_loss / num_traj_test, epoch)
 
 # if __name__ == "__main__":
 

@@ -78,9 +78,9 @@ class RNN_VAE(nn.Module):
         logvar_output = torch.zeros(batch_size, seq_len, self.latent_size)
         # Loop through sequence
         for i in range(seq_len):
-            hx_hidden, cx_hidden = self.encode_LSTM_hidden(x[:, i, :], hx_hidden, cx_hidden)
-            hx_mu, cx_mu = self.encode_LSTM_mu(hx_hidden, hx_mu, cx_mu)
-            hx_logvar, cx_logvar = self.encode_LSTM_logvar(hx_hidden, hx_logvar, cx_logvar)
+            hx_hidden, cx_hidden = self.encode_LSTM_hidden(x[:, i, :], (hx_hidden, cx_hidden))
+            hx_mu, cx_mu = self.encode_LSTM_mu(hx_hidden, (hx_mu, cx_mu))
+            hx_logvar, cx_logvar = self.encode_LSTM_logvar(hx_hidden, (hx_logvar, cx_logvar))
             mu_output[:, i, :] = hx_mu
             logvar_output[:, i, :] = hx_logvar
        
@@ -110,13 +110,14 @@ class RNN_VAE(nn.Module):
         decode_output = torch.zeros(batch_size, seq_len, self.input_size)
         # Loop through sequence
         for i in range(seq_len):
-            hx1, cx1 = self.decode_LSTM1(z[:, i, :], hx1, cx1)
-            hx2, cx2 = self.decode_LSTM2(hx1, hx2, cx2)
+            hx1, cx1 = self.decode_LSTM1(z[:, i, :], (hx1, cx1))
+            hx2, cx2 = self.decode_LSTM2(hx1, (hx2, cx2))
             decode_output[:, i, :] = hx2
        
         return decode_output
 
     def forward(self, x):
+        # print(x.size())
         mu_seq, logvar_seq = self.encode(x)
         z = self.reparameterize(mu_seq, logvar_seq)
         return self.decode(z), mu_seq, logvar_seq
