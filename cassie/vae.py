@@ -3,7 +3,7 @@ from torch import nn, optim
 from torch.nn import functional as F
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class VAE(nn.Module):
@@ -128,7 +128,7 @@ class RNN_VAE(nn.Module):
 
 
 class RNN_VAE_FULL(nn.Module):
-    def __init__(self, hidden_size, latent_size, num_layers, input_size, mj_state=False):
+    def __init__(self, hidden_size, latent_size, num_layers, input_size, device="cuda", mj_state=False):
         super(RNN_VAE_FULL, self).__init__()
 
         if mj_state:
@@ -139,11 +139,18 @@ class RNN_VAE_FULL(nn.Module):
         self.hidden_size = hidden_size
         self.latent_size = latent_size
         self.num_layers = num_layers
+        self.device= device
         self.encode_LSTM = torch.nn.LSTM(input_size=self.input_size, hidden_size=hidden_size, batch_first=True, num_layers=num_layers)
         self.encode_mu = nn.Linear(hidden_size, latent_size)
         self.encode_logvar = nn.Linear(hidden_size, latent_size)
 
         self.decode_LSTM = torch.nn.LSTM(input_size=latent_size, hidden_size=self.input_size, batch_first=True, num_layers=num_layers)
+
+        self.he0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+        self.ce0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+
+        self.hd0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+        self.cd0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
 
     # Assumes that "x" is a sequence of data of shape (batch_size, seq_len, feature_size)
     # Takes in a sequence of states, and will output encoded sequence
@@ -151,11 +158,7 @@ class RNN_VAE_FULL(nn.Module):
 
         [batch_size, seq_len, _] = x.shape
 
-        
-        h0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
-        c0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
-        
-        lstm_output, (_, _) = self.encode_LSTM(x, (h0, c0))
+        lstm_output, (_, _) = self.encode_LSTM(x, (self.he0, self.ce0))
 
         return self.encode_mu(lstm_output), self.encode_logvar(lstm_output)
        
@@ -174,14 +177,17 @@ class RNN_VAE_FULL(nn.Module):
     def decode(self, z):
         
         [batch_size, seq_len, _] = z.shape
-        
-        # Initialize hidden and cell state to be zero (NOTE: could try init as random as well)
-        h0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(device)
-        c0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(device)
 
-        decode_output, (_, _) = self.decode_LSTM(z, (h0, c0))
+        decode_output, (_, _) = self.decode_LSTM(z, (self.hd0, self.cd0))
 
         return decode_output
+
+    def reset_hidden(self, batch_size):
+        self.he0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(self.device)
+        self.ce0 = torch.zeros(self.num_layers, batch_size, self.hidden_size).to(self.device)
+
+        self.hd0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(self.device)
+        self.cd0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(self.device)
 
     def forward(self, x):
         # print(x.size())

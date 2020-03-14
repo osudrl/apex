@@ -10,13 +10,13 @@ import time
 from cassie.quaternion_function import *
 from cassie import CassieEnv, CassieEnv_latent, CassieStandingEnv
 from cassie.cassiemujoco.cassiemujoco import CassieSim, CassieVis
-from cassie.vae import VAE
+from cassie.vae import *
 from torch import nn
 
 def isData():
     return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
 
-def vis_policy(latent_model, norm_params):
+def vis_policy(latent_model, norm_params, is_recurrent=False):
     # Load policy and env args
     eval_path = "./trained_models/latent_space/Cassie-v0/5b75b3-seed0/"
     run_args = pickle.load(open(eval_path + "experiment.pkl", "rb"))
@@ -45,10 +45,12 @@ def vis_policy(latent_model, norm_params):
     # print("reconstruct sim id: ", id(reconstruct_sim))
     # print("reconstruct vis id: ", id(reconstruct_vis))
     # norm_params = np.load("./data_norm_params.npz")
-    data_max = norm_params["data_max"]
-    data_min = norm_params["data_min"]
+    data_max = norm_params["data_max"][2:35]
+    data_min = norm_params["data_min"][2:35]
     print("data max shape: ", data_max.shape)
 
+    if is_recurrent:
+        latent_model.reset_hidden(1)
 
     old_settings = termios.tcgetattr(sys.stdin)
 
@@ -57,7 +59,7 @@ def vis_policy(latent_model, norm_params):
     perturb_start = -100
     force_arr = np.zeros(6)
     timesteps = 0
-    reconstruct_err = np.zeros(35)
+    reconstruct_err = np.zeros(33)
 
     # Inital render of both vis's
     # env_render_state = env.render()
@@ -140,12 +142,20 @@ def vis_policy(latent_model, norm_params):
                 # Update reconstruct state
                 curr_qpos = env.sim.qpos()
                 # mj_state = env.sim.qpos()#np.concatenate([env.sim.qpos(), env.sim.qvel()])
-                norm_state = np.divide((np.array(env.sim.qpos()) - data_min), data_max)
+                
+                norm_state = np.divide((np.array(env.sim.qpos()[2:]) - data_min), data_max)
+                if is_recurrent:
+                    norm_state = torch.Tensor(norm_state.reshape(1, 1, -1))
+                else:
+                    norm_state = torch.Tensor(norm_state)
                 # norm_state = np.random.rand(35)
-                decode_state, mu, logvar = latent_model.forward(torch.Tensor(norm_state))
+                decode_state, mu, logvar = latent_model.forward(norm_state)
                 decode_state = latent_model.decode(mu).detach().numpy()[0]
+                # print("decode state: ", decode_state)
+                if is_recurrent:
+                    decode_state = decode_state[0, :]
                 reconstruct_state = (decode_state*data_max) + data_min
-                reconstruct_state[0:2] = curr_qpos[0:2]
+                reconstruct_state = np.concatenate([curr_qpos[0:2], reconstruct_state])
                 # reconstruct_state += data_min
                 # print("reconstruct state: ", reconstruct_state)
                 # print("mj state: ", mj_state)
@@ -153,7 +163,7 @@ def vis_policy(latent_model, norm_params):
                 # reconstruct_state[3:7] = mj_state[3:7]
                 reconstruct_sim.set_qpos(reconstruct_state[0:35])
                 # reconstruct_sim.set_qvel(reconstruct_state[35:35+32])
-                reconstruct_err += norm_state - decode_state
+                reconstruct_err += norm_state.data.numpy().reshape(33) - decode_state
 
                 timesteps += 1
 
@@ -325,14 +335,21 @@ def interpolate_latent(latent_model, norm_params):
 
 
 # Load latent model
-latent_size = 35
+latent_size = 25
 hidden_size = 40
-latent_model = VAE(hidden_size, latent_size, mj_state=True)
-saved_state_dict = torch.load("./vae_model/mj_state_qpos_sse2_latent{}_hidden{}.pt".format(latent_size, hidden_size), map_location=torch.device('cpu'))
+layer = 1
+input_dim = 33
+latent_model = VAE(hidden_size=hidden_size, latent_size = latent_size, input_size = input_dim, mj_state=True)
+# latent_model = RNN_VAE_FULL(hidden_size=hidden_size, latent_size=latent_size, num_layers=layer, input_size=input_dim,  device="cpu", mj_state=True)
+
+saved_state_dict = torch.load("./vae_model/mj_state_SSE_KL_NoXY_500epoch_latent_{}_hidden_{}.pt".format(latent_size, hidden_size), map_location=torch.device('cpu'))
+# saved_state_dict = torch.load("./vae_model/mj_state_lstm_SSE_noKL_NoXY_latent_25_layers_1_hidden_40.pt", map_location=torch.device('cpu'))
+
 latent_model.load_state_dict(saved_state_dict)
-norm_params = np.load("./data_norm_params_qpos_varreg.npz")
+norm_params = np.load("./total_mjdata_norm_params.npz")
 
 
 # vis_traj(latent_model, norm_params)
-# vis_policy(latent_model, norm_params)
-interpolate_latent(latent_model, norm_params)
+vis_policy(latent_model, norm_params, is_recurrent=False)
+# vis_policy(latent_model, norm_params, is_recurrent=True)
+# interpolate_latent(latent_model, norm_params)
