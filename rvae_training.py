@@ -38,10 +38,10 @@ parser.add_argument('--debug', default=False, action="store_true", help='print d
 args = parser.parse_args()
 
 args.epochs = 500
-args.hidden_size = 40
+args.hidden_size = 64
 args.latent_size = 25
-args.num_layers = 5
-args.run_name = "mj_state_lstm_SSE_KL_NoXY_latent{}_layer{}_hidden{}".format(args.latent_size, args.num_layers, args.hidden_size)
+args.num_layers = 1
+args.run_name = "mj_state_lstm_FF_MSE_randInit_2layer32_KL_NoXY_latent{}_layer{}_hidden{}".format(args.latent_size, args.num_layers, args.hidden_size)
 # args.run_name = "test"+str(now)
 LSTM_layer = args.num_layers
 
@@ -53,7 +53,7 @@ torch.manual_seed(args.seed)
 device = torch.device("cuda" if args.cuda else "cpu")
 
 if args.test_model is None:
-    log_path = "./logs/"+args.run_name
+    log_path = "./logs/mj_state_lstm_test/"+args.run_name
     logger = SummaryWriter(log_path, flush_secs=0.1) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
@@ -89,9 +89,15 @@ for i in range(num_traj_test):
 data_max = torch.Tensor(data_max).to(device)
 data_min = torch.Tensor(data_min).to(device)
 
-# model = RNN_VAE(args.hidden_size, args.latent_size, mj_state=True).to(device)
-model = RNN_VAE_FULL(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, device=device, mj_state=True).to(device)
+# model = RNN_VAE(args.hidden_size, args.latent_size, device=device, mj_state=True).to(device)
+# model = RNN_VAE_FULL(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, device=device, mj_state=True).to(device)
+model = VAE_LSTM_FF(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, device=device, mj_state=True).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
+recon_loss_mse = nn.MSELoss()
+
+print("Model constructed.")
+print(model)
+print()
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
@@ -100,7 +106,7 @@ def loss_function(recon_x, x, mu, logvar):
 
 def loss_function_KL(recon_x, x, mu, logvar):
     SSE = torch.sum(torch.pow(recon_x - x, 2)) # SSE Loss
-
+    MSE = recon_loss_mse(recon_x, x)
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
     # https://arxiv.org/abs/1312.6114
@@ -109,8 +115,8 @@ def loss_function_KL(recon_x, x, mu, logvar):
     # print("mu shape; ", mu.shape)
     # print("entropy: ", entropy)
     # print("KLD: ", KLD)
-    # return SSE + KLD, KLD
-    return SSE + KLD, KLD, SSE
+    return MSE, KLD, SSE
+    # return SSE + 0.001*KLD, KLD, SSE
 
 
 def elbo_loss(model, data, mu, logvar):
@@ -146,15 +152,18 @@ def train(epoch):
 
     batch_idx = 0
     for indices in sampler:
-        data = train_data[indices, :, :]
+        start_idx_rand = np.random.randint(0, 150)
+        data = train_data[indices, start_idx_rand:, :]
+        
         data = data.to(device)
         optimizer.zero_grad()
         model.reset_hidden(args.batch_size)
+
         recon_batch, mu, logvar = model(data)
         # loss = loss_function(recon_batch, data, mu, logvar)
         loss, loss_kl, loss_sse = loss_function_KL(recon_batch, data, mu, logvar)
         loss.backward()
-        train_loss += loss.item()
+        train_loss += loss.item() / (300-start_idx_rand)
         train_loss_kl += loss_kl.item()
         train_loss_recon += loss_sse.item()
         optimizer.step()
@@ -176,25 +185,33 @@ def train(epoch):
         logger.add_scalar("Train/Loss_SSE", train_loss_recon / num_traj_train, epoch)
         for name, param in model.named_parameters():
             logger.add_histogram("Model Params/"+name, param.data, epoch)
+        # logger.add_graph(model, data)
 
 def test(epoch):
     model.eval()
     test_loss = 0
 
     with torch.no_grad():
-        data = test_data.to(device)
-        model.reset_hidden(num_traj_test)
-        recon_batch, mu, logvar = model(data)
-        # test_loss_temp = loss_function(recon_batch, data, mu, logvar).item()
-        test_loss_temp, test_loss_kl, test_loss_sse = loss_function_KL(recon_batch, data, mu, logvar)
-        test_loss += test_loss_temp.item()
+        sampler = BatchSampler(SubsetRandomSampler(range(num_traj_test)), args.batch_size, drop_last=True)
+        num_batch = len(list(sampler))
 
-        # Un-normalize data
-        orig_batch = recon_batch*data_max + data_min
-        orig_data = data*data_max + data_min
-        percent_error = torch.div((orig_data-orig_batch), (orig_data+1e-6))
-        percent_error = torch.mean(percent_error, axis=0)
-        # print("percent error: ", percent_error*100)
+        for indices in sampler:
+            start_idx_rand = np.random.randint(0, 150)
+            data = test_data[:, start_idx_rand:, :]
+
+            data = data.to(device)
+            model.reset_hidden(num_traj_test)
+            recon_batch, mu, logvar = model(data)
+            # test_loss_temp = loss_function(recon_batch, data, mu, logvar)
+            test_loss_temp, test_loss_kl, test_loss_sse = loss_function_KL(recon_batch, data, mu, logvar)
+            test_loss += test_loss_temp.item() / (300-start_idx_rand)
+
+            # Un-normalize data
+            orig_batch = recon_batch*data_max + data_min
+            orig_data = data*data_max + data_min
+            percent_error = torch.div((orig_data-orig_batch), (orig_data+1e-6))
+            percent_error = torch.mean(percent_error, axis=0)
+            # print("percent error: ", percent_error*100)
             
     if args.debug:
         print('====> Test set loss: {:.4f}'.format(test_loss / num_traj_test))
@@ -207,6 +224,7 @@ if args.test_model is None:
     # train and save new model
     PATH = "./vae_model/"+args.run_name+".pt"
     for epoch in range(1, args.epochs + 1):
+        print("training... epoch: {}".format(epoch))
         train(epoch)
         test(epoch)    
         torch.save(model.state_dict(), PATH)
