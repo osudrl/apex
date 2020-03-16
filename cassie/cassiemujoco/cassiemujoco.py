@@ -257,6 +257,14 @@ class CassieSim:
             c_arr[i] = data[i]
 
         cassie_sim_set_geom_rgba(self.c, c_arr)
+
+    def set_cassie_rgba(self, data):
+        c_arr = (ctypes.c_float * 4)()
+
+        for i in range(4):
+            c_arr[i] = data[i]
+        print("setting cassie rgba")
+        cassie_sim_set_cassie_rgba(self.c, c_arr)
     
     def set_geom_quat(self, data, name=None):
         if name is None:
