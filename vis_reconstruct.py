@@ -12,6 +12,7 @@ from cassie import CassieEnv, CassieEnv_latent, CassieStandingEnv
 from cassie.cassiemujoco.cassiemujoco import CassieSim, CassieVis
 from cassie.vae import *
 from torch import nn
+import matplotlib.pyplot as plt
 
 def isData():
     return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
@@ -22,15 +23,6 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
     run_args = pickle.load(open(eval_path + "experiment.pkl", "rb"))
     policy = torch.load(eval_path + "actor.pt")
 
-    # Load latent model
-    latent_size = 35
-    hidden_size = 40
-    # latent_model = VAE(hidden_size, latent_size, mj_state=True)
-    # saved_state_dict = torch.load("./vae_model/mj_state_test_latent{}_hidden{}.pt".format(latent_size, hidden_size), map_location=torch.device('cpu'))
-    # latent_model.load_state_dict(saved_state_dict)
-    # print(latent_model)
-    # exit()
-
     # Make interaction env and reconstruction sim/vis
     env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
     print("obs dim: ", env._obs)
@@ -39,6 +31,7 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
     # them in a CassieEnv.......... wtf
     policy_vis = CassieVis(env.sim, "./cassie/cassiemujoco/cassie.xml")
     reconstruct_sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+    reconstruct_sim.set_cassie_rgba([0.2031, 0.746, 0.92968, 1])
     reconstruct_vis = CassieVis(reconstruct_sim, "./cassie/cassiemujoco/cassie.xml")
     # print("Made both env and vis")
     # print("env sim id: ", id(env.sim))
@@ -59,7 +52,8 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
     perturb_start = -100
     force_arr = np.zeros(6)
     timesteps = 0
-    reconstruct_err = np.zeros(33)
+    reconstruct_err = np.zeros((1,35))
+    input_states = np.zeros((1,33))
 
     # Inital render of both vis's
     # env_render_state = env.render()
@@ -154,7 +148,7 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
                 # print("decode state: ", decode_state)
                 if is_recurrent:
                     decode_state = decode_state[0, :]
-                reconstruct_state = (decode_state*data_max) + data_min
+                reconstruct_state = np.multiply(decode_state,data_max) + data_min
                 reconstruct_state = np.concatenate([curr_qpos[0:2], reconstruct_state])
                 # reconstruct_state += data_min
                 # print("reconstruct state: ", reconstruct_state)
@@ -163,7 +157,12 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
                 # reconstruct_state[3:7] = mj_state[3:7]
                 reconstruct_sim.set_qpos(reconstruct_state[0:35])
                 # reconstruct_sim.set_qvel(reconstruct_state[35:35+32])
-                reconstruct_err += norm_state.data.numpy().reshape(33) - decode_state
+                reconstruct_err = np.vstack((reconstruct_err, reconstruct_state - curr_qpos))
+                if is_recurrent:
+                    input_states = np.vstack((input_states, norm_state[0, 0, :]))
+                else:
+                    input_states = np.vstack((input_states, norm_state))
+
 
                 timesteps += 1
 
@@ -177,7 +176,23 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
     finally:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
-    print("Average reconstruction error: ", np.linalg.norm(reconstruct_err) / timesteps)
+    # np.save("./policy_input_states.npy", input_states)
+    # print("Average reconstruction error: ", np.linalg.norm(reconstruct_err) / timesteps)
+    # t = np.linspace(0, reconstruct_err.shape[0]*0.0005*env.simrate, reconstruct_err.shape[0])
+    # fig, ax = plt.subplots(2, 5, figsize=(15, 8))
+    # motor_inds = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
+    # titles = ["Hip Roll", "Hip Yaw", "Hip Pitch", "Knee", "Foot"]
+    # ax[0][0].set_ylabel("Reconstruction Error")
+    # ax[1][0].set_ylabel("Reconstruction Error")
+    # for i in range(5):
+    #     ax[0][i].plot(t, reconstruct_err[:, motor_inds[i]])
+    #     ax[0][i].set_title("Left " + titles[i])
+    #     ax[1][i].plot(t, reconstruct_err[:, motor_inds[i+5]])
+    #     ax[1][i].set_title("Right " + titles[i])
+    #     ax[1][i].set_xlabel("Time (sec)")
+    # plt.tight_layout()
+    # plt.show()
+
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logvar):
@@ -196,7 +211,7 @@ def loss_function(recon_x, x, mu, logvar):
     return MSE + KLD
 
 
-def vis_traj(latent_model, norm_params):
+def vis_traj(latent_model, norm_params, is_recurrent=False):
     data = np.load("./5b75b3-seed0_full_mjdata.npz")
     state_data = data["total_data"]
     state_data = state_data[:, 0:-32]
@@ -207,14 +222,6 @@ def vis_traj(latent_model, norm_params):
     data_min = norm_params["data_min"]
     norm_data = np.divide((state_data-data_min), data_max)
     norm_data = torch.Tensor(norm_data)
-
-
-    # Load latent model
-    latent_size = 35
-    hidden_size = 40
-    # latent_model = VAE(hidden_size, latent_size, mj_state=True)
-    # saved_state_dict = torch.load("./vae_model/mj_state_qpos_entropyloss_latent{}_hidden{}.pt".format(latent_size, hidden_size), map_location=torch.device('cpu'))
-    # latent_model.load_state_dict(saved_state_dict)
 
     decode, mu, log_var = latent_model.forward(norm_data)
     print("log_var shape: ", torch.mean(log_var, axis=0))
@@ -260,7 +267,7 @@ def vis_traj(latent_model, norm_params):
             time.sleep(0.005)
 
 @torch.no_grad()
-def interpolate_latent(latent_model, norm_params):
+def interpolate_latent(latent_model, norm_params, is_recurrent=False):
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
     old_settings = termios.tcgetattr(sys.stdin)
@@ -269,24 +276,41 @@ def interpolate_latent(latent_model, norm_params):
     ind2 = 15
     data = np.load("./5b75b3-seed0_full_mjdata.npz")
     state_data = data["total_data"]
-    state_data = state_data[:, 0:-32]
+    state_data = state_data[:, 0:35]
     data_len =  state_data.shape[0]
-    data_max = norm_params["data_max"]
-    data_min = norm_params["data_min"]
-    norm_data = np.divide((state_data-data_min), data_max)
+    data_max = norm_params["data_max"][2:35]
+    data_min = norm_params["data_min"][2:35]
+    norm_data = np.divide((state_data[:, 2:35]-data_min), data_max)
     norm_data = torch.Tensor(norm_data)
-    decode1, mu1, logvar1 = latent_model.forward(norm_data[ind1, :])
-    decode2, mu2, logvar2 = latent_model.forward(norm_data[ind2, :])
+    if is_recurrent:
+        latent_model.reset_hidden(1)
+        norm_state1 = torch.Tensor(norm_data[ind1, :].reshape(1, 1, -1))
+        norm_state2 = torch.Tensor(norm_data[ind2, :].reshape(1, 1, -1))
+    else:
+        norm_state1 = torch.Tensor(norm_data[ind1, :])
+        norm_state2 = torch.Tensor(norm_data[ind2, :])
+    decode1, mu1, logvar1 = latent_model.forward(norm_state1)
+    decode2, mu2, logvar2 = latent_model.forward(norm_state2)
 
     num_points = 20
     mu_diff = mu2 - mu1
+    xy_diff = state_data[ind2, 0:2] - state_data[ind1, 0:2]
+    # if is_recurrent:
+        # mu_interp = [(mu1+(i/num_points)*mu_diff for i in range(num_points+1)]
+    # else:
     mu_interp = [mu1+(i/num_points)*mu_diff for i in range(num_points+1)]
+    xy_interp = [state_data[ind1, 0:2]+(i/num_points)*xy_diff for i in range(num_points+1)]
 
     sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
     vis = CassieVis(sim, "./cassie/cassiemujoco/cassie.xml")
-    # print("decode mu: ", latent_model.decode(mu1))
+    print("decode mu: ", latent_model.decode(mu1))
+    # if is_recurrent:
+        # mu1 = mu1.view(1, 1, -1)
     recon_state = latent_model.decode(mu1)[0].detach().numpy()
+    if is_recurrent:
+        recon_state = recon_state[0, :]
     recon_state = np.multiply(recon_state,data_max) + data_min
+    recon_state = np.concatenate((state_data[ind1, 0:2], recon_state))
     sim.set_qpos(recon_state)
     render_state = vis.draw(sim)
     mu_ind = 0
@@ -299,24 +323,36 @@ def interpolate_latent(latent_model, norm_params):
                     mu_ind += 1
                     mu_ind = min(num_points, mu_ind)
                     recon_state = latent_model.decode(mu_interp[mu_ind])[0].detach().numpy()
+                    if is_recurrent:
+                        recon_state = recon_state[0, :]
                     recon_state = np.multiply(recon_state,data_max) + data_min
+                    recon_state = np.concatenate((xy_interp[mu_ind], recon_state))
                     sim.set_qpos(recon_state)
                     print("mu_ind: ", mu_ind)
                 elif c == 's':
                     mu_ind -= 1
                     mu_ind = max(0, mu_ind)
                     recon_state = latent_model.decode(mu_interp[mu_ind])[0].detach().numpy()
+                    if is_recurrent:
+                        recon_state = recon_state[0, :]
                     recon_state = np.multiply(recon_state,data_max) + data_min
+                    recon_state = np.concatenate((xy_interp[mu_ind], recon_state))
                     sim.set_qpos(recon_state)
                     print("mu_ind: ", mu_ind)
                 elif c == 'a':
                     recon_state = latent_model.decode(mu1)[0].detach().numpy()
+                    if is_recurrent:
+                        recon_state = recon_state[0, :]
                     recon_state = np.multiply(recon_state,data_max) + data_min
+                    recon_state = np.concatenate((xy_interp[0], recon_state))
                     sim.set_qpos(recon_state)
                     print("Setting to mu1 state")
                 elif c == 'd':
                     recon_state = latent_model.decode(mu2)[0].detach().numpy()
+                    if is_recurrent:
+                        recon_state = recon_state[0, :]
                     recon_state = np.multiply(recon_state,data_max) + data_min
+                    recon_state = np.concatenate((xy_interp[num_points], recon_state))
                     sim.set_qpos(recon_state)
                     print("Setting to mu2 state")
                 elif c == 'q':
@@ -331,7 +367,24 @@ def interpolate_latent(latent_model, norm_params):
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
 
+# reconstruct_states = np.load("./policy_input_states.npy")
+# reconstruct_max = np.max(reconstruct_states[1:, :], axis=0)
+# reconstruct_min = np.min(reconstruct_states[1:, :], axis=0)
+# # print(reconstruct_max)
+# train_data = np.load("5b75b3-seed0_full_mjdata.npz")["total_data"][:, 0:35]
+# train_data_max = np.max(train_data, axis=0)
+# train_data_min = np.min(train_data, axis=0)
+# output_max = "reconstruct\toriginal\n"
+# output_min = "reconstruct\toriginal\n"
+# for i in range(2,35):
+#     output_max += "{}\t{}\n".format(reconstruct_max[i], train_data_max[i])
+#     output_min += "{}\t{}\n".format(reconstruct_min[i], train_data_min[i])
+# print("Qpos maximum comparison")
+# print(output_max)
+# print("Qpos minimum comparison")
+# print(output_min)
 
+# exit()
 
 
 # Load latent model
@@ -350,6 +403,6 @@ norm_params = np.load("./total_mjdata_norm_params.npz")
 
 
 # vis_traj(latent_model, norm_params)
-vis_policy(latent_model, norm_params, is_recurrent=False)
+# vis_policy(latent_model, norm_params, is_recurrent=False)
 # vis_policy(latent_model, norm_params, is_recurrent=True)
-# interpolate_latent(latent_model, norm_params)
+interpolate_latent(latent_model, norm_params, is_recurrent=False)
