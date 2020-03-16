@@ -69,11 +69,7 @@
   </asset>
 
   <worldbody>
-<<<<<<< HEAD
     <geom name='floor' pos='0 0 0' size='100 5 .125' type='plane' material='plane' condim='3' conaffinity='15'/>
-=======
-    <geom name='floor' pos='0 0 0' size='50 5 .125' type='plane' material='plane' condim='3' conaffinity='15'/>
->>>>>>> mirror
 
     <light mode='trackcom' pos='0 0 5' dir='0 0 -1'/>
     <light directional='true' pos='0 0 3' dir='0 0 -1' diffuse='0.2 0.2 0.2' specular='0 0 0'/>
