@@ -162,11 +162,11 @@ def train(epoch):
         batch_idx+=1
     if args.debug:
         print('====> Epoch: {} Average loss: {:.4f}'.format(
-            epoch, train_loss / batch_idx))
+            epoch, train_loss / (train_len)))
     if do_log:
-        logger.add_scalar("Train/Loss", train_loss / batch_idx, epoch)
-        logger.add_scalar("Train/Loss_KL", train_loss_kl / batch_idx, epoch)
-        logger.add_scalar("Train/Loss_SSE", train_loss_recon / batch_idx, epoch)
+        logger.add_scalar("Train/Loss", train_loss / train_len, epoch)
+        logger.add_scalar("Train/Loss_KL", train_loss_kl / train_len, epoch)
+        logger.add_scalar("Train/Loss_SSE", train_loss_recon / train_len, epoch)
 
         for name, param in model.named_parameters():
             logger.add_histogram("Model Params/"+name, param.data, epoch)
@@ -198,9 +198,9 @@ def test(epoch):
                 print("percent error: ", percent_error*100)
             
     if args.debug:
-        print('====> Test set loss: {:.4f}'.format(test_loss / batch_idx))
+        print('====> Test set loss: {:.4f}'.format(test_loss / test_len))
     if do_log:
-        logger.add_scalar("Test/Loss", test_loss / batch_idx, epoch)
+        logger.add_scalar("Test/Loss", test_loss / test_len, epoch)
 
 # if __name__ == "__main__":
 

@@ -41,7 +41,7 @@ args.epochs = 500
 args.hidden_size = 64
 args.latent_size = 25
 args.num_layers = 1
-args.run_name = "mj_state_lstm_FF_MSE_randInit_2layer32_KL_NoXY_latent{}_layer{}_hidden{}".format(args.latent_size, args.num_layers, args.hidden_size)
+args.run_name = "mj_state_lstm_FF_Relu_less_SSE_randInit_2layer32_NoKL_NoXY_latent{}_layer{}_hidden{}".format(args.latent_size, args.num_layers, args.hidden_size)
 # args.run_name = "test"+str(now)
 LSTM_layer = args.num_layers
 
@@ -91,7 +91,9 @@ data_min = torch.Tensor(data_min).to(device)
 
 # model = RNN_VAE(args.hidden_size, args.latent_size, device=device, mj_state=True).to(device)
 # model = RNN_VAE_FULL(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, device=device, mj_state=True).to(device)
-model = VAE_LSTM_FF(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, device=device, mj_state=True).to(device)
+# model = VAE_LSTM_FF(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, device=device, mj_state=True).to(device)
+# model = VAE_LSTM_FF_Relu(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, device=device, mj_state=True).to(device)
+model = VAE_LSTM_FF_Relu_less(hidden_size=args.hidden_size, latent_size=args.latent_size, num_layers=LSTM_layer, input_size=input_dim, device=device, mj_state=True).to(device)
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 recon_loss_mse = nn.MSELoss()
 
@@ -104,7 +106,7 @@ def loss_function(recon_x, x, mu, logvar):
     SSE = torch.sum(torch.pow(recon_x - x, 2)) # SSE Loss
     return SSE
 
-def loss_function_KL(recon_x, x, mu, logvar):
+def loss_function_KL(recon_x, x, mu, logvar, beta):
     SSE = torch.sum(torch.pow(recon_x - x, 2)) # SSE Loss
     MSE = recon_loss_mse(recon_x, x)
     # see Appendix B from VAE paper:
@@ -115,8 +117,8 @@ def loss_function_KL(recon_x, x, mu, logvar):
     # print("mu shape; ", mu.shape)
     # print("entropy: ", entropy)
     # print("KLD: ", KLD)
-    return MSE, KLD, SSE
-    # return SSE + 0.001*KLD, KLD, SSE
+    # return MSE, KLD, SSE
+    return SSE + beta*KLD, KLD, SSE
 
 
 def elbo_loss(model, data, mu, logvar):
@@ -143,7 +145,7 @@ def train(epoch):
     train_loss = 0
     train_loss_kl = 0
     train_loss_recon = 0
-
+    beta = 0#1/(1+np.exp(-0.08*(epoch-250)))
     train_len = len(norm_data)
     # print("norm data shape: ", norm_data.shape)
     # print("train_len: ", train_len)
@@ -161,11 +163,11 @@ def train(epoch):
 
         recon_batch, mu, logvar = model(data)
         # loss = loss_function(recon_batch, data, mu, logvar)
-        loss, loss_kl, loss_sse = loss_function_KL(recon_batch, data, mu, logvar)
+        loss, loss_kl, loss_sse = loss_function_KL(recon_batch, data, mu, logvar, beta)
         loss.backward()
         train_loss += loss.item() / (300-start_idx_rand)
-        train_loss_kl += loss_kl.item()
-        train_loss_recon += loss_sse.item()
+        train_loss_kl += loss_kl.item() / (300-start_idx_rand)
+        train_loss_recon += loss_sse.item() / (300-start_idx_rand)
         optimizer.step()
         if batch_idx % args.log_interval == 0 and args.debug:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -190,6 +192,7 @@ def train(epoch):
 def test(epoch):
     model.eval()
     test_loss = 0
+    beta = 0#1/(1+np.exp(-0.08*(epoch-250)))
 
     with torch.no_grad():
         sampler = BatchSampler(SubsetRandomSampler(range(num_traj_test)), args.batch_size, drop_last=True)
@@ -203,7 +206,7 @@ def test(epoch):
             model.reset_hidden(num_traj_test)
             recon_batch, mu, logvar = model(data)
             # test_loss_temp = loss_function(recon_batch, data, mu, logvar)
-            test_loss_temp, test_loss_kl, test_loss_sse = loss_function_KL(recon_batch, data, mu, logvar)
+            test_loss_temp, test_loss_kl, test_loss_sse = loss_function_KL(recon_batch, data, mu, logvar, beta)
             test_loss += test_loss_temp.item() / (300-start_idx_rand)
 
             # Un-normalize data

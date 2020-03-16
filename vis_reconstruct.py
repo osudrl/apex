@@ -92,7 +92,7 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
                     print("Decreasing orient_add to: ", orient_add)
                 elif c == 'p':
                     print("set perturb time")
-                    push = -50
+                    push = 20
                     push_dir = 1
                     force_arr = np.zeros(6)
                     force_arr[push_dir] = push
@@ -331,25 +331,25 @@ def interpolate_latent(latent_model, norm_params):
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
 
-
-
-
 # Load latent model
 latent_size = 25
-hidden_size = 40
+hidden_size = 64
 layer = 1
 input_dim = 33
-latent_model = VAE(hidden_size=hidden_size, latent_size = latent_size, input_size = input_dim, mj_state=True)
+# latent_model = VAE(hidden_size=hidden_size, latent_size = latent_size, input_size = input_dim, mj_state=True)
 # latent_model = RNN_VAE_FULL(hidden_size=hidden_size, latent_size=latent_size, num_layers=layer, input_size=input_dim,  device="cpu", mj_state=True)
+# latent_model = VAE_LSTM_FF(hidden_size=hidden_size, latent_size=latent_size, num_layers=layer, input_size=input_dim,  device="cpu", mj_state=True)
+# latent_model = VAE_LSTM_FF_Relu(hidden_size=hidden_size, latent_size=latent_size, num_layers=layer, input_size=input_dim, device="cpu", mj_state=True)
+latent_model = VAE_LSTM_FF_Relu_less(hidden_size=hidden_size, latent_size=latent_size, num_layers=layer, input_size=input_dim, device="cpu", mj_state=True)
 
-saved_state_dict = torch.load("./vae_model/mj_state_SSE_KL_NoXY_500epoch_latent_{}_hidden_{}.pt".format(latent_size, hidden_size), map_location=torch.device('cpu'))
-# saved_state_dict = torch.load("./vae_model/mj_state_lstm_SSE_noKL_NoXY_latent_25_layers_1_hidden_40.pt", map_location=torch.device('cpu'))
+# saved_state_dict = torch.load("./vae_model/mj_state_SSE_KL_NoXY_500epoch_latent_{}_hidden_{}.pt".format(latent_size, hidden_size), map_location=torch.device('cpu'))
+saved_state_dict = torch.load("./vae_model/mj_state_lstm_FF_Relu_less_SSE_randInit_2layer32_NoKL_NoXY_latent25_layer1_hidden64.pt", map_location=torch.device('cpu'))
 
 latent_model.load_state_dict(saved_state_dict)
 norm_params = np.load("./total_mjdata_norm_params.npz")
 
 
 # vis_traj(latent_model, norm_params)
-vis_policy(latent_model, norm_params, is_recurrent=False)
-# vis_policy(latent_model, norm_params, is_recurrent=True)
+# vis_policy(latent_model, norm_params, is_recurrent=False)
+vis_policy(latent_model, norm_params, is_recurrent=True)
 # interpolate_latent(latent_model, norm_params)

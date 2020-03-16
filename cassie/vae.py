@@ -257,6 +257,7 @@ class VAE_output_dist(nn.Module):
         return self.decode(z), mu, logvar
 
 
+
 class VAE_LSTM_FF(nn.Module):
     def __init__(self, hidden_size, latent_size, num_layers, input_size, device="cuda", mj_state=False):
         super(VAE_LSTM_FF, self).__init__()
@@ -325,6 +326,171 @@ class VAE_LSTM_FF(nn.Module):
 
         self.hd0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(self.device)
         self.cd0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(self.device)
+
+    def forward(self, x):
+        # print(x.size())
+        mu_seq, logvar_seq = self.encode(x)
+        z = self.reparameterize(mu_seq, logvar_seq)
+        return self.decode(z), mu_seq, logvar_seq
+
+class VAE_LSTM_FF_Relu(nn.Module):
+    def __init__(self, hidden_size, latent_size, num_layers, input_size, device="cuda", mj_state=False):
+        super(VAE_LSTM_FF_Relu, self).__init__()
+
+        if mj_state:
+            self.input_size = input_size
+        else:
+            self.input_size = 40
+
+        self.hidden_size = hidden_size
+        self.latent_size = latent_size
+        self.num_layers = num_layers
+        self.device= device
+
+        # LSTM
+        self.encode_LSTM = torch.nn.LSTM(input_size=self.input_size, hidden_size=self.input_size, batch_first=True, num_layers=num_layers)
+        self.encode_mu = nn.Sequential(
+                        nn.Linear(self.input_size, self.hidden_size),
+                        nn.ReLU(),
+                        nn.Linear(self.hidden_size, 32),
+                        nn.ReLU(),
+                        nn.Linear(32, self.latent_size))
+        self.encode_logvar = nn.Sequential(
+                        nn.Linear(self.input_size, self.hidden_size),
+                        nn.ReLU(),
+                        nn.Linear(self.hidden_size, 32),
+                        nn.ReLU(),
+                        nn.Linear(32, self.latent_size))
+
+        self.decode_LSTM = torch.nn.LSTM(input_size=self.latent_size, hidden_size=self.latent_size, batch_first=True, num_layers=self.num_layers)
+        self.decode_linear = nn.Sequential(
+                        nn.Linear(self.latent_size, self.hidden_size),
+                        nn.ReLU(),
+                        nn.Linear(self.hidden_size, 32),
+                        nn.ReLU(),
+                        nn.Linear(32, self.input_size))
+
+        self.he0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+        self.ce0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+
+        self.hd0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+        self.cd0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+
+    # Assumes that "x" is a sequence of data of shape (batch_size, seq_len, feature_size)
+    # Takes in a sequence of states, and will output encoded sequence
+    def encode(self, x):
+
+        [batch_size, seq_len, _] = x.shape
+
+        lstm_output, (_, _) = self.encode_LSTM(x, (self.he0, self.ce0))
+
+        return self.encode_mu(lstm_output), self.encode_logvar(lstm_output)
+       
+    # Given the mean and log variance for a sequence of states, returns a sample from
+    # the distribution at each timestep
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar) # 0.5 because stddev is square root of var 
+        eps = torch.randn_like(std)
+        # NOTE: I think does does mu + std scaled normal tensor because this is faster than making
+        # a torch dist for every single element, and should do the same thing
+        return mu + eps*std
+
+    # Decodes a sequence of latent states back into a sequence of reconstructed states
+    # Similar to encode function, assumes z is of shape (batch_size, seq_len, latent_size)
+    def decode(self, z):
+        
+        [batch_size, seq_len, _] = z.shape
+
+        decode_output, (_, _) = self.decode_LSTM(z, (self.hd0, self.cd0))
+
+        return self.decode_linear(decode_output)
+
+    def reset_hidden(self, batch_size):
+        self.he0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(self.device)
+        self.ce0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(self.device)
+
+        self.hd0 = torch.zeros(self.num_layers, batch_size, self.latent_size).to(self.device)
+        self.cd0 = torch.zeros(self.num_layers, batch_size, self.latent_size).to(self.device)
+
+    def forward(self, x):
+        # print(x.size())
+        mu_seq, logvar_seq = self.encode(x)
+        z = self.reparameterize(mu_seq, logvar_seq)
+        return self.decode(z), mu_seq, logvar_seq
+
+
+class VAE_LSTM_FF_Relu_less(nn.Module):
+    def __init__(self, hidden_size, latent_size, num_layers, input_size, device="cuda", mj_state=False):
+        super(VAE_LSTM_FF_Relu_less, self).__init__()
+
+        if mj_state:
+            self.input_size = input_size
+        else:
+            self.input_size = 40
+
+        self.hidden_size = hidden_size
+        self.latent_size = latent_size
+        self.num_layers = num_layers
+        self.device= device
+
+        # LSTM
+        self.encode_LSTM = torch.nn.LSTM(input_size=self.input_size, hidden_size=self.input_size, batch_first=True, num_layers=num_layers)
+        self.encode_mu = nn.Sequential(
+                        nn.Linear(self.input_size, self.hidden_size),
+                        nn.ReLU(),
+                        nn.Linear(self.hidden_size, self.latent_size))
+        self.encode_logvar = nn.Sequential(
+                        nn.Linear(self.input_size, self.hidden_size),
+                        nn.ReLU(),
+                        nn.Linear(self.hidden_size, self.latent_size))
+
+        self.decode_LSTM = torch.nn.LSTM(input_size=self.latent_size, hidden_size=self.latent_size, batch_first=True, num_layers=self.num_layers)
+        self.decode_linear = nn.Sequential(
+                        nn.Linear(self.latent_size, self.hidden_size),
+                        nn.ReLU(),
+                        nn.Linear(self.hidden_size, self.input_size))
+
+        self.he0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+        self.ce0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+
+        self.hd0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+        self.cd0 = None#torch.zeros(self.num_layers, batch_size, self.hidden_size).to(device)
+
+    # Assumes that "x" is a sequence of data of shape (batch_size, seq_len, feature_size)
+    # Takes in a sequence of states, and will output encoded sequence
+    def encode(self, x):
+
+        [batch_size, seq_len, _] = x.shape
+
+        lstm_output, (_, _) = self.encode_LSTM(x, (self.he0, self.ce0))
+
+        return self.encode_mu(lstm_output), self.encode_logvar(lstm_output)
+       
+    # Given the mean and log variance for a sequence of states, returns a sample from
+    # the distribution at each timestep
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar) # 0.5 because stddev is square root of var 
+        eps = torch.randn_like(std)
+        # NOTE: I think does does mu + std scaled normal tensor because this is faster than making
+        # a torch dist for every single element, and should do the same thing
+        return mu + eps*std
+
+    # Decodes a sequence of latent states back into a sequence of reconstructed states
+    # Similar to encode function, assumes z is of shape (batch_size, seq_len, latent_size)
+    def decode(self, z):
+        
+        [batch_size, seq_len, _] = z.shape
+
+        decode_output, (_, _) = self.decode_LSTM(z, (self.hd0, self.cd0))
+
+        return self.decode_linear(decode_output)
+
+    def reset_hidden(self, batch_size):
+        self.he0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(self.device)
+        self.ce0 = torch.zeros(self.num_layers, batch_size, self.input_size).to(self.device)
+
+        self.hd0 = torch.zeros(self.num_layers, batch_size, self.latent_size).to(self.device)
+        self.cd0 = torch.zeros(self.num_layers, batch_size, self.latent_size).to(self.device)
 
     def forward(self, x):
         # print(x.size())
