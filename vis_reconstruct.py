@@ -6,6 +6,7 @@ import select
 import pickle
 import sys
 import time
+import csv
 
 from cassie.quaternion_function import *
 from cassie import CassieEnv, CassieEnv_latent, CassieStandingEnv
@@ -41,6 +42,9 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
     data_max = norm_params["data_max"][2:35]
     data_min = norm_params["data_min"][2:35]
     print("data max shape: ", data_max.shape)
+
+    orig_states = np.zeros((1, 35))
+    recon_states = np.zeros((1, 35))
 
     if is_recurrent:
         latent_model.reset_hidden(1)
@@ -158,6 +162,8 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
                 reconstruct_sim.set_qpos(reconstruct_state[0:35])
                 # reconstruct_sim.set_qvel(reconstruct_state[35:35+32])
                 reconstruct_err = np.vstack((reconstruct_err, reconstruct_state - curr_qpos))
+                orig_states = np.vstack((orig_states, curr_qpos))
+                recon_states = np.vstack((recon_states, reconstruct_state))
                 if is_recurrent:
                     input_states = np.vstack((input_states, norm_state[0, 0, :]))
                 else:
@@ -175,6 +181,14 @@ def vis_policy(latent_model, norm_params, is_recurrent=False):
 
     finally:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+    # Write state data to csvfile
+    save_data = np.hstack((orig_states, recon_states))
+    np.savetxt("RNN_orig_recon_data.csv", save_data, delimiter=",")
+    # with open ("./orig_recon_data.csv", 'w', newline='') as csvfile:
+    #     writer = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+    #     for i in range(1, orig_states.shape[0]):
+    #         writer.writerow(str(orig_states[i]) + str(recon_states[i]))
 
     # np.save("./policy_input_states.npy", input_states)
     # print("Average reconstruction error: ", np.linalg.norm(reconstruct_err) / timesteps)
@@ -407,5 +421,5 @@ norm_params = np.load("./total_mjdata_norm_params.npz")
 
 # vis_traj(latent_model, norm_params)
 # vis_policy(latent_model, norm_params, is_recurrent=False)
-# vis_policy(latent_model, norm_params, is_recurrent=True)
-interpolate_latent(latent_model, norm_params, is_recurrent=False)
+vis_policy(latent_model, norm_params, is_recurrent=True)
+# interpolate_latent(latent_model, norm_params, is_recurrent=False)
