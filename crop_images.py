@@ -1,10 +1,10 @@
 from PIL import Image
 
-im = Image.open("/home/robot/Pictures/RNN_recon_double.png")
+im = Image.open("/home/robot/Pictures/ff_size2_recon_double.png")
 im_crop = im.crop((470, 320, 720, 900))
 
 # im_crop.show()
-im_crop.save("/home/robot/Pictures/RNN_recon_double_crop.png")
+im_crop.save("/home/robot/Pictures/ff_size2_recon_double_crop.png")
 
 
 inds = [0, 5, 10, 15, 20]

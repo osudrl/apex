@@ -210,7 +210,7 @@ int main (int argc, const char** argv0) {
             data_ind += 1;
             mju_copy(&d->qpos[0], orig_states[data_ind].data(), 35);
             mju_copy(&d->qpos[35], recon_states[data_ind].data(), 35);
-            printf("data_ind: %i\n", data_ind);
+            // printf("data_ind: %i\n", data_ind);
             mj_forward(m, d);
         }
 
@@ -227,7 +227,7 @@ int main (int argc, const char** argv0) {
 
         // process pending GUI events, call GLFW callbacks
         glfwPollEvents();
-        this_thread::sleep_for(chrono::milliseconds(1/60*100));
+        this_thread::sleep_for(chrono::milliseconds(10/30*1000));
     }
 
     //free visualization storage
