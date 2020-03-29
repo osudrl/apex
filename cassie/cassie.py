@@ -491,35 +491,55 @@ class CassieEnv_v2:
 
   # get the corresponding state from the reference trajectory for the current phase
   def get_ref_state(self, phase=None):
-      if phase is None:
-          phase = self.phase
+        if phase is None:
+            phase = self.phase
 
-      if phase > self.phaselen:
-          phase = 0
+        if phase > self.phaselen:
+            phase = 0
 
-      pos = np.copy(self.trajectory.qpos[phase * self.simrate]) if not self.aslip_traj else np.copy(self.trajectory.qpos[phase])
+        if not self.aslip_traj:
+            desired_ind = phase * self.simrate
+            low_traj_ind = int(np.floor(desired_ind))
+            high_traj_ind = int(np.ceil(desired_ind))
+            phase_diff = desired_ind - low_traj_ind
+        else:
+            low_traj_ind = int(np.floor(phase))
+            high_traj_ind = int(np.ceil(phase))
+            phase_diff = self.phase - np.floor(self.phase)
 
-      # this is just setting the x to where it "should" be given the number
-      # of cycles
-      # pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
-      
-      # ^ should only matter for COM error calculation,
-      # gets dropped out of state variable for input reasons
+        if phase_diff != 0:
+            pos_prev = np.copy(self.trajectory.qpos[low_traj_ind])
+            pos_next = np.copy(self.trajectory.qpos[high_traj_ind])
+            vel_prev = np.copy(self.trajectory.qvel[low_traj_ind])
+            vel_next = np.copy(self.trajectory.qvel[high_traj_ind])
+            pos_diff = pos_next - pos_prev
+            vel_diff = vel_next - vel_prev
+            pos = pos_prev + phase_diff*pos_diff
+            vel = vel_prev + phase_diff*vel_diff
+        else:
+            pos = np.copy(self.trajectory.qpos[int(phase * self.simrate)]) if not self.aslip_traj else np.copy(self.trajectory.qpos[phase])
+            vel = np.copy(self.trajectory.qvel[int(phase * self.simrate)]) if not self.aslip_traj else np.copy(self.trajectory.qvel[phase])
 
-      ###### Setting variable speed  #########
-      pos[0] *= self.speed
-      pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter * self.speed
-      ######                          ########
+        # this is just setting the x to where it "should" be given the number
+        # of cycles
+        # pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
+        
+        # ^ should only matter for COM error calculation,
+        # gets dropped out of state variable for input reasons
 
-      # setting lateral distance target to 0?
-      # regardless of reference trajectory?
-      pos[1] = 0
+        ###### Setting variable speed  #########
+        pos[0] *= self.speed
+        pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter * self.speed
+        ######                          ########
 
-      vel = np.copy(self.trajectory.qvel[phase * self.simrate]) if not self.aslip_traj else np.copy(self.trajectory.qvel[phase])
-      if not self.aslip_traj:
+        # setting lateral distance target to 0?
+        # regardless of reference trajectory?
+        pos[1] = 0
+
+        if not self.aslip_traj:
             vel[0] *= self.speed
 
-      return pos, vel
+        return pos, vel
 
   def get_full_state(self):
       qpos = np.copy(self.sim.qpos())
