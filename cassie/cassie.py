@@ -155,16 +155,16 @@ class CassieEnv_v2:
 
   def step_simulation(self, action):
 
-    if self.aslip_traj and self.phase == self.phaselen - 1:
-      ref_pos, ref_vel = self.get_ref_state(0)
-    else:
-      # maybe make ref traj only send relevant idxs?
-      ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
-    
-    if not self.no_delta:
-      target = action + ref_pos[self.pos_idx]
-    else:
-      target = action + self.offset
+    if self.no_delta:
+        target = action + self.offset
+    else: 
+        if self.aslip_traj and self.phase == self.phaselen - 1:
+            ref_pos, ref_vel = self.get_ref_state(0)
+        else:
+            # maybe make ref traj only send relevant idxs?
+            ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
+
+        target = action + ref_pos[self.pos_idx]
     
     self.u = pd_in_t()
     for i in range(5):
@@ -473,10 +473,10 @@ class CassieEnv_v2:
   # NOTE: this reward is slightly different from the one in Xie et al
   # see notes for details
   def compute_reward(self, action):
-      qpos = np.copy(self.sim.qpos())
-      qvel = np.copy(self.sim.qvel())
+    #   qpos = np.copy(self.sim.qpos())
+    #   qvel = np.copy(self.sim.qvel())
 
-      ref_pos, ref_vel = self.get_ref_state(self.phase)
+    #   ref_pos, ref_vel = self.get_ref_state(self.phase)
 
       if self.reward_func == "jonah_RNN":
           return jonah_RNN_reward(self)

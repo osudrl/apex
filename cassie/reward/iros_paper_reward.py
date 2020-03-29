@@ -4,7 +4,19 @@ def iros_paper_reward(self):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())
 
-    ref_pos, ref_vel = self.get_ref_state(self.phase)
+    phase_diff = self.phase - np.floor(self.phase)
+    ref_pos_prev, ref_vel_prev = self.get_ref_state(int(np.floor(self.phase)))
+    if phase_diff != 0:
+        ref_pos_next, ref_vel_next = self.get_ref_state(int(np.ceil(self.phase)))
+        ref_pos_diff = ref_pos_next - ref_pos_prev
+        ref_vel_diff = ref_vel_next - ref_vel_prev
+        ref_pos = ref_pos_prev + phase_diff*ref_pos_diff
+        ref_vel = ref_vel_prev + phase_diff*ref_vel_diff
+    else:
+        ref_pos = ref_pos_prev
+        ref_vel = ref_vel_prev
+
+    # ref_pos, ref_vel = self.get_ref_state(self.phase)
 
     # TODO: should be variable; where do these come from?
     # TODO: see magnitude of state variables to gauge contribution to reward
