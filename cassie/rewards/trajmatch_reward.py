@@ -73,3 +73,49 @@ def trajmatch_reward(self):
     #     )
 
     return reward
+
+def speedmatch_joint_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+    phase_diff = self.phase - np.floor(self.phase)
+    ref_pos_prev, ref_vel_prev = self.get_ref_state(int(np.floor(self.phase)))
+    if phase_diff != 0:
+        ref_pos_next, ref_vel_next = self.get_ref_state(int(np.ceil(self.phase)))
+        ref_pos_diff = ref_pos_next - ref_pos_prev
+        ref_vel_diff = ref_vel_next - ref_vel_prev
+        ref_pos = ref_pos_prev + phase_diff*ref_pos_diff
+        ref_vel = ref_vel_prev + phase_diff*ref_vel_diff
+    else:
+        ref_pos = ref_pos_prev
+        ref_vel = ref_vel_prev
+
+    ref_pos, ref_vel = self.get_ref_state(self.phase)
+
+    # TODO: should be variable; where do these come from?
+    # TODO: see magnitude of state variables to gauge contribution to reward
+    weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
+
+    joint_error       = 0
+
+    # each joint pos
+    for i, j in enumerate(self.pos_idx):
+        target = ref_pos[j]
+        actual = qpos[j]
+
+        joint_error += 30 * weight[i] * (target - actual) ** 2    
+
+    diff = np.abs(qvel[0] - self.speed)
+    orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    y_vel = np.abs(qvel[1])
+    if diff < 0.05:
+      diff = 0
+    if y_vel < 0.03:
+      y_vel = 0
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+      straight_diff = 0
+
+    reward = .4*np.exp(-diff) + .15*np.exp(-orient_diff) + .1*np.exp(-y_vel) + .25 * np.exp(-straight_diff) \
+            + .1*np.exp(-joint_error)
+
+    return reward

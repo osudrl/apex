@@ -30,7 +30,80 @@ def side_speedmatch_torquesmooth_reward(self):
 
     reward = .25*np.exp(-forward_diff) + .25*np.exp(-side_diff) + .2*np.exp(-orient_diff) \
                 + .1*np.exp(-self.torque_cost) + .2*np.exp(-self.smooth_cost)
-                
+
+    return reward
+
+def side_speedmatch_footorient_footheightvel_actpenalty_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+        
+    forward_diff = np.abs(qvel[0] -self.speed)
+    orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    side_diff = np.abs(qvel[1] - self.side_speed)
+    if forward_diff < 0.05:
+        forward_diff = 0
+    if side_diff < 0.05:
+        side_diff = 0
+
+    if self.lfoot_orient_cost < 5e-3:
+        self.lfoot_orient_cost = 0
+    else:
+        self.lfoot_orient_cost *= 100
+    if self.rfoot_orient_cost < 5e-3:
+        self.rfoot_orient_cost = 0
+    else:
+        self.rfoot_orient_cost *= 100
+    ####### Prev action penalty ########
+    if self.prev_action is not None:
+        action_cost = np.linalg.norm(self.curr_action - self.prev_action)#* (30/self.simrate)
+    else:
+        action_cost = 0
+    if action_cost < 0.4:
+        action_cost = 0
+
+
+    reward = .2*np.exp(-forward_diff) + .2*np.exp(-side_diff) + .1*np.exp(-orient_diff) \
+                + .1*np.exp(-self.lf_heightvel) + .1*np.exp(-self.rf_heightvel) \
+                + .1*np.exp(-self.lfoot_orient_cost) + .1*np.exp(-self.rfoot_orient_cost) \
+                + .1*np.exp(-action_cost) 
+
+    return reward
+
+def side_speedmatch_footorient_footheightvel_actpenalty_zfootvel_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+        
+    forward_diff = np.abs(qvel[0] -self.speed)
+    orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    side_diff = np.abs(qvel[1] - self.side_speed)
+    if forward_diff < 0.05:
+        forward_diff = 0
+    if side_diff < 0.05:
+        side_diff = 0
+
+    if self.lfoot_orient_cost < 5e-3:
+        self.lfoot_orient_cost = 0
+    else:
+        self.lfoot_orient_cost *= 100
+    if self.rfoot_orient_cost < 5e-3:
+        self.rfoot_orient_cost = 0
+    else:
+        self.rfoot_orient_cost *= 100
+    ####### Prev action penalty ########
+    if self.prev_action is not None:
+        action_cost = np.linalg.norm(self.curr_action - self.prev_action)#* (30/self.simrate)
+    else:
+        action_cost = 0
+    if action_cost < 0.4:
+        action_cost = 0
+
+
+    reward = .2*np.exp(-forward_diff) + .2*np.exp(-side_diff) + .1*np.exp(-orient_diff) \
+                + .1*np.exp(-self.lf_heightvel) + .1*np.exp(-self.rf_heightvel) \
+                + .05*np.exp(-self.lfoot_orient_cost) + .05*np.exp(-self.rfoot_orient_cost) \
+                + .1*np.exp(-action_cost) \
+                + .05*np.exp(-self.lfoot_vel[2]) + .05*np.exp(-self.rfoot_vel[3])
+
     return reward
 
 def side_speedmatch_foottraj_reward(self):

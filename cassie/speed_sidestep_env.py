@@ -302,8 +302,8 @@ class CassieEnv_speed_sidestep:
                 self.smooth_cost += 0
             self.prev_torque = curr_torques 
             ######## Foot height vel cost ########
-            self.lf_heightvel += (0.2 - foot_pos[2])**2 * np.linalg.norm(self.lfoot_vel[0:2]) * 20
-            self.rf_heightvel += (0.2 - foot_pos[5])**2 * np.linalg.norm(self.rfoot_vel[0:2]) * 20
+            self.lf_heightvel += (0.1 - foot_pos[2])**2 * np.linalg.norm(self.lfoot_vel[0:2]) * 20
+            self.rf_heightvel += (0.1 - foot_pos[5])**2 * np.linalg.norm(self.rfoot_vel[0:2]) * 20
             ######## Tdvel cost ########
             # When foot is close to ground, i.e. (0.2-foot_height) is large, then want foot z velocity to be low
             # When foot is away from ground, don't care how high foot vel is, so weight foot z vel by how close
@@ -313,10 +313,10 @@ class CassieEnv_speed_sidestep:
             # self.ltdvel_cost += 10*(0.3 - foot_pos[2])**2 * min(0, self.lfoot_vel[2])**2
             # self.rtdvel_cost += 10*(0.3 - foot_pos[5])**2 * min(0, self.rfoot_vel[2])**2
             ######## Foot Orientation ########
-            # self.lfoot_orient_cost += 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.leftFoot.orientation[:]) ** 2
-            # self.rfoot_orient_cost += 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.rightFoot.orientation[:]) ** 2
-            self.lfoot_orient_cost += 100*(1 - np.inner(neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
-            self.rfoot_orient_cost += 100*(1 - np.inner(neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
+            self.lfoot_orient_cost += 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.leftFoot.orientation[:]) ** 2
+            self.rfoot_orient_cost += 1 - np.inner(np.array([1, 0, 0, 0]), self.cassie_state.rightFoot.orientation[:]) ** 2
+            # self.lfoot_orient_cost += 100*(1 - np.inner(neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
+            # self.rfoot_orient_cost += 100*(1 - np.inner(neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
 
             
         self.joint_error        /= self.simrate 
@@ -478,7 +478,8 @@ class CassieEnv_speed_sidestep:
         # reward = side_speedmatch_foottraj_reward(self)
         # reward = side_speedmatch_heightvel_reward(self)
         # reward = side_speedmatch_heuristic_reward(self)
-        reward = side_speedmatch_torquesmooth_reward(self)
+        # reward = side_speedmatch_torquesmooth_reward(self)
+        reward = side_speedmatch_footorient_footheightvel_actpenalty_reward(self)
 
         return reward
 

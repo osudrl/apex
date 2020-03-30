@@ -74,8 +74,8 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
             traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
 
         # self.trajectory = CassieIKTrajectory(traj_path)
-        self.trajectory = CassieTrajectory(traj_path)
-        # self.trajectory = CassieTraj(os.path.join(dirname, "trajectory", "iktraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel_fixedfoot.npy"))
+        # self.trajectory = CassieTrajectory(traj_path)
+        self.trajectory = CassieTraj(os.path.join(dirname, "trajectory", "iktraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel_fixedfoot.npy"))
         # self.foot_traj = CassieFootTrajectory(os.path.join(dirname, "trajectory", "foottraj_doublestance_time0.4_land1.0_h0.2.pkl"))
         self.foot_traj = CassieFootTrajectory(os.path.join(dirname, "trajectory", "foottraj_land0.4_speed1.0_fixedheightfreq_fixedtdvel.pkl"))
 
@@ -129,9 +129,11 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
         self.joint_error = 0
         self.torque_cost = 0
         self.smooth_cost = 0
+        self.lf_heightvel = 0
+        self.rf_heightvel = 0
 
         #### Dynamics Randomization ####
-        self.dynamics_rand = False
+        self.dynamics_rand = True
         self.slope_rand = False
         # Record default dynamics parameters
         if self.dynamics_rand:
@@ -208,8 +210,9 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
         self.sim.set_geom_friction([0.6, 1e-4, 5e-5], "floor")
 
         if self.state_est:
-            self.clock_inds = [39, 40]
+            self.clock_inds = [38, 39]
         else:
+            # TODO: SET CORRECT CLOCK INDS FOR NON STATE EST
             self.clock_inds = [40, 41]
     
 
@@ -328,6 +331,10 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
             # self.l_footvel_diff += (curr_l_yfoot_vel - self.l_footvel_diff) / (i + 1)
             # self.r_footvel_diff += (curr_r_yfoot_vel - self.r_footvel_diff) / (i + 1)
 
+            ######## Foot height vel cost ########
+            self.lf_heightvel += 20 * (0.15 - foot_pos[2])**2 * np.linalg.norm(self.lfoot_vel[0:2])
+            self.rf_heightvel += 20 * (0.15 - foot_pos[5])**2 * np.linalg.norm(self.rfoot_vel[0:2])
+
             # Foot Orientation Cost
             self.l_foot_orient += 100*(1 - np.inner(neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
             self.r_foot_orient += 100*(1 - np.inner(neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
@@ -349,6 +356,8 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
         # self.r_foot_diff        /= self.simrate
         # self.l_footvel_diff     /= self.simrate
         # self.r_footvel_diff     /= self.simrate
+        self.lf_heightvel       /= self.simrate
+        self.rf_heightvel       /= self.simrate
         self.l_foot_orient      /= self.simrate
         self.r_foot_orient      /= self.simrate
         self.torque_cost        /= self.simrate
@@ -405,7 +414,7 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
             # self.phase_add = 1.3 + 0.7*random.random()
         # else:
             # self.phase_add = 1 + random.random()
-        self.phase_add = 1
+        self.phase_add = 1 #+ random.random()
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
         self.orient_time = 500#random.randint(50, 200) 
         self.com_vel_offset = 0.1*np.random.uniform(-0.1, 0.1, 2)
@@ -420,12 +429,14 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
         self.torque_cost = 0
         self.smooth_cost = 0
         self.joint_error = 0
+        self.lf_heightvel = 0
+        self.rf_heightvel = 0
         self.prev_action = None
         self.prev_torque = None
 
         if self.dynamics_rand:
             #### Dynamics Randomization ####
-            damp_noise = [np.random.uniform(a, b) for a, b in self.damp_range]
+            # damp_noise = [np.random.uniform(a, b) for a, b in self.damp_range]
             # mass_noise = [np.random.uniform(a, b) for a, b in self.mass_range]
             # com_noise = [0, 0, 0] + [np.random.uniform(self.delta_x_min, self.delta_x_min)] + [np.random.uniform(self.delta_y_min, self.delta_y_max)] + [0] + list(self.default_ipos[6:])
             # fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
@@ -435,11 +446,11 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
             # rolling = np.random.uniform(5e-5, 5e-4)
             # for _ in range(int(len(self.default_fric)/3)):
             #     fric_noise += [translational, torsional, rolling]
-            # fric_noise = [np.random.uniform(0.6, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)]
-            self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
+            fric_noise = [np.random.uniform(0.3, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)]
+            # self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
             # self.sim.set_body_mass(np.clip(mass_noise, 0, None))
             # self.sim.set_body_ipos(com_noise)
-            # self.sim.set_geom_friction(np.clip(fric_noise, 0, None), "floor")
+            self.sim.set_geom_friction(np.clip(fric_noise, 0, None), "floor")
 
             self.sim.set_const()
         if self.slope_rand:
@@ -481,14 +492,16 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
         self.torque_cost = 0
         self.smooth_cost = 0
         self.joint_error = 0
+        self.lf_heightvel = 0
+        self.rf_heightvel = 0
         self.prev_action = None
         self.prev_torque = None
 
         if self.dynamics_rand:
-            self.sim.set_dof_damping(self.default_damping)
+            # self.sim.set_dof_damping(self.default_damping)
             # self.sim.set_body_mass(self.default_mass)
             # self.sim.set_body_ipos(self.default_ipos)
-            # self.sim.set_geom_friction(self.default_fric)
+            self.sim.set_geom_friction(self.default_fric)
             self.sim.set_const()
         if self.slope_rand:
             self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
@@ -533,8 +546,11 @@ class CassieEnv_speed_no_delta_noheight_noaccel:
     def compute_reward(self):
 
         # reward = trajmatch_reward(self)
-        reward = speedmatch_reward(self)
-        # reward = speedmatch_footorient_joint_smooth_reward(self)
+        # reward = speedmatch_joint_reward(self)
+        # reward = speedmatch_reward(self)
+        # reward = speedmatch_footorient_reward(self)
+        # reward = speedmatch_footorient_footheightvel_actpenalty_reward(self)
+        reward = old_speed_reward(self)
 
         return reward
 
