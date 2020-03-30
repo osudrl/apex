@@ -276,8 +276,8 @@ class MirrorPPO(PPO):
                     logger.add_scalar("Misc/Optimize Times", opt_time[itr], itr)
                     logger.add_scalar("Misc/Evaluation Times", eval_time[itr], itr)
 
-                    for i in range(pdf.loc.shape[1]): # go thru all actions
-                        logger.add_histogram("Action Dist/action_"+str(i), pdf.loc[:,i], itr)
+                    # for i in range(pdf.loc.shape[1]): # go thru all actions
+                    #     logger.add_histogram("Action Dist/action_"+str(i), pdf.loc[:,i], itr)
                 else:
                     print("No Logger")
 
