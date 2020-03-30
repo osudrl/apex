@@ -12,6 +12,7 @@ from cassie.speed_double_freq_env import CassieEnv_speed_dfreq
 from cassie.speed_no_delta_neutral_foot_env import CassieEnv_speed_no_delta_neutral_foot
 from cassie.standing_env import CassieEnv_stand
 from cassie.speed_sidestep_env import CassieEnv_speed_sidestep
+from cassie.speed_no_delta_noheight_noaccel_env import CassieEnv_speed_no_delta_noheight_noaccel
 
 from rl.policies import GaussianMLP
 
@@ -28,6 +29,7 @@ def avg_pols(policies, state):
 # cassie_env = CassieEnv_speed("walking", clock_based=True, state_est=True)
 # cassie_env = CassieEnv_speed_dfreq("walking", clock_based=True, state_est=False)
 # cassie_env = CassieEnv_speed_no_delta_neutral_foot("walking", clock_based=True, state_est=True)
+# cassie_env = CassieEnv_speed_no_delta_noheight_noaccel("walking", simrate=60, state_est=True)
 cassie_env = CassieEnv_speed_sidestep("walking", simrate = 60, clock_based=True, state_est=True)
 # cassie_env = CassieEnv_stand(state_est=False)
 
@@ -40,9 +42,10 @@ limittargs = False
 lininterp = False
 offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
-# file_prefix = "5k_footorient_smoothcost_jointreward_randjoint_seed10"
+# file_prefix = "5k_footorient_actpenaltybig_footheightvellow_randjoint_randfric_seed10"
+# file_prefix = "noheightaccel_StateEst_speedmatch_footorient_footheightvel_actpenalty_randfric"
 # file_prefix = "sidestep_StateEst_speedmatch_(3)"#_actpenalty_retrain"
-file_prefix = "sidestep_StateEst_speedmatch_torquesmoothcost"
+file_prefix = "sidestep_StateEst_speedmatch_actpenaltybig_footorient_footheightvel01"
 # file_prefix = "nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2"
 policy = torch.load("./trained_models/{}.pt".format(file_prefix))
 policy.bounded = False
@@ -175,12 +178,20 @@ with torch.no_grad():
                 act_diff[i*simrate+j] = np.linalg.norm(action - prev_action)
             else:
                 act_diff[i*simrate+j] = 0
+            if act_diff[i*simrate+j] < 0.4:
+                act_diff[i*simrate+j] = 0
+            # else:
+                # act_diff[i*simrate+j] *= 2
             if prev_foot is not None:
                 diff_foot_vel[i*simrate+j, :] = (mj_foot - prev_foot) / 0.0005
             else: 
                 diff_foot_vel[i*simrate+j, :] = np.zeros(6)
             # Calculate costs for reward
-            foot_orient_cost[i*simrate+j, :] = 100*(1 - np.array([np.inner(neutral_foot_orient, cassie_env.sim.xquat("left-foot")) ** 2, np.inner(neutral_foot_orient, cassie_env.sim.xquat("right-foot")) ** 2]))
+            orient_diff = (1 - np.array([np.inner(neutral_foot_orient, cassie_env.sim.xquat("left-foot")) ** 2, np.inner(neutral_foot_orient, cassie_env.sim.xquat("right-foot")) ** 2]))
+            under_inds = orient_diff < 5e-3
+            orient_diff[under_inds] = 0
+            foot_orient_cost[i*simrate+j, :] = 100*orient_diff
+            # foot_orient_cost[i*simrate+j, :] = 100*(1 - np.array([np.inner(neutral_foot_orient, cassie_env.sim.xquat("left-foot")) ** 2, np.inner(neutral_foot_orient, cassie_env.sim.xquat("right-foot")) ** 2]))
             pel_orient_cost[i*simrate+j] = (1 - np.inner(orient_targ, curr_qpos[3:7]) ** 2)
             forward_cost[i*simrate+j] = np.abs(curr_qvel[0] - cassie_env.speed)
             yvel_cost[i*simrate+j] = np.abs(curr_qvel[1] - 0)
@@ -204,8 +215,8 @@ with torch.no_grad():
                 # smooth_cost[i*simrate+j] = 0
             smooth_cost[i*simrate+j] = 0.0001*np.linalg.norm(np.square(torque_diff[i*simrate+j, :]))
             prev_torques = torques[i*simrate+j]
-            footheightvel_cost[i*simrate+j, 0] = 20 * (0.2 - mj_foot[2])**2 * np.linalg.norm(diff_foot_vel[i*simrate+j, 0:2])
-            footheightvel_cost[i*simrate+j, 1] = 20 * (0.2 - mj_foot[5])**2 * np.linalg.norm(diff_foot_vel[i*simrate+j, 3:5])
+            footheightvel_cost[i*simrate+j, 0] = 20 * (0.15 - mj_foot[2])**2 * np.linalg.norm(diff_foot_vel[i*simrate+j, 0:2])
+            footheightvel_cost[i*simrate+j, 1] = 20 * (0.15 - mj_foot[5])**2 * np.linalg.norm(diff_foot_vel[i*simrate+j, 3:5])
             prev_foot = mj_foot
 
         prev_action = action
@@ -378,8 +389,8 @@ ax[2][1].plot(t, foot_orient_cost[:, 1])
 
 ax[3][0].plot(t, torque_cost)
 ax[3][0].set_title("Torque Cost")
-ax[3][1].plot(t, smooth_cost)
-ax[3][1].set_title("Smooth Cost")
+ax[3][1].plot(t, act_diff)
+ax[3][1].set_title("Act Diff Cost")
 
 ax[4][0].plot(t, footheightvel_cost[:, 0])
 ax[4][0].set_title("Left Foot Height Vel Cost")

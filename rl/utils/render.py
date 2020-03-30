@@ -14,19 +14,20 @@ def isData():
     return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
 
 @torch.no_grad()
-def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05):
+def renderpolicy_speedinput(env, policy, smallinput=False, deterministic=False, speedup=1, dt=0.05):
     state = torch.Tensor(env.reset_for_test())
     env.speed = 0
     env.side_speed = 0
     env.phase_add = 1
     orient_add = 0
     prev_foot = None
+    side_bias = 0
 
     # Check if using StateEst or not
-    if env.observation_space.shape[0] >= 48:
-        is_stateest = True
-    else:
-        is_stateest = False
+    # if env.observation_space.shape[0] >= 48:
+    #     is_stateest = True
+    # else:
+    #     is_stateest = False
 
     render_state = env.render()
     old_settings = termios.tcgetattr(sys.stdin)
@@ -60,6 +61,12 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 elif c == 'k':
                     orient_add -= .1
                     print("Decreasing orient_add to: {:.1f}".format(orient_add))
+                elif c == 'm':
+                    side_bias += .01
+                    print("Increasing side_bias to: {:.2f}".format(side_bias))
+                elif c == 'n':
+                    side_bias -= .01
+                    print("Decreasing side_bias to: {:.2f}".format(side_bias))
                 elif c == 'p':
                     print("Applying force")
                     push = 100
@@ -75,9 +82,13 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 # Update orientation
                 quaternion = euler2quat(z=orient_add, y=0, x=0)
                 iquaternion = inverse_quaternion(quaternion)
-                if is_stateest:
-                    curr_orient = state[1:5]
-                    curr_transvel = state[15:18]
+                if env.state_est:
+                    if smallinput:
+                        curr_orient = state[0:4]
+                        curr_transvel = state[14:17]
+                    else:
+                        curr_orient = state[1:5]
+                        curr_transvel = state[15:18]
                 else:
                     curr_orient = state[2:6]
                     curr_transvel = state[20:23]
@@ -85,16 +96,21 @@ def renderpolicy_speedinput(env, policy, deterministic=False, speedup=1, dt=0.05
                 if new_orient[0] < 0:
                     new_orient = -new_orient
                 new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
-                if is_stateest:
-                    state[1:5] = torch.FloatTensor(new_orient)
-                    state[15:18] = torch.FloatTensor(new_translationalVelocity)
-                    # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+                # new_translationalVelocity += np.array([0, side_bias, 0])
+                if env.state_est:
+                    if smallinput:
+                        state[0:4] = torch.FloatTensor(new_orient)
+                        state[14:17] = torch.FloatTensor(new_translationalVelocity)
+                    else:
+                        state[1:5] = torch.FloatTensor(new_orient)
+                        state[15:18] = torch.FloatTensor(new_translationalVelocity)
+                        # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
                 else:
                     state[2:6] = torch.FloatTensor(new_orient)
                     state[20:23] = torch.FloatTensor(new_translationalVelocity)
                
                 # Get action
-                # state[36] = 0
+                # state[30] = -10
                 # state[9] = 0
                 _, action = policy.act(state, deterministic)
                 if deterministic:
@@ -237,6 +253,7 @@ def rendermultipolicy_speedinput(env, policies, deterministic=False, speedup=1, 
     prev_foot = None
     total_stddev = 0
     count = 0
+    side_bias = 0
 
     # Check if using StateEst or not
     if env.observation_space.shape[0] >= 48:
@@ -276,6 +293,12 @@ def rendermultipolicy_speedinput(env, policies, deterministic=False, speedup=1, 
                 elif c == 'k':
                     orient_add -= .1
                     print("Decreasing orient_add to: ", orient_add)
+                elif c == 'm':
+                    side_bias += .01
+                    print("Increasing side_bias to: {:.3f}".format(side_bias))
+                elif c == 'n':
+                    side_bias -= .01
+                    print("Decreasing side_bias to: {:.3f}".format(side_bias))
                 elif c == 'p':
                     print("Applying force")
                     push = 100
@@ -299,6 +322,7 @@ def rendermultipolicy_speedinput(env, policies, deterministic=False, speedup=1, 
                 if new_orient[0] < 0:
                     new_orient = -new_orient
                 new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+                new_translationalVelocity += np.array([0, side_bias, 0])
                 if is_stateest:
                     state[1:5] = torch.FloatTensor(new_orient)
                     state[15:18] = torch.FloatTensor(new_translationalVelocity)
