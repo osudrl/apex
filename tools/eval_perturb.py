@@ -95,7 +95,7 @@ def perturb_worker(env_fn, qpos_phase, qvel_phase, policy, angles, wait_time, pe
     cassie_env = env_fn()
 
     eval_start = time.time()
-    sim_times = np.zeros((num_angles, 2))
+    sim_times = np.zeros((num_angles, num_steps))
     for i in range(num_angles):
         for j in range(num_steps):
             sim_start = time.time()
