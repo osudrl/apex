@@ -65,8 +65,8 @@ elif args.test == "perturb":
         save_data = compute_perturbs(cassie_env, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size, 
                     perturb_incr=args.pert_incr, perturb_body=args.pert_body, num_angles=args.num_angles)
     else:
-        save_data = compute_perturbs_multi(cassie_env, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size, 
-                    perturb_incr=args.pert_incr, perturb_body=args.pert_body, num_angles=args.num_angles)
+        save_data = compute_perturbs_multi(env_fn, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size, 
+                    perturb_incr=args.pert_incr, perturb_body=args.pert_body, num_angles=args.num_angles, num_procs=args.n_procs)
     np.save(os.path.join(args.path, "eval_perturbs.npy"), save_data)
 
 
