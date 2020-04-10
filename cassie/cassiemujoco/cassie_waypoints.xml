@@ -1,0 +1,572 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Cassie simulation model developed by the Dynamic Robotics Laboratory -->
+<mujoco model="cassie">
+  <compiler inertiafromgeom="auto" angle="degree" eulerseq="zyx" meshdir="cassie-stl-meshes"/>
+  <size nuser_actuator="1" nuser_sensor="1" nuser_geom="1"/>
+  <option timestep="0.0005" iterations="50" solver="PGS" gravity="0 0 -9.81"/>
+  <!-- Timestep is set to 0.0005 because our controller runs at 2 kHz -->
+  <!-- Larger values still have stable dynamics -->
+  <visual>
+    <quality shadowsize="4096"/>
+    <map znear="0.05"/>
+  </visual>
+  <default>
+    <joint limited="true"/>
+    <motor ctrllimited="true"/>
+    <!-- <geom contype='0' conaffinity='0' condim='1' solref='0.005 1' friction='.4 0.0001 0.00001'/> -->
+    <geom contype="0" conaffinity="0" condim="1" solref="0.005 1"/>
+    <equality solref="0.005 1"/>
+    <default class="cassie">
+      <geom material="cassie"/>
+    </default>
+    <default class="collision">
+      <!-- User parameter for geoms is used to identify collision types -->
+      <geom material="collision" contype="1" user="2"/>
+      <default class="collision-left">
+        <geom contype="2" conaffinity="4"/>
+      </default>
+      <default class="collision-right">
+        <geom contype="4" conaffinity="2"/>
+      </default>
+    </default>
+    <default class="obstacle">
+      <geom material="obstacle" condim="3" contype="8" conaffinity="15" user="1"/>
+    </default>
+  </default>
+  <asset>
+    <texture type="skybox" builtin="gradient" width="128" height="128" rgb1="0.4 0.6 0.8" rgb2="0 0 0"/>
+    <texture name="plane" type="2d" builtin="checker" rgb1="0.2 0.2 0.2" rgb2="0.3 0.3 0.3" width="512" height="512"/>
+    <material name="plane" reflectance="0.0" texture="plane" texrepeat="1 1" texuniform="true"/>
+    <material name="cassie" rgba="0.9 0.5 0.1 1"/>
+    <material name="collision" rgba="0.1 0.5 0.9 0"/>
+    <material name="obstacle" rgba="0.2 0.6 0.2 1"/>
+    <mesh name="cassie-pelvis" file="pelvis.stl"/>
+    <mesh name="left-hip-roll" file="hip-roll.stl"/>
+    <mesh name="left-hip-yaw" file="hip-yaw.stl"/>
+    <mesh name="left-hip-pitch" file="hip-pitch.stl"/>
+    <mesh name="left-achilles-rod" file="achilles-rod.stl"/>
+    <mesh name="left-knee" file="knee.stl"/>
+    <mesh name="left-knee-spring" file="knee-spring.stl"/>
+    <mesh name="left-shin" file="shin.stl"/>
+    <mesh name="left-tarsus" file="tarsus.stl"/>
+    <mesh name="left-heel-spring" file="heel-spring.stl"/>
+    <mesh name="left-foot-crank" file="foot-crank.stl"/>
+    <mesh name="left-plantar-rod" file="plantar-rod.stl"/>
+    <mesh name="left-foot" file="foot.stl"/>
+    <mesh name="right-hip-roll" scale="1 -1 1" file="hip-roll.stl"/>
+    <mesh name="right-hip-yaw" scale="1 -1 1" file="hip-yaw.stl"/>
+    <mesh name="right-hip-pitch" scale="1 1 -1" file="hip-pitch.stl"/>
+    <mesh name="right-achilles-rod" scale="1 1 -1" file="achilles-rod.stl"/>
+    <mesh name="right-knee" scale="1 1 -1" file="knee.stl"/>
+    <mesh name="right-knee-spring" scale="1 1 -1" file="knee-spring.stl"/>
+    <mesh name="right-shin" scale="1 1 -1" file="shin.stl"/>
+    <mesh name="right-tarsus" scale="1 1 -1" file="tarsus.stl"/>
+    <mesh name="right-heel-spring" scale="1 1 -1" file="heel-spring.stl"/>
+    <mesh name="right-foot-crank" scale="1 1 -1" file="foot-crank.stl"/>
+    <mesh name="right-plantar-rod" scale="1 1 -1" file="plantar-rod.stl"/>
+    <mesh name="right-foot" scale="1 1 -1" file="foot.stl"/>
+  </asset>
+  <worldbody>
+    <geom name="floor" pos="0 0 -0.01" size="100 5 .125" type="plane" material="plane" condim="3" conaffinity="15" priority="1"/>
+    <light mode="trackcom" pos="0 0 5" dir="0 0 -1"/>
+    <light directional="true" pos="0 0 3" dir="0 0 -1" diffuse="0.2 0.2 0.2" specular="0 0 0"/>
+    <body name="cassie-pelvis" pos="0 0 1.01" childclass="cassie">
+      <camera name="track" pos="0 -3 1" zaxis="0 -1 0.5" mode="track"/>
+      <!--camera name='track' pos='-3 0 0' xyaxes='0 -1 0 0 0 1' mode='track'/-->
+      <inertial pos="0.05066 0.000346 0.02841" mass="10.33" fullinertia="0.085821 0.049222 0.08626 1.276e-05 -0.00016022 -0.000414"/>
+      <joint type="slide" axis="1 0 0" limited="false"/>
+      <joint type="slide" axis="0 1 0" limited="false"/>
+      <joint type="slide" axis="0 0 1" limited="false" ref="1.01"/>
+      <joint type="ball" limited="false"/>
+      <geom type="mesh" mesh="cassie-pelvis"/>
+      <geom type="sphere" size="0.15" pos="0.02 0 0.02" class="collision"/>
+      <site name="imu" size="0.01" pos="0.03155 0 -0.07996"/>
+      <body name="left-hip-roll" pos="0.021 0.135 0" xyaxes="0 0 -1 0 1 0">
+        <inertial pos="-0.01793 0.0001 -0.04428" mass="1.82" fullinertia="0.003431 0.003793 0.002135 -6.65e-07 -0.00084 3.99e-06"/>
+        <joint name="left-hip-roll" type="hinge" range="-15 22.5" damping="1" armature="0.038125"/>
+        <geom type="mesh" mesh="left-hip-roll"/>
+        <body name="left-hip-yaw" pos="0 0 -0.07" xyaxes="0 0 1 0 1 0">
+          <inertial pos="0 -1e-05 -0.034277" mass="1.171" fullinertia="0.002443 0.002803 0.000842 -4e-08 2.462e-07 -2.71e-08"/>
+          <joint name="left-hip-yaw" type="hinge" range="-22.5 22.5" damping="1" armature="0.038125"/>
+          <geom type="mesh" mesh="left-hip-yaw"/>
+          <body name="left-hip-pitch" pos="0 0 -0.09" xyaxes="0 0 -1 1 0 0">
+            <inertial pos="0.05946 5e-05 -0.03581" mass="5.52" fullinertia="0.010898 0.029714 0.030257 -0.0002669 -5.721e-05 9.17e-06"/>
+            <joint name="left-hip-pitch" type="hinge" range="-50 80" damping="1" armature="0.09344"/>
+            <geom type="mesh" mesh="left-hip-pitch"/>
+            <geom type="capsule" size="0.08" fromto="0 0 -0.04 0.12 0 -0.0355" class="collision"/>
+            <body name="left-achilles-rod" pos="0 0 0.045" xyaxes="0.7922 -0.60599 -0.072096 0.60349 0.79547 -0.054922">
+              <inertial pos="0.24719 0 0" mass="0.1567" fullinertia="3.754e-06 0.004487 0.004488 -3.74e-08 -1.61e-08 0"/>
+              <joint name="left-achilles-rod" type="ball" limited="false" damping="0.01"/>
+              <geom type="mesh" mesh="left-achilles-rod"/>
+            </body>
+            <body name="left-knee" pos="0.12 0 0.0045" xyaxes="0.70711 -0.70711 0 0.70711 0.70711 0">
+              <inertial pos="0.023 0.03207 -0.002181" mass="0.7578" fullinertia="0.001376 0.0010335 0.0021637 -0.00039744 -4.085e-05 -5.374e-05"/>
+              <joint name="left-knee" type="hinge" ref="-45" range="-164 -37" damping="1" armature="0.09344"/>
+              <geom type="mesh" mesh="left-knee"/>
+              <body name="left-knee-spring" pos="0.06068 0.08241 0">
+                <inertial pos="0.0836 0.0034 0" mass="0.186" fullinertia="5.215e-05 0.00041205 0.0003669 6.87e-06 0 0"/>
+                <geom type="mesh" mesh="left-knee-spring"/>
+              </body>
+              <body name="left-shin" pos="0.06068 0.04741 0">
+                <inertial pos="0.18338 0.001169 0.0002123" mass="0.577" fullinertia="0.00035939 0.014728 0.014707 -0.00020981 2.266e-05 -1.2e-07"/>
+                <joint name="left-shin" type="hinge" range="-20 20" stiffness="1500" damping="0.1"/>
+                <geom type="mesh" mesh="left-shin"/>
+                <geom type="capsule" size="0.04" fromto="0 0 0 0.43476 0.02 0" class="collision-left"/>
+                <body name="left-tarsus" pos="0.43476 0.02 0" xyaxes="0.52992 0.84805 0 -0.84805 0.52992 0">
+                  <inertial pos="0.11046 -0.03058 -0.00131" mass="0.782" fullinertia="0.00039238 0.013595 0.013674 0.00023651 -4.987e-05 -4.82e-06"/>
+                  <joint name="left-tarsus" type="hinge" ref="58" range="50 170" damping="0.1"/>
+                  <geom type="mesh" mesh="left-tarsus"/>
+                  <geom type="capsule" size="0.04" fromto="-0.01269 -0.03059 0.00092 0.408 -0.04 0" class="collision-left"/>
+                  <body name="left-heel-spring" pos="-0.01269 -0.03059 0.00092" xyaxes="-0.91211 0.40829 0.036948 -0.40992 -0.90952 -0.068841">
+                    <inertial pos="0.081 0.0022 0" mass="0.126" fullinertia="2.959e-05 0.00022231 0.0002007 7.15e-06 -6e-07 1e-07"/>
+                    <joint name="left-heel-spring" type="hinge" limited="false" stiffness="1250"/>
+                    <geom type="mesh" mesh="left-heel-spring"/>
+                  </body>
+                  <body name="left-foot-crank" pos="0.058 -0.034 0.02275">
+                    <inertial pos="0.00493 2e-05 -0.00215" mass="0.1261" fullinertia="2.6941e-05 4.9621e-05 6.3362e-05 -2.1e-09 -3.9623e-06 -1.09e-08"/>
+                    <joint name="left-foot-crank" type="hinge" range="-140 -30" damping="1"/>
+                    <geom type="mesh" mesh="left-foot-crank"/>
+                    <body name="left-plantar-rod" pos="0.055 0 -0.00791">
+                      <inertial pos="0.17792 0 0" mass="0.1186" fullinertia="2.779e-06 0.001774 0.001775 -2.34e-08 -8.1e-09 0"/>
+                      <joint name="left-plantar-rod" type="hinge" limited="false"/>
+                      <geom type="mesh" mesh="left-plantar-rod"/>
+                    </body>
+                  </body>
+                  <body name="left-foot" pos="0.408 -0.04 0">
+                    <inertial pos="0.00474 0.02748 -0.00014" mass="0.1498" fullinertia="0.00017388 0.00016793 0.00033261 0.00011814 1.36e-06 -4e-07"/>
+                    <joint name="left-foot" type="hinge" range="-140 -30" damping="1" armature="0.01225"/>
+                    <geom type="mesh" mesh="left-foot"/>
+                    <geom type="capsule" size="0.02" fromto="-0.052821 0.092622 0 0.069746 -0.010224 0" class="collision-left"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="right-hip-roll" pos="0.021 -0.135 0" xyaxes="0 0 -1 0 1 0">
+        <inertial pos="-0.01793 0.0001 -0.04428" mass="1.82" fullinertia="0.003431 0.003793 0.002135 6.65e-07 -0.00084 -3.99e-06"/>
+        <joint name="right-hip-roll" type="hinge" range="-22.5 15" damping="1" armature="0.038125"/>
+        <geom type="mesh" mesh="right-hip-roll"/>
+        <body name="right-hip-yaw" pos="0 0 -0.07" xyaxes="0 0 1 0 1 0">
+          <inertial pos="0 1e-05 -0.034277" mass="1.171" fullinertia="0.002443 0.002803 0.000842 4e-08 2.462e-07 2.71e-08"/>
+          <joint name="right-hip-yaw" type="hinge" range="-22.5 22.5" damping="1" armature="0.038125"/>
+          <geom type="mesh" mesh="right-hip-yaw"/>
+          <body name="right-hip-pitch" pos="0 0 -0.09" xyaxes="0 0 -1 1 0 0">
+            <inertial pos="0.05946 5e-05 0.03581" mass="5.52" fullinertia="0.010898 0.029714 0.030257 -0.0002669 5.721e-05 -9.17e-06"/>
+            <joint name="right-hip-pitch" type="hinge" range="-50 80" damping="1" armature="0.09344"/>
+            <geom type="mesh" mesh="right-hip-pitch"/>
+            <geom type="capsule" size="0.08" fromto="0 0 0.04 0.12 0 0.0355" class="collision"/>
+            <body name="right-achilles-rod" pos="0 0 -0.045" xyaxes="0.7922 -0.60599 0.072096 0.60349 0.79547 0.054922">
+              <inertial pos="0.24719 0 0" mass="0.1567" fullinertia="3.754e-06 0.004487 0.004488 -3.74e-08 1.61e-08 0"/>
+              <joint name="right-achilles-rod" type="ball" limited="false" damping="0.01"/>
+              <geom type="mesh" mesh="right-achilles-rod"/>
+            </body>
+            <body name="right-knee" pos="0.12 0 -0.0045" xyaxes="0.70711 -0.70711 0 0.70711 0.70711 0">
+              <inertial pos="0.023 0.03207 0.002181" mass="0.7578" fullinertia="0.001376 0.0010335 0.0021637 -0.00039744 4.085e-05 5.374e-05"/>
+              <joint name="right-knee" type="hinge" ref="-45" range="-164 -37" damping="1" armature="0.09344"/>
+              <geom type="mesh" mesh="right-knee"/>
+              <body name="right-knee-spring" pos="0.06068 0.08241 0">
+                <inertial pos="0.0836 0.0034 0" mass="0.186" fullinertia="5.215e-05 0.00041205 0.0003669 6.87e-06 0 0"/>
+                <geom type="mesh" mesh="right-knee-spring"/>
+              </body>
+              <body name="right-shin" pos="0.06068 0.04741 0">
+                <inertial pos="0.18338 0.001169 -0.0002123" mass="0.577" fullinertia="0.00035939 0.014728 0.014707 -0.00020981 -2.266e-05 1.2e-07"/>
+                <joint name="right-shin" type="hinge" range="-20 20" stiffness="1500" damping="0.1"/>
+                <geom type="mesh" mesh="right-shin"/>
+                <geom type="capsule" size="0.04" fromto="0 0 0 0.43476 0.02 0" class="collision-right"/>
+                <body name="right-tarsus" pos="0.43476 0.02 0" xyaxes="0.52992 0.84805 0 -0.84805 0.52992 0">
+                  <inertial pos="0.11046 -0.03058 0.00131" mass="0.782" fullinertia="0.00039238 0.013595 0.013674 0.00023651 4.987e-05 4.82e-06"/>
+                  <joint name="right-tarsus" type="hinge" ref="58" range="50 170" damping="0.1"/>
+                  <geom type="mesh" mesh="right-tarsus"/>
+                  <geom type="capsule" size="0.04" fromto="-0.01269 -0.03059 -0.00092 0.408 -0.04 0" class="collision-right"/>
+                  <body name="right-heel-spring" pos="-0.01269 -0.03059 -0.00092" xyaxes="-0.91211 0.40829 -0.036948 -0.40992 -0.90952 0.068841">
+                    <inertial pos="0.081 0.0022 0" mass="0.126" fullinertia="2.959e-05 0.00022231 0.0002007 7.15e-06 6e-07 -1e-07"/>
+                    <joint name="right-heel-spring" type="hinge" limited="false" stiffness="1250"/>
+                    <geom type="mesh" mesh="right-heel-spring"/>
+                  </body>
+                  <body name="right-foot-crank" pos="0.058 -0.034 -0.02275">
+                    <inertial pos="0.00493 2e-05 0.00215" mass="0.1261" fullinertia="2.6941e-05 4.9621e-05 6.3362e-05 -2.1e-09 3.9623e-06 1.09e-08"/>
+                    <joint name="right-foot-crank" type="hinge" range="-140 -30" damping="1"/>
+                    <geom type="mesh" mesh="right-foot-crank"/>
+                    <body name="right-plantar-rod" pos="0.055 0 0.00791">
+                      <inertial pos="0.17792 0 0" mass="0.1186" fullinertia="2.779e-06 0.001774 0.001775 -2.34e-08 8.1e-09 0"/>
+                      <joint name="right-plantar-rod" type="hinge" limited="false"/>
+                      <geom type="mesh" mesh="right-plantar-rod"/>
+                    </body>
+                  </body>
+                  <body name="right-foot" pos="0.408 -0.04 0">
+                    <inertial pos="0.00474 0.02748 0.00014" mass="0.1498" fullinertia="0.00017388 0.00016793 0.00033261 0.00011814 -1.36e-06 4e-07"/>
+                    <joint name="right-foot" type="hinge" range="-140 -30" damping="1" armature="0.01225"/>
+                    <geom type="mesh" mesh="right-foot"/>
+                    <geom type="capsule" size="0.02" fromto="-0.052821 0.092622 0 0.069746 -0.010224 0" class="collision-right"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    <!-- Add any other moving bodies after the Cassie definition -->
+    <!-- <body name='box' pos='2 0 0.2'> -->
+    <!--   <freejoint/> -->
+    <!--   <geom type='box' size='0.1 0.1 0.1' mass='3' class='obstacle'/> -->
+    <!-- </body> -->
+    <geom name="waypoint1" pos="0.04857505326277334 -0.2989521938717683 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint2" pos="0.08295091856997439 -0.4409401743575092 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint3" pos="0.12350078770608472 -0.5769112940114365 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint4" pos="0.1698109942048791 -0.7060969654347672 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint5" pos="0.22146787160013243 -0.8277286012287135 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint6" pos="0.278057753425619 -0.9410376139944922 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint7" pos="0.33916697321511435 -1.0452554163333223 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint8" pos="0.40438186450239244 -1.1396134208464126 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint9" pos="0.4732887608212282 -1.2233430401349779 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint10" pos="0.5454739957053965 -1.2956756868002344 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint11" pos="0.6205239026886724 -1.3558427734433967 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint12" pos="0.6980248153048297 -1.4030757126656797 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint13" pos="0.7775630670876443 -1.4366059170682934 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint14" pos="0.8587249915708901 -1.4556647992524625 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint15" pos="0.9418760970919926 -1.4598582605233827 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint16" pos="1.0423613436997197 -1.4565997760848404 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint17" pos="1.1637319795684382 -1.4491286886450458 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint18" pos="1.3026147861588968 -1.4375705836044446 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint19" pos="1.4556365449318471 -1.422051046363494 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint20" pos="1.6194240373480375 -1.4026956623226399 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint21" pos="1.7906040448682168 -1.379630016882336 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint22" pos="1.9658033489531364 -1.3529796954430253 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint23" pos="2.1416487310635466 -1.3228702834051664 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint24" pos="2.3147669726601947 -1.289427366169204 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint25" pos="2.4817848552038324 -1.2527765291355895 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint26" pos="2.6393291601552087 -1.2130433577047783 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint27" pos="2.7840266689750726 -1.1703534372772104 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint28" pos="2.9125041631241726 -1.1248323532533426 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint29" pos="3.0213884240632627 -1.0766056910336257 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint30" pos="3.1073062332530896 -1.0257990360185085 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint31" pos="3.1695435329644037 -0.9602009588980936 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint32" pos="3.2217418030899108 -0.8136838798913751 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint33" pos="3.267229821746286 -0.5873254769347831 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint34" pos="3.3070587264084286 -0.2941062158692471 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint35" pos="3.342279654551234 0.05299343746429485 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint36" pos="3.3739437436496025 0.44099301722491197 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint37" pos="3.4031021311784304 0.8569120575716607 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint38" pos="3.4308059546126137 1.287770092663619 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint39" pos="3.4581063514270522 1.720586656659835 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint40" pos="3.4860544590966436 2.1423812837193825 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint41" pos="3.5157014150962853 2.540173508001333 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint42" pos="3.5480983569008737 2.900982863664737 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint43" pos="3.584296421985307 3.2118288848686696 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint44" pos="3.6253467478244814 3.459731105772189 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint45" pos="3.6723004718932986 3.631709060534368 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint46" pos="3.726208731666652 3.7147822833142623 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint47" pos="3.794785296376979 3.727467761395145 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint48" pos="3.8917842721110687 3.7366948888176967 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint49" pos="4.013589710635232 3.7453124000430886 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint50" pos="4.155907745397017 3.753316195938519 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint51" pos="4.3144445098439625 3.7607021773711993 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint52" pos="4.484906137423609 3.7674662452083343 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint53" pos="4.662998761583502 3.7736043003171296 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint54" pos="4.844428515771183 3.7791122435647946 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint55" pos="5.024901533434199 3.7839859758185295 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint56" pos="5.2001239480200825 3.788221397945549 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint57" pos="5.365801892976385 3.791814410813053 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint58" pos="5.517641501750647 3.794760915288254 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint59" pos="5.6513489077904095 3.7970568122383535 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint60" pos="5.762630244543214 3.798698002530561 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint61" pos="5.847191645456608 3.7996803870320814 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint62" pos="5.900745402267448 3.799990246680716 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint63" pos="5.93582288870324 3.775406848997247 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint64" pos="5.96691737980564 3.706587240639177 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint65" pos="5.994498588202936 3.5980021970148046 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint66" pos="6.019036226523424 3.4541224935324326 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint67" pos="6.0410000073953904 3.279418905600356 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint68" pos="6.060859643447127 3.0783622086268685 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint69" pos="6.079084847306924 2.8554231780202692 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint70" pos="6.096145331603071 2.6150725891888573 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint71" pos="6.112510808963858 2.3617812175409334 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint72" pos="6.128650992017576 2.1000198384847906 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint73" pos="6.145035593392516 1.834259227428728 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint74" pos="6.162134325716965 1.5689701597810402 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint75" pos="6.180416901619215 1.308623410950032 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint76" pos="6.20035303372756 1.0576897563439915 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint77" pos="6.222412434670288 0.8206399713712215 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint78" pos="6.246901390730168 0.6002362754104151 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint79" pos="6.271245068309212 0.3692409932404672 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint80" pos="6.294703771791317 0.1198886467903595 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint81" pos="6.317666626400889 -0.1437457411704024 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint82" pos="6.340522757362344 -0.4175871478723128 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint83" pos="6.363661289900095 -0.6975605505458766 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint84" pos="6.38747134923855 -0.9795909264215688 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint85" pos="6.412342060602122 -1.2596032527299033 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint86" pos="6.438662549215232 -1.5335225067013647 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint87" pos="6.46682194030228 -1.797273665566454 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint88" pos="6.497209359087682 -2.046781706555661 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint89" pos="6.530213930795856 -2.277971606899486 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint90" pos="6.566224780651208 -2.486768343828426 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint91" pos="6.605631033878151 -2.6690968945729687 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint92" pos="6.648821815701102 -2.8208822363636177 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint93" pos="6.696186251344465 -2.9380493464308572 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint94" pos="6.7536384641523135 -3.022051592535936 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint95" pos="6.84865702358165 -3.0997324275497204 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint96" pos="6.980103934621686 -3.17490063390424 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint97" pos="7.142271888646887 -3.2471526333435445 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint98" pos="7.329453577031723 -3.3160848476117004 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint99" pos="7.535941691150654 -3.3812936984527564 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint100" pos="7.756028922378152 -3.44237560761077 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint101" pos="7.984007962088685 -3.4989269968298022 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint102" pos="8.214171501656711 -3.5505442878538997 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint103" pos="8.440812232456706 -3.5968239024271265 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint104" pos="8.65822284586313 -3.6373622622935335 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint105" pos="8.860696033250449 -3.6717557891971766 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint106" pos="9.042524485993134 -3.6996009048821175 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint107" pos="9.19800089546565 -3.7204940310924095 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint108" pos="9.321417953042468 -3.734031589572103 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint109" pos="9.407068350098045 -3.7398100020652625 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint110" pos="9.462745333721568 -3.7331766588420856 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint111" pos="9.515026808252571 -3.7057547993326687 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint112" pos="9.564789448011398 -3.6591570609820896 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint113" pos="9.611940462819227 -3.595332943121849 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint114" pos="9.656387062497222 -3.516231945083461 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint115" pos="9.698036456866562 -3.423803566198428 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint116" pos="9.736795855748417 -3.3199973057982524 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint117" pos="9.772572468963956 -3.2067626632144517 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint118" pos="9.805273506334352 -3.0860491377785286 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint119" pos="9.834806177680779 -2.9598062288219893 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint120" pos="9.861077692824413 -2.8299834356763447 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint121" pos="9.883995261586415 -2.6985302576730987 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint122" pos="9.903466093787967 -2.56739619414376 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint123" pos="9.919397399250236 -2.4385307444198374 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint124" pos="9.931696387794394 -2.313883407832838 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint125" pos="9.940272368199432 -2.1953944969637518 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint126" pos="9.946489693023498 -2.078489253007749 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint127" pos="9.95167371834743 -1.9582218212324611 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint128" pos="9.955978755318496 -1.8346468690128177 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint129" pos="9.95955911508396 -1.7078190637237567 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint130" pos="9.962569108791087 -1.577793072740203 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint131" pos="9.965163047587142 -1.4446235634370785 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint132" pos="9.96749524261939 -1.308365203189325 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint133" pos="9.969720005035091 -1.1690726593718637 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint134" pos="9.97199164598152 -1.0268005993596263 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint135" pos="9.974464476605938 -0.881603690527541 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint136" pos="9.977292808055608 -0.7335366002505364 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint137" pos="9.980630951477798 -0.582653995903545 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint138" pos="9.984633218019768 -0.42901054486149626 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint139" pos="9.989453918828794 -0.2726609144993155 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint140" pos="9.995247365052125 -0.11365977219193367 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint141" pos="10.002547215731997 0.049213242419138936 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint142" pos="10.017458011060045 0.23514871796706596 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint143" pos="10.041572181029759 0.44645121369957325 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint144" pos="10.074249797011523 0.6776986095367956 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint145" pos="10.114850930375715 0.9234687853988852 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint146" pos="10.162735652492714 1.178339621205973 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint147" pos="10.2172640347329 1.4368889968782064 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint148" pos="10.277796148466656 1.6936947923357213 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint149" pos="10.343692065064353 1.943334887498665 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint150" pos="10.414311855896381 2.1803871622871758 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint151" pos="10.489015592333107 2.3994294966213925 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint152" pos="10.567163345744925 2.5950397704214634 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint153" pos="10.6481151875022 2.7617958636075226 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint154" pos="10.731231188975325 2.894275656099717 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint155" pos="10.815871421534666 2.9870570278181816 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint156" pos="10.901395956550612 3.0347178586830603 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint157" pos="10.991144551018781 3.0377656394106314 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint158" pos="11.103003431127378 3.02258035312072 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint159" pos="11.236240877046574 2.993735031674481 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint160" pos="11.387364822220087 2.9520437703203197 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint161" pos="11.552883200091626 2.8983206643066572 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint162" pos="11.729303944104904 2.833379808881902 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint163" pos="11.913134987703625 2.7580352992944785 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint164" pos="12.100884264331507 2.673101230792799 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint165" pos="12.289059707432259 2.5793916986252814 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint166" pos="12.474169250449597 2.477720798040332 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint167" pos="12.652720826827217 2.368902624286376 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint168" pos="12.821222370008845 2.2537512726118276 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint169" pos="12.976181813438185 2.133080838265096 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint170" pos="13.114107090558948 2.0077054164946087 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint171" pos="13.231506134814849 1.878439102548768 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint172" pos="13.324886879649588 1.7460959916760017 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint173" pos="13.397191337386765 1.5830091924444751 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint174" pos="13.460530853281528 1.3388214892702308 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint175" pos="13.51647101491518 1.024711933420475 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint176" pos="13.566229718500514 0.6536075575484777 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint177" pos="13.61102486025032 0.23843539430753505 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint178" pos="13.652074336377396 -0.20787752364911505 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint179" pos="13.690596043094544 -0.6724041636681619 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint180" pos="13.727807876614545 -1.1422174930963662 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint181" pos="13.764927733150207 -1.6043904792804253 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint182" pos="13.803173508914316 -2.045996089567097 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint183" pos="13.843763100119672 -2.454107291303075 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint184" pos="13.887914402979074 -2.81579705183512 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint185" pos="13.936845313705314 -3.118138338509939 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint186" pos="13.991773728511177 -3.3482041186742526 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint187" pos="14.053917543609476 -3.493067359674798 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint188" pos="14.124546733098132 -3.5399849122386646 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint189" pos="14.21971697270895 -3.5353888949507084 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint190" pos="14.347690543903632 -3.5229547771123637 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint191" pos="14.502956577743344 -3.503205625147805 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint192" pos="14.680004205289235 -3.4766645054812058 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint193" pos="14.87332255760249 -3.4438544845367347 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint194" pos="15.07740076574426 -3.405298628738571 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint195" pos="15.286727960775705 -3.3615200045108886 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint196" pos="15.495793273758009 -3.313041678277855 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint197" pos="15.699085835752317 -3.260386716463649 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint198" pos="15.891094777819808 -3.2040781854924414 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint199" pos="16.066309231021634 -3.144639151788405 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint200" pos="16.219218326418975 -3.0825926817757128 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint201" pos="16.34431119507298 -3.0184618418785445 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint202" pos="16.43607696804483 -2.952769698521065 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint203" pos="16.489004776395678 -2.8860393181274495 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint204" pos="16.499948019614813 -2.8170559069691516 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint205" pos="16.499098582809133 -2.7225812211534843 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint206" pos="16.497220148294588 -2.599114367541203 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint207" pos="16.4943281953139 -2.451728449957284 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint208" pos="16.490438203109782 -2.285496572226716 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint209" pos="16.48556565092495 -2.1054918381744754 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint210" pos="16.479726018002125 -1.9167873516255505 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint211" pos="16.47293478358402 -1.7244562164049189 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint212" pos="16.465207426913352 -1.5335715363375646 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint213" pos="16.45655942723284 -1.349206415248477 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint214" pos="16.447006263785198 -1.1764339569626294 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint215" pos="16.436563415813147 -1.0203272653050153 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint216" pos="16.4252463625594 -0.8859594441006103 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint217" pos="16.413070583266673 -0.7784035971743962 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint218" pos="16.400051557177687 -0.7027328283513601 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint219" pos="16.386204763535154 -0.6640202414564822 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint220" pos="16.365597920903408 -0.6601468474660965 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint221" pos="16.312353994550467 -0.6611061854474691 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint222" pos="16.22637749700485 -0.6629429620179828 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint223" pos="16.111061899035214 -0.6656379624926653 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint224" pos="15.969800671410209 -0.6691719721865432 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint225" pos="15.805987284898473 -0.6735257764146532 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint226" pos="15.623015210268685 -0.6786801604920215 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint227" pos="15.424277918289466 -0.6846159097336831 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint228" pos="15.213168879729489 -0.6913138094546607 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint229" pos="14.993081565357382 -0.698754644969995 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint230" pos="14.767409445941821 -0.7069192015947044 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint231" pos="14.539545992251453 -0.715788264643832 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint232" pos="14.312884675054908 -0.7253426194323945 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint233" pos="14.090818965120874 -0.7355630512754345 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint234" pos="13.876742333217962 -0.7464303454879743 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint235" pos="13.674048250114849 -0.7579252873850493 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint236" pos="13.480773062676752 -0.7776231847334305 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint237" pos="13.287880294590131 -0.8185196337567183 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint238" pos="13.094424637248244 -0.8784902123290906 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint239" pos="12.899680805205296 -0.955056226089459 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint240" pos="12.702923513015488 -1.0457389806767399 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint241" pos="12.503427475233025 -1.1480597817298612 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint242" pos="12.300467406412112 -1.2595399348877248 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint243" pos="12.09331802110694 -1.3777007457892632 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint244" pos="11.88125403387174 -1.5000635200733763 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint245" pos="11.663550159260682 -1.6241495633790004 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint246" pos="11.439481111827993 -1.7474801813450396 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint247" pos="11.20832160612787 -1.8675766796104143 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint248" pos="10.969346356714505 -1.9819603638140453 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint249" pos="10.721830078142132 -2.0881525395948435 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint250" pos="10.465047484964918 -2.1836745125917334 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint251" pos="10.198194067501332 -2.266112558571137 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint252" pos="9.907380158564147 -2.3448766752884644 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint253" pos="9.585982996024308 -2.427153236418247 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint254" pos="9.238609406159432 -2.511712502122416 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint255" pos="8.869866215247175 -2.5973247325629214 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint256" pos="8.484360249565153 -2.6827601879017084 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint257" pos="8.08669833539102 -2.7667891283007178 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint258" pos="7.681487299002433 -2.848181813921889 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint259" pos="7.273333966676998 -2.9257085049271785 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint260" pos="6.866845164692386 -2.998139461478515 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint261" pos="6.466627719326206 -3.0642449437378487 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint262" pos="6.077288456856126 -3.1227952118671207 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint263" pos="5.703434203559757 -3.1725605260282776 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint264" pos="5.349671785714758 -3.212311146383263 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint265" pos="5.020608029598772 -3.240817333094016 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint266" pos="4.720849761489419 -3.256849346322481 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint267" pos="4.4522828674199815 -3.2588102846129674 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint268" pos="4.184150888718963 -3.2416046305591646 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint269" pos="3.9093553449771528 -3.2052488184114187 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint270" pos="3.631441432124068 -3.151420367715641 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint271" pos="3.353954346089258 -3.081796798017733 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint272" pos="3.080439282802237 -2.9980556288636007 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint273" pos="2.814441438192547 -2.9018743797991484 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint274" pos="2.559506008189731 -2.794930570370286 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint275" pos="2.3191781887233 -2.678901720122908 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint276" pos="2.097003175722807 -2.5554653486029335 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint277" pos="1.8965261651177687 -2.4262989753562527 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint278" pos="1.7212923528377309 -2.293080119928786 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint279" pos="1.5748469348122138 -2.1574863018664248 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint280" pos="1.46073510697076 -2.0211950407150807 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint281" pos="1.3825020652428943 -1.8858838560206552 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint282" pos="1.3436930055581544 -1.753230267329056 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint283" pos="1.3443825028790453 -1.6212254420876955 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint284" pos="1.3711276861755797 -1.4758605514205962 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint285" pos="1.420735864610637 -1.3170951846532644 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint286" pos="1.4915444299231693 -1.1466708910186405 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint287" pos="1.581890773852118 -0.96632921974971 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint288" pos="1.690112288136438 -0.7778117200794145 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint289" pos="1.814546364515068 -0.5828599412407308 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint290" pos="1.9535303947269664 -0.3832154324666117 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint291" pos="2.1054017705110737 -0.18061974299001804 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint292" pos="2.268497883606333 0.023185577956081 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint293" pos="2.4411561257517036 0.2264589811387303 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint294" pos="2.6217138886861187 0.4274589173249588 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint295" pos="2.808508564148541 0.6244438372818184 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint296" pos="2.9998775438779033 0.8156721917763347 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint297" pos="3.1941582196131657 0.9994024315755594 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint298" pos="3.3896879830932645 1.173893007446514 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint299" pos="3.595907498319155 1.3410244343082327 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint300" pos="3.830917339369376 1.5064258705747573 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint301" pos="4.0936734560585055 1.6701790624963007 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint302" pos="4.38275918809312 1.8322507238817705 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint303" pos="4.696757875179758 1.992607568540052 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint304" pos="5.034252857024999 2.1512163102800463 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint305" pos="5.393827473335383 2.308043662910644 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint306" pos="5.7740650638174875 2.463056340240742 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint307" pos="6.173548968177848 2.6162210560792296 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint308" pos="6.590862526123053 2.767504524235015 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint309" pos="7.024589077359645 2.9168734585169798 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint310" pos="7.473311961594165 3.064294572734021 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint311" pos="7.935614518533207 3.209734580695036 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint312" pos="8.410080087883294 3.3531601962089144 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+    <geom name="waypoint313" pos="8.89529200935102 3.494538133084564 1.01 " size="0.03 0.03 0.03" type="sphere" contype="0" rgba="1 0.9 0 0.7"/>
+  </worldbody>
+  <equality>
+    <connect body1="left-plantar-rod" body2="left-foot" anchor="0.35012 0 0"/>
+    <connect body1="left-achilles-rod" body2="left-heel-spring" anchor="0.5012 0 0"/>
+    <connect body1="right-plantar-rod" body2="right-foot" anchor="0.35012 0 0"/>
+    <connect body1="right-achilles-rod" body2="right-heel-spring" anchor="0.5012 0 0"/>
+  </equality>
+  <actuator>
+    <!-- User parameter is the maximum no-load motor RPM -->
+    <motor name="left-hip-roll" joint="left-hip-roll" gear="25" ctrllimited="true" ctrlrange="-4.5 4.5" user="2900"/>
+    <motor name="left-hip-yaw" joint="left-hip-yaw" gear="25" ctrllimited="true" ctrlrange="-4.5 4.5" user="2900"/>
+    <motor name="left-hip-pitch" joint="left-hip-pitch" gear="16" ctrllimited="true" ctrlrange="-12.2 12.2" user="1300"/>
+    <motor name="left-knee" joint="left-knee" gear="16" ctrllimited="true" ctrlrange="-12.2 12.2" user="1300"/>
+    <motor name="left-foot" joint="left-foot" gear="50" ctrllimited="true" ctrlrange="-0.9 0.9" user="5500"/>
+    <motor name="right-hip-roll" joint="right-hip-roll" gear="25" ctrllimited="true" ctrlrange="-4.5 4.5" user="2900"/>
+    <motor name="right-hip-yaw" joint="right-hip-yaw" gear="25" ctrllimited="true" ctrlrange="-4.5 4.5" user="2900"/>
+    <motor name="right-hip-pitch" joint="right-hip-pitch" gear="16" ctrllimited="true" ctrlrange="-12.2 12.2" user="1300"/>
+    <motor name="right-knee" joint="right-knee" gear="16" ctrllimited="true" ctrlrange="-12.2 12.2" user="1300"/>
+    <motor name="right-foot" joint="right-foot" gear="50" ctrllimited="true" ctrlrange="-0.9 0.9" user="5500"/>
+  </actuator>
+  <sensor>
+    <!-- User parameter is the number of absolute encoder bits -->
+    <actuatorpos name="left-hip-roll-input" actuator="left-hip-roll" user="13"/>
+    <actuatorpos name="left-hip-yaw-input" actuator="left-hip-yaw" user="13"/>
+    <actuatorpos name="left-hip-pitch-input" actuator="left-hip-pitch" user="13"/>
+    <actuatorpos name="left-knee-input" actuator="left-knee" user="13"/>
+    <actuatorpos name="left-foot-input" actuator="left-foot" user="18"/>
+    <jointpos name="left-shin-output" joint="left-shin" user="18" noise="2e-4"/>
+    <jointpos name="left-tarsus-output" joint="left-tarsus" user="18" noise="2e-4"/>
+    <jointpos name="left-foot-output" joint="left-foot" user="13"/>
+    <actuatorpos name="right-hip-roll-input" actuator="right-hip-roll" user="13"/>
+    <actuatorpos name="right-hip-yaw-input" actuator="right-hip-yaw" user="13"/>
+    <actuatorpos name="right-hip-pitch-input" actuator="right-hip-pitch" user="13"/>
+    <actuatorpos name="right-knee-input" actuator="right-knee" user="13"/>
+    <actuatorpos name="right-foot-input" actuator="right-foot" user="18"/>
+    <jointpos name="right-shin-output" joint="right-shin" user="18" noise="2e-4"/>
+    <jointpos name="right-tarsus-output" joint="right-tarsus" user="18" noise="2e-4"/>
+    <jointpos name="right-foot-output" joint="right-foot" user="13"/>
+    <framequat name="pelvis-orientation" objtype="site" objname="imu"/>
+    <gyro name="pelvis-angular-velocity" site="imu" noise="5e-4" cutoff="34.9"/>
+    <accelerometer name="pelvis-linear-acceleration" site="imu" noise="1e-2" cutoff="157"/>
+    <magnetometer name="pelvis-magnetometer" site="imu"/>
+  </sensor>
+</mujoco>

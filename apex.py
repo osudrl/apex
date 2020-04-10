@@ -27,7 +27,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, history=0, **kwargs):
+def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, reward=None, history=0, **kwargs):
     from functools import partial
 
     """
@@ -40,15 +40,17 @@ def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    if history > 0:
-      raise NotImplementedError
+    # if history > 0:
+    #   raise NotImplementedError
 
     # Custom Cassie Environment
-    if path in ['Cassie-v0', 'CassieStandingEnv-v0']:
-        from cassie import CassieEnv, CassieStandingEnv
+    if path in ['Cassie-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0']:
+        from cassie import CassieEnv, CassiePlayground, CassieStandingEnv
 
         if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, history=history)
+            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+        elif path == 'CassiePlayground-v0':
+            env_fn = partial(CassiePlayground, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
             env_fn = partial(CassieStandingEnv, state_est=state_est)
 
@@ -137,14 +139,13 @@ def create_logger(args):
     logger.dir = output_dir
     return logger
 
-
 def eval_policy(policy, args, run_args):
 
     import tty
     import termios
     import select
     import numpy as np
-    from cassie import CassieEnv, CassieStandingEnv
+    from cassie import CassieEnv, CassiePlayground, CassieStandingEnv
 
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
@@ -152,11 +153,20 @@ def eval_policy(policy, args, run_args):
     max_traj_len = args.traj_len
     visualize = True
 
-    if run_args.env_name == "Cassie-v0":
-        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
+    if args.env_name == "Cassie-v0":
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif args.env_name == "CassiePlayground-v0":
+        env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     else:
         env = CassieStandingEnv(state_est=run_args.state_est)
-    
+
+    if args.debug:
+        env.debug = True
+
+    print(env.reward_func)
+
+    if hasattr(policy, 'init_hidden_state'):
+        policy.init_hidden_state()
 
     old_settings = termios.tcgetattr(sys.stdin)
 
@@ -242,6 +252,22 @@ def eval_policy(policy, args, run_args):
     finally:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
+# deal with loading hyperparameters of previous run continuation
+def parse_previous(args):
+    if args.previous is not None:
+        run_args = pickle.load(open(args.previous + "experiment.pkl", "rb"))
+        args.traj = run_args.traj
+        args.clock_based = run_args.clock_based
+        args.state_est = run_args.state_est
+        args.dyn_random = run_args.dyn_random
+        args.no_delta = run_args.no_delta
+        args.mirror = run_args.mirror
+        if args.env_name == "CassiePlayground-v0":
+            args.reward = "command"
+            args.run_name = run_args.run_name + "-playground"
+    
+    return args
+
 if __name__ == "__main__":
     import sys, argparse, time
     parser = argparse.ArgumentParser()
@@ -252,12 +278,13 @@ if __name__ == "__main__":
         General arguments for configuring the environment
     """
     parser.add_argument("--traj", default="walking", type=str, help="reference trajectory to use. options are 'aslip', 'walking', 'stepping'")
-    parser.add_argument("--clock_based", default=False, action='store_true')
-    parser.add_argument("--state_est", default=True, action='store_true')
-    parser.add_argument("--dyn_random", default=False, action='store_true')
-    parser.add_argument("--no_delta", default=False, action='store_true')
-    parser.add_argument("--reward", default="iros_paper", )
-    parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
+    parser.add_argument("--not_clock_based", default=True, action='store_false', dest='clock_based')
+    parser.add_argument("--not_state_est", default=True, action='store_false', dest='state_est')
+    parser.add_argument("--not_dyn_random", default=True, action='store_false', dest='dyn_random')
+    parser.add_argument("--not_no_delta", default=True, action='store_false', dest='no_delta')
+    parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
+    parser.add_argument("--reward", default="iros_paper", type=str)
+    
 
     """
         General arguments for configuring the logger
@@ -340,6 +367,8 @@ if __name__ == "__main__":
 
         args.recurrent = recurrent
 
+        args = parse_previous(args)
+
         run_experiment(args)
 
     elif sys.argv[1] == 'td3_sync':
@@ -381,6 +410,7 @@ if __name__ == "__main__":
         parser.add_argument("--noise_clip", default=0.5, type=float)                    # Range to clip target policy noise
         parser.add_argument("--policy_freq", default=2, type=int)                       # Frequency of delayed policy updates
         args = parser.parse_args()
+        args = parse_previous(args)
 
         run_experiment(args)
 
@@ -435,6 +465,7 @@ if __name__ == "__main__":
         parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
 
         args = parser.parse_args()
+        args = parse_previous(args)
 
         run_experiment(args)
 
@@ -477,6 +508,8 @@ if __name__ == "__main__":
 
         args = parser.parse_args()
         args.num_steps = args.num_steps // args.num_procs
+        args = parse_previous(args)
+
         run_experiment(args)
 
     elif sys.argv[1] == 'eval':
@@ -486,13 +519,14 @@ if __name__ == "__main__":
         parser.add_argument("--path", type=str, default="./trained_models/ppo/Cassie-v0/7b7e24-seed0/", help="path to folder containing policy and run details")
         parser.add_argument("--env_name", default="Cassie-v0", type=str)
         parser.add_argument("--traj_len", default=400, type=str)
-        parser.add_argument("--history", default=0, type=int)                                         # number of previous states to use as input
+        parser.add_argument("--history", default=0, type=int)                                    # number of previous states to use as input
+        parser.add_argument("--debug", default=False, action='store_true')
         args = parser.parse_args()
-
 
         run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 
         policy = torch.load(args.path + "actor.pt")
+        policy.eval()
 
         eval_policy(policy, args, run_args)
         

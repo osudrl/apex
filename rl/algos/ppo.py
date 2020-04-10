@@ -49,7 +49,7 @@ class PPOBuffer:
 
         self.gamma, self.lam = gamma, lam
 
-        self.ptr, self.path_idx = 0, 0
+        self.ptr = 0
         self.traj_idx = [0]
     
     def __len__(self):
@@ -72,12 +72,7 @@ class PPOBuffer:
     
     def finish_path(self, last_val=None):
         self.traj_idx += [self.ptr]
-
-        if last_val is None:
-            last_val = np.zeros(shape=(1,))
-
-        path = slice(self.path_idx, self.ptr)
-        rewards = self.rewards[path]
+        rewards = self.rewards[self.traj_idx[-2]:self.traj_idx[-1]]
 
         returns = []
 
@@ -93,8 +88,6 @@ class PPOBuffer:
         self.ep_returns += [np.sum(rewards)]
         self.ep_lens    += [len(rewards)]
 
-        self.path_idx = self.ptr
-    
     def get(self):
         return(
             self.states,
@@ -121,9 +114,9 @@ class PPO:
         self.grad_clip      = args['max_grad_norm']
         self.recurrent      = args['recurrent']
 
-        self.max_return = 0
         self.total_steps = 0
         self.highest_reward = -1
+        self.limit_cores = 0
 
         self.save_path = save_path
 
@@ -197,15 +190,22 @@ class PPO:
 
         # Don't don't bother launching another process for single thread
         if self.n_proc > 1:
-            result = ray.get([worker.remote(*args) for _ in range(self.n_proc)])
+            real_proc = self.n_proc
+            if self.limit_cores:
+                real_proc = 48 - 16*int(np.log2(60 / env_fn().simrate))
+                print("limit cores active, using {} cores".format(real_proc))
+                args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
+            result_ids = [worker.remote(*args) for _ in range(real_proc)]
+            result = ray.get(result_ids)
         else:
             result = [worker._function(*args)]
-
+        
         # O(n)
         def merge(buffers):
             merged = PPOBuffer(self.gamma, self.lam)
             for buf in buffers:
                 offset = len(merged)
+
                 merged.states  += buf.states
                 merged.actions += buf.actions
                 merged.rewards += buf.rewards
@@ -216,10 +216,15 @@ class PPO:
                 merged.ep_lens    += buf.ep_lens
 
                 merged.traj_idx += [offset + i for i in buf.traj_idx[1:]]
-                merged.ptr      += buf.ptr
+                merged.ptr += buf.ptr
 
             return merged
-        return merge(result)
+
+        total_buf = merge(result)
+        if len(total_buf) > min_steps*self.n_proc * 1.5:
+            self.limit_cores = 1
+        return total_buf
+
 
     def update_policy(self, obs_batch, action_batch, return_batch, advantage_batch, mask, env_fn, mirror_observation=None, mirror_action=None):
         policy = self.policy
@@ -251,10 +256,17 @@ class PPO:
           env = env_fn()
           deterministic_actions = policy(obs_batch)
           if env.clock_based:
-              mir_obs = mirror_observation(obs_batch, env.clock_inds)
-              mirror_actions = policy(mir_obs)
-          else: 
-              mirror_actions = policy(mirror_observation(obs_batch))
+              if self.recurrent:
+                  mir_obs = torch.stack([mirror_observation(obs_batch[i,:,:], env.clock_inds) for i in range(obs_batch.shape[0])])
+                  mirror_actions = policy(mir_obs)
+              else:
+                mir_obs = mirror_observation(obs_batch, env.clock_inds)
+                mirror_actions = policy(mir_obs)
+          else:
+              if self.recurrent:
+                mirror_actions = policy(mirror_observation(torch.stack([mirror_observation(obs_batch[i,:,:]) for i in range(obs_batch.shape[0])])))
+              else:
+                mirror_actions = policy(mirror_observation(obs_batch))
           mirror_actions = mirror_action(mirror_actions)
           mirror_loss = 4 * (deterministic_actions - mirror_actions).pow(2).mean()
         else:
@@ -332,16 +344,17 @@ class PPO:
 
             optimizer_start = time.time()
             
-            for _ in range(self.epochs):
+            for epoch in range(self.epochs):
                 losses = []
                 entropies = []
                 kls = []
                 if self.recurrent:
                     random_indices = SubsetRandomSampler(range(len(batch.traj_idx)-1))
+                    sampler = BatchSampler(random_indices, minibatch_size, drop_last=True)
                 else:
                     random_indices = SubsetRandomSampler(range(advantages.numel()))
+                    sampler = BatchSampler(random_indices, minibatch_size, drop_last=True)
 
-                sampler = BatchSampler(random_indices, minibatch_size, drop_last=True)
                 for indices in sampler:
                     if self.recurrent:
                         obs_batch       = [observations[batch.traj_idx[i]:batch.traj_idx[i+1]] for i in indices]
@@ -368,7 +381,7 @@ class PPO:
                     entropies.append(entropy)
                     kls.append(kl)
                     losses.append([actor_loss, entropy, critic_loss, ratio, kl])
-                    
+
                 # TODO: add verbosity arguments to suppress this
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
@@ -377,7 +390,7 @@ class PPO:
                     print("Max kl reached, stopping optimization early.")
                     break
 
-            print("optimizer time elapsed: {:.2f} s".format(time.time() - optimizer_start))        
+            print("optimizer time elapsed: {:.2f} s".format(time.time() - optimizer_start))
 
             if logger is not None:
                 evaluate_start = time.time()
@@ -408,7 +421,7 @@ def run_experiment(args):
     torch.set_num_threads(1)
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, history=args.history)
+    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, no_delta=args.no_delta, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -443,27 +456,34 @@ def run_experiment(args):
 
     algo = PPO(args=vars(args), save_path=logger.dir)
 
+    print()
+    print("Environment: {}".format(args.env_name))
+    print(" ├ clock_based:    {}".format(args.clock_based))
+    print(" ├ state_est:      {}".format(args.state_est))
+    print(" ├ dyn_random:     {}".format(args.dyn_random))
+    print(" ├ no_delta:       {}".format(args.no_delta))
+    print(" ├ mirror:         {}".format(args.mirror))
+    print(" └ obs_dim:        {}".format(obs_dim))
 
     print()
     print("Synchronous Distributed Proximal Policy Optimization:")
-    print("\tenv:            {}".format(args.env_name))
-    print("\trun name:       {}".format(args.run_name))
-    print("\tmax traj len:   {}".format(args.max_traj_len))
-    print("\tseed:           {}".format(args.seed))
-    print("\tmirror:         {}".format(args.mirror))
-    print("\tnum procs:      {}".format(args.num_procs))
-    print("\tlr:             {}".format(args.lr))
-    print("\teps:            {}".format(args.eps))
-    print("\tlam:            {}".format(args.lam))
-    print("\tgamma:          {}".format(args.gamma))
-    print("\tentropy coeff:  {}".format(args.entropy_coeff))
-    print("\tclip:           {}".format(args.clip))
-    print("\tminibatch size: {}".format(args.minibatch_size))
-    print("\tepochs:         {}".format(args.epochs))
-    print("\tnum steps:      {}".format(args.num_steps))
-    print("\tuse gae:        {}".format(args.use_gae))
-    print("\tmax grad norm:  {}".format(args.max_grad_norm))
-    print("\tmax traj len:   {}".format(args.max_traj_len))
+    print(" ├ recurrent:      {}".format(args.recurrent))
+    print(" ├ run name:       {}".format(args.run_name))
+    print(" ├ max traj len:   {}".format(args.max_traj_len))
+    print(" ├ seed:           {}".format(args.seed))
+    print(" ├ num procs:      {}".format(args.num_procs))
+    print(" ├ lr:             {}".format(args.lr))
+    print(" ├ eps:            {}".format(args.eps))
+    print(" ├ lam:            {}".format(args.lam))
+    print(" ├ gamma:          {}".format(args.gamma))
+    print(" ├ entropy coeff:  {}".format(args.entropy_coeff))
+    print(" ├ clip:           {}".format(args.clip))
+    print(" ├ minibatch size: {}".format(args.minibatch_size))
+    print(" ├ epochs:         {}".format(args.epochs))
+    print(" ├ num steps:      {}".format(args.num_steps))
+    print(" ├ use gae:        {}".format(args.use_gae))
+    print(" ├ max grad norm:  {}".format(args.max_grad_norm))
+    print(" └ max traj len:   {}".format(args.max_traj_len))
     print()
 
     algo.train(env_fn, policy, critic, args.n_itr, logger=logger)

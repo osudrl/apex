@@ -24,7 +24,7 @@ RUN_NAME = run_args.run_name if run_args.run_name != None else "plot"
 
 # Load environment and policy
 # env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
-cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
+cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=run_args.reward, history=run_args.history)
 policy = torch.load(args.path + "actor.pt")
 
 def avg_pols(policies, state):
