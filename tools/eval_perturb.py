@@ -31,6 +31,7 @@ def reset_to_phase(env, policy, phase):
         action = action.data.numpy()
         state, reward, done, _ = env.step(action)
         state = torch.Tensor(state)
+    return state
 
 @torch.no_grad()
 def compute_perturbs(cassie_env, policy, wait_time=4, perturb_duration=0.2, perturb_size=100, perturb_incr=10, perturb_body="cassie-pelvis", num_angles="4"):
@@ -94,7 +95,7 @@ def perturb_worker(env_fn, qpos_phase, qvel_phase, policy, angles, wait_time, pe
     cassie_env = env_fn()
 
     eval_start = time.time()
-    sim_times = np.zeros((num_angles, 2))
+    sim_times = np.zeros((num_angles, num_steps))
     for i in range(num_angles):
         for j in range(num_steps):
             sim_start = time.time()
@@ -110,7 +111,7 @@ def perturb_worker(env_fn, qpos_phase, qvel_phase, policy, angles, wait_time, pe
                 # cassie_env.sim.set_qpos(qpos_phase[:, j])
                 # cassie_env.sim.set_qvel(qvel_phase[:, j])
                 # cassie_env.phase = j
-                reset_to_phase(cassie_env, policy, j)
+                state = reset_to_phase(cassie_env, policy, j)
                 curr_time = 0
                 # Apply perturb
                 force_x = curr_size * np.cos(angles[i])
@@ -172,6 +173,8 @@ def compute_perturbs_multi(env_fn, policy, wait_time=4, perturb_duration=0.2, pe
     start_t = time.time()
     ray.init(num_cpus=num_procs)
     result_ids = []
+    if num_procs > num_angles:
+        num_procs = num_angles
     angle_split = (num_angles) // num_procs
     for i in range(num_procs):
         print("Start ind: {} End ind: {}".format(angle_split*i, angle_split*(i+1)))
