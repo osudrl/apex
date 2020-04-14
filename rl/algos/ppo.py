@@ -350,7 +350,7 @@ class PPO:
                 kls = []
                 if self.recurrent:
                     random_indices = SubsetRandomSampler(range(len(batch.traj_idx)-1))
-                    sampler = BatchSampler(random_indices, minibatch_size, drop_last=True)
+                    sampler = BatchSampler(random_indices, minibatch_size, drop_last=False)
                 else:
                     random_indices = SubsetRandomSampler(range(advantages.numel()))
                     sampler = BatchSampler(random_indices, minibatch_size, drop_last=True)
@@ -416,7 +416,7 @@ class PPO:
                 self.save(policy, critic)
 
 def run_experiment(args):
-    from apex import env_factory, create_logger
+    from util import env_factory, create_logger
 
     torch.set_num_threads(1)
 
