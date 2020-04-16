@@ -123,7 +123,7 @@ class PPO:
         if args['redis_address'] is not None:
             ray.init(redis_address=args['redis_address'])
         else:
-            ray.init()
+            ray.init(num_cpus=self.n_proc)
 
     def save(self, policy, critic):
 
