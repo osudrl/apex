@@ -33,6 +33,24 @@ def speedmatch_reward(self):
 
     return reward
 
+def old_speed_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+    diff = np.abs(qvel[0] - self.speed)
+    orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    y_vel = np.abs(qvel[1])
+    if diff < 0.05:
+      diff = 0
+    if y_vel < 0.03:
+      y_vel = 0
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+      straight_diff = 0
+    reward = .5*np.exp(-diff) + .15*np.exp(-orient_diff) + .1*np.exp(-y_vel) + .25 * np.exp(-straight_diff)
+    # print('reward: ', reward)
+
+    return reward
+
 def speedmatch_footorient_reward(self):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())
