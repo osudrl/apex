@@ -202,52 +202,80 @@ class CassieEnv_noaccel_footdist_omniscient:
         # Find the mirrored trajectory
         if self.aslip_traj:
             ref_traj_size = 18
-            mirror_taskspace = [6,7,8,9,10,11,0,1,2,3,4,5,12,13,14,15,16,17]
-            mirrored_traj = [x + state_est_size for x in mirror_taskspace] if self.state_est else [x + mjstate_size for x in mirror_taskspace]
+            # mirror_taskspace = [6,7,8,9,10,11,0.1,1,2,3,4,5,12,13,14,15,16,17]
+            mirrored_traj = [6,7,8,9,10,11,0.1,1,2,3,4,5,12,13,14,15,16,17]
+            # mirrored_traj = [x + state_est_size for x in mirror_taskspace] if self.state_est else [x + mjstate_size for x in mirror_taskspace]
         else:
             ref_traj_size = 40
-            if self.state_est:
-                mirrored_traj = [ 46,  47,  48,  49,  50,  51, -59, -60,  61,  62,  63,  64,  65, -52, -53,  54,  55,  56,  57,  58,  66,  67,  68,  69,  70,  71,-79, -80,  81,  82,  83,  84,  85, -72, -73,  74,  75,  76,  77, 78]
-            else:
-                mirrored_traj = [ 42,  43,  44,  45,  46,  47, -55, -56,  57,  58,  59,  60,  61, -48, -49,  50,  51,  52,  53,  54,  62,  63,  64,  65,  66,  67, -75, -76,  77,  78,  79,  80,  81, -68, -69,  70,  71,  72,  73, 74]
+            mirrored_traj = np.array([0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12,
+                                        20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
+            # if self.state_est:
+            #     mirrored_traj = [ 46,  47,  48,  49,  50,  51, -59, -60,  61,  62,  63,  64,  65, -52, -53,  54,  55,  56,  57,  58,  66,  67,  68,  69,  70,  71,-79, -80,  81,  82,  83,  84,  85, -72, -73,  74,  75,  76,  77, 78]
+            # else:
+            #     mirrored_traj = [ 42,  43,  44,  45,  46,  47, -55, -56,  57,  58,  59,  60,  61, -48, -49,  50,  51,  52,  53,  54,  62,  63,  64,  65,  66,  67, -75, -76,  77,  78,  79,  80,  81, -68, -69,  70,  71,  72,  73, 74]
 
         # construct mirrored observations for clock-based
         if self.clock_based:
             if self.state_est:
-                observation_space = np.zeros(state_est_size + clock_size + speed_size)
+                # observation_space = np.zeros(state_est_size + clock_size + speed_size)
+                obs_size = state_est_size + clock_size + speed_size
                 clock_inds = [51, 52]
                 # mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48]
-                mirrored_obs = [ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, 21, 22,
+                mirrored_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, 21, 22,
                                     23, 24, 25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 36, 37, 38, 42,
-                                    43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47, 51, 52, 53]
+                                    43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47, 51, 52, 53])
             else:
-                observation_space = np.zeros(mjstate_size + clock_size + speed_size)
+                # observation_space = np.zeros(mjstate_size + clock_size + speed_size)
+                obs_size = mjstate_size + clock_size + speed_size
                 clock_inds = [40, 41]
+                # clock_inds = [45, 46]
                 mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42]
-                # mirrored_obs = [ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, 10, -18, -19, 20, 21, 22, 23, 24, -11, -12, 13, 14, 15,
+                # mirrored_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, 10, -18, -19, 20, 21, 22, 23, 24, -11, -12, 13, 14, 15,
                 #                     16, 17, 25, 26, 27, 28, 29, 30, -38, -39, 40, 41, 42, 43, 44, -31, -32,
-                #                     33, 34, 35, 36, 37, 45, 46, 47]
+                #                     33, 34, 35, 36, 37, 45, 46, 47])
 
         # construct mirrored observations for traj-based. Here we assume that traj-based has no speed input
         else:
             if self.state_est:
-                observation_space = np.zeros(state_est_size + ref_traj_size)
-                mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42] + mirrored_traj
-                # mirrored_obs = [ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, 15, 16, 17, 18, 19, 10, 11, 12, 13, 14, 20, 21, 22,
-                #                     23, 24, 25, 31, 32, 33, 34, 35, 26, 27, 28, 29, 30, 36, 37, 38, 42,
-                #                     43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47]
+                # observation_space = np.zeros(state_est_size + ref_traj_size)
+                obs_size = state_est_size
+                # mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42] + mirrored_traj
+                mirrored_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, 21, 22,
+                                    23, 24, 25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 36, 37, 38, 42,
+                                    43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47])
             else:
-                observation_space = np.zeros(mjstate_size + ref_traj_size)
-                mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32] + mirrored_traj
+                # observation_space = np.zeros(mjstate_size + ref_traj_size)
+                obs_size = mjstate_size
+                mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32] #+ mirrored_traj
+                # mirrored_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, 10, -18, -19, 20, 21, 22, 23, 24, -11, -12, 13, 14, 15,
+                #                     16, 17, 25, 26, 27, 28, 29, 30, -38, -39, 40, 41, 42, 43, 44, -31, -32,
+                #                     33, 34, 35, 36, 37])
             clock_inds = None
+            mirrored_traj_sign = np.multiply(np.sign(mirrored_traj), obs_size+np.floor(np.abs(mirrored_traj)))
+            mirrored_obs = np.concatenate([mirrored_obs, mirrored_traj_sign])
+            obs_size += ref_traj_size
 
-        damp_mirror = len(mirrored_obs) + np.array([0, 1, 2, 3, 4, 5, -19, -20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-                        -6, -7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
+        # print("mirrored obs no traj: ", mirrored_obs)
+        # NOTE: mirror loss only set up for clock based with state estimation so far. 
+        damp_mirror = len(mirrored_obs) + np.array([0, 1, 2, 3, 4, 5, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+                        6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
         mass_mirror = len(mirrored_obs) + 32 + np.array([0, 1, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
         fric_mirror = len(mirrored_obs) + 32 + 26 + np.array([0, 1, 2])
         mirrored_obs = np.concatenate([np.array(mirrored_obs), damp_mirror, mass_mirror, fric_mirror])
+        mirrored_obs = mirrored_obs.astype(int)
+        obs_size += 32+26+3
+        observation_space = np.zeros(obs_size)
+        # print("mir obs check: ", np.all(np.sort(np.abs(mirrored_obs)) == np.arange(obs_size)))
+        # print("mir obs check: ", np.sort(np.abs(mirrored_obs)))
+        # print("mir obs check: ", np.sort(np.abs(mirrored_obs)) == np.arange(obs_size))
+        
         mirrored_obs = mirrored_obs.tolist()
-        observation_space = np.concatenate([observation_space, np.zeros(32+26+3)])
+        # print("mirrored_obs: ", mirrored_obs)
+        # print("mir obs len: ", len(mirrored_obs))
+        # print("obs_size: ", obs_size)
+        
+        # exit()
+        # observation_space = np.concatenate([observation_space, np.zeros(32+26+3)])
         
 
         return observation_space, clock_inds, mirrored_obs
