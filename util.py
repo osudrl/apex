@@ -141,24 +141,26 @@ def create_logger(args):
     logger.dir = output_dir
     return logger
 
+#TODO: Add pausing, and window quiting along with other render functionality
 def eval_policy(policy, args, run_args):
 
     import tty
     import termios
     import select
     import numpy as np
-    from cassie import CassieEnv, CassiePlayground, CassieStandingEnv
+    from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient
 
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
 
     max_traj_len = args.traj_len
     visualize = not args.no_viz
-
     if args.env_name == "Cassie-v0":
         env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     elif args.env_name == "CassiePlayground-v0":
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif args.env_name == "CassieNoaccelFootDistOmniscient":
+        env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     else:
         env = CassieStandingEnv(state_est=run_args.state_est)
 
