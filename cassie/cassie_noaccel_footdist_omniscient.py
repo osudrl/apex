@@ -496,6 +496,8 @@ class CassieEnv_noaccel_footdist_omniscient:
             return aslip_TaskSpace_reward(self, action)
         elif self.reward_func == "iros_paper":
             return iros_paper_reward(self)
+        elif self.reward_func == "5k_speed_reward":
+            return old_speed_reward(self)
         else:
             raise NotImplementedError
 

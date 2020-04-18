@@ -11,7 +11,7 @@ from torch.nn.utils.rnn import pad_sequence
 import time
 
 import numpy as np
-import os
+import os, sys
 
 import ray
 
@@ -291,7 +291,7 @@ class PPO:
         with torch.no_grad():
           kl = kl_divergence(pdf, old_pdf)
 
-        return actor_loss.item(), pdf.entropy().mean().item(), critic_loss.item(), ratio.mean().item(), kl.mean().item()
+        return actor_loss.item(), pdf.entropy().mean().item(), critic_loss.item(), ratio.mean().item(), kl.mean().item(), mirror_loss.item()
 
     def train(self,
               env_fn,
@@ -328,7 +328,8 @@ class PPO:
             batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
-            print("sample time elapsed: {:.2f} s".format(time.time() - sample_start))
+            samp_time = time.time() - sample_start
+            print("sample time elapsed: {:.2f} s".format(samp_time))
 
             observations, actions, returns, values = map(torch.Tensor, batch.get())
 
@@ -376,11 +377,11 @@ class PPO:
                         mask            = 1
 
                     scalars = self.update_policy(obs_batch, action_batch, return_batch, advantage_batch, mask, env_fn, mirror_observation=obs_mirr, mirror_action=act_mirr)
-                    actor_loss, entropy, critic_loss, ratio, kl = scalars
+                    actor_loss, entropy, critic_loss, ratio, kl, mirror_loss = scalars
 
                     entropies.append(entropy)
                     kls.append(kl)
-                    losses.append([actor_loss, entropy, critic_loss, ratio, kl])
+                    losses.append([actor_loss, entropy, critic_loss, ratio, kl, mirror_loss])
 
                 # TODO: add verbosity arguments to suppress this
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
@@ -390,25 +391,47 @@ class PPO:
                     print("Max kl reached, stopping optimization early.")
                     break
 
-            print("optimizer time elapsed: {:.2f} s".format(time.time() - optimizer_start))
+            opt_time = time.time() - optimizer_start
+            print("optimizer time elapsed: {:.2f} s".format(opt_time))
 
             if logger is not None:
                 evaluate_start = time.time()
                 test = self.sample_parallel(env_fn, self.policy, self.critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
-                print("evaluate time elapsed: {:.2f} s".format(time.time() - evaluate_start))
+                eval_time = time.time() - evaluate_start
+                print("evaluate time elapsed: {:.2f} s".format(eval_time))
 
                 avg_eval_reward = np.mean(test.ep_returns)
-                print("avg eval reward: {:.2f}".format(avg_eval_reward))
+                avg_batch_reward = np.mean(batch.ep_returns)
+                avg_ep_len = np.mean(batch.ep_lens)
+                mean_losses = np.mean(losses, axis=0)
+                # print("avg eval reward: {:.2f}".format(avg_eval_reward))
+
+                sys.stdout.write("-" * 37 + "\n")
+                sys.stdout.write("| %15s | %15s |" % ('Return (test)', avg_eval_reward) + "\n")
+                sys.stdout.write("| %15s | %15s |" % ('Return (batch)', avg_batch_reward) + "\n")
+                sys.stdout.write("| %15s | %15s |" % ('Mean Eplen', avg_ep_len) + "\n")
+                sys.stdout.write("| %15s | %15s |" % ('Mean KL Div', "%8.3g" % kl) + "\n")
+                sys.stdout.write("| %15s | %15s |" % ('Mean Entropy', "%8.3g" % entropy) + "\n")
+                sys.stdout.write("-" * 37 + "\n")
+                sys.stdout.flush()
 
                 entropy = np.mean(entropies)
                 kl = np.mean(kls)
 
                 logger.add_scalar("Test/Return", avg_eval_reward, itr)
-                logger.add_scalar("Train/Return", np.mean(batch.ep_returns), itr)
-                logger.add_scalar("Train/Mean Eplen", np.mean(batch.ep_lens), itr)
+                logger.add_scalar("Train/Return", avg_batch_reward, itr)
+                logger.add_scalar("Train/Mean Eplen", avg_ep_len, itr)
                 logger.add_scalar("Train/Mean KL Div", kl, itr)
                 logger.add_scalar("Train/Mean Entropy", entropy, itr)
+
+                logger.add_scalar("Misc/Critic Loss", mean_losses[2], itr)
+                logger.add_scalar("Misc/Actor Loss", mean_losses[0], itr)
+                logger.add_scalar("Misc/Mirror Loss", mean_losses[5], itr)
                 logger.add_scalar("Misc/Timesteps", self.total_steps, itr)
+
+                logger.add_scalar("Misc/Sample Times", samp_time, itr)
+                logger.add_scalar("Misc/Optimize Times", opt_time, itr)
+                logger.add_scalar("Misc/Evaluation Times", eval_time, itr)
 
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:
@@ -430,8 +453,8 @@ def run_experiment(args):
     np.random.seed(args.seed)
 
     if args.previous is not None:
-        policy = torch.load(args.previous + "actor.pt")
-        critic = torch.load(args.previous + "critic.pt")
+        policy = torch.load(os.path.join(args.previous, "actor.pt"))
+        critic = torch.load(os.path.join(args.previous, "critic.pt"))
         # TODO: add ability to load previous hyperparameters, if this is something that we event want
         # with open(args.previous + "experiment.pkl", 'rb') as file:
         #     args = pickle.loads(file.read())
