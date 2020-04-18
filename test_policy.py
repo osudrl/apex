@@ -31,6 +31,8 @@ parser.add_argument("--pert_body", type=str, default="cassie-pelvis", help="Body
 parser.add_argument("--num_angles", type=int, default=4, help="How many angles to test (angles are evenly divided into 2*pi)")
 # Test parameter sensitivity args
 parser.add_argument("--sens_incr", type=float, default=0.05, help="Size of increments for the sensityivity sweep")
+parser.add_argument("--hi_factor", type=float, default=15, help="High factor")
+parser.add_argument("--lo_factor", type=float, default=0, help="Low factor")
 
 args = parser.parse_args()
 run_args = pickle.load(open(os.path.join(args.path, "experiment.pkl"), "rb"))
@@ -73,8 +75,7 @@ elif args.test == "perturb":
     np.save(os.path.join(args.path, "eval_perturbs.npy"), save_data)
 elif args.test == "sensitivity":
     print("Testing sensitivity")
-    eval_sensitivity(cassie_env, policy, incr=args.sens_incr)
-
+    eval_sensitivity(cassie_env, policy, incr=args.sens_incr, hi_factor=args.hi_factor, lo_factor=args.lo_factor)
 
 # vis_commands(cassie_env, policy, num_steps=200, num_commands=6, max_speed=3, min_speed=0)
 # save_data = eval_commands(cassie_env, policy, num_steps=200, num_commands=2, max_speed=3, min_speed=0, num_iters=1)
