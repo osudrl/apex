@@ -262,19 +262,20 @@ class CassieEnv_noaccel_footdist_omniscient:
         mass_mirror = len(mirrored_obs) + 32 + np.array([0, 1, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
         fric_mirror = len(mirrored_obs) + 32 + 26 + np.array([0, 1, 2])
         mirrored_obs = np.concatenate([np.array(mirrored_obs), damp_mirror, mass_mirror, fric_mirror])
-        mirrored_obs = mirrored_obs.astype(int)
         obs_size += 32+26+3
         observation_space = np.zeros(obs_size)
-        # print("mir obs check: ", np.all(np.sort(np.abs(mirrored_obs)) == np.arange(obs_size)))
+        check_arr = np.arange(obs_size, dtype=np.float64)
+        check_arr[0] = 0.1
+        # print("mir obs check: ", np.all(np.sort(np.abs(mirrored_obs)) == check_arr))
         # print("mir obs check: ", np.sort(np.abs(mirrored_obs)))
-        # print("mir obs check: ", np.sort(np.abs(mirrored_obs)) == np.arange(obs_size))
+        # print("mir obs check: ", np.sort(np.abs(mirrored_obs)) == check_arr)
         
         mirrored_obs = mirrored_obs.tolist()
         # print("mirrored_obs: ", mirrored_obs)
         # print("mir obs len: ", len(mirrored_obs))
         # print("obs_size: ", obs_size)
         
-        # exit()
+        exit()
         # observation_space = np.concatenate([observation_space, np.zeros(32+26+3)])
         
 
