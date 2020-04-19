@@ -1,263 +1,23 @@
 import torch
-import hashlib, os, pickle
-from collections import OrderedDict
-
-from cassie.quaternion_function import *
-
-class color:
-    BOLD   = '\033[1m\033[48m'
-    END    = '\033[0m'
-    ORANGE = '\033[38;5;202m'
-    BLACK  = '\033[38;5;240m'
-
-
-def print_logo(subtitle="", option=2):
-    print()
-    print(color.BOLD + color.ORANGE +  "         .8.         " + color.BLACK + " 8 888888888o   " + color.ORANGE + "8 8888888888   `8.`8888.      ,8' ")
-    print(color.BOLD + color.ORANGE +  "        .888.        " + color.BLACK + " 8 8888    `88. " + color.ORANGE + "8 8888          `8.`8888.    ,8' ")
-    print(color.BOLD + color.ORANGE +  "       :88888.       " + color.BLACK + " 8 8888     `88 " + color.ORANGE + "8 8888           `8.`8888.  ,8' ")
-    print(color.BOLD + color.ORANGE +  "      . `88888.      " + color.BLACK + " 8 8888     ,88 " + color.ORANGE + "8 8888            `8.`8888.,8' ")
-    print(color.BOLD + color.ORANGE +  "     .8. `88888.     " + color.BLACK + " 8 8888.   ,88' " + color.ORANGE + "8 888888888888     `8.`88888' ")
-    print(color.BOLD + color.ORANGE + "    .8`8. `88888.    " + color.BLACK  + " 8 888888888P'  " + color.ORANGE + "8 8888             .88.`8888. ")
-    print(color.BOLD + color.ORANGE + "   .8' `8. `88888.   " + color.BLACK  + " 8 8888         " + color.ORANGE + "8 8888            .8'`8.`8888. ")
-    print(color.BOLD + color.ORANGE + "  .8'   `8. `88888.  " + color.BLACK  + " 8 8888         " + color.ORANGE + "8 8888           .8'  `8.`8888. ")
-    print(color.BOLD + color.ORANGE + " .888888888. `88888. " + color.BLACK  + " 8 8888         " + color.ORANGE + "8 8888          .8'    `8.`8888. ")
-    print(color.BOLD + color.ORANGE + ".8'       `8. `88888." + color.BLACK  + " 8 8888         " + color.ORANGE + "8 888888888888 .8'      `8.`8888. " + color.END)
-    print("\n")
-    print(subtitle)
-    print("\n")
-
-def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, history=0, **kwargs):
-    from functools import partial
-
-    """
-    Returns an *uninstantiated* environment constructor.
-
-    Since environments containing cpointers (e.g. Mujoco envs) can't be serialized, 
-    this allows us to pass their constructors to Ray remote functions instead 
-    (since the gym registry isn't shared across ray subprocesses we can't simply 
-    pass gym.make() either)
-
-    Note: env.unwrapped.spec is never set, if that matters for some reason.
-    """
-    if history > 0:
-      raise NotImplementedError
-
-    # Custom Cassie Environment
-    if path in ['Cassie-v0', 'CassieStandingEnv-v0']:
-        from cassie import CassieEnv, CassieStandingEnv
-
-        if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, history=history)
-        elif path == 'CassieStandingEnv-v0':
-            env_fn = partial(CassieStandingEnv, state_est=state_est)
-
-        # TODO for Yesh: make mirrored_obs an attribute of environment, configured based on setup parameters
-        if mirror:
-            from rl.envs.wrappers import SymmetricEnv
-            env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=env_fn().mirrored_obs, mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
-
-        return env_fn
-
-    # OpenAI Gym environment
-    else:
-        import gym
-        spec = gym.envs.registry.spec(path)
-        _kwargs = spec._kwargs.copy()
-        _kwargs.update(kwargs)
-
-        try:
-            if callable(spec._entry_point):
-                cls = spec._entry_point(**_kwargs)
-            else:
-                cls = gym.envs.registration.load(spec._entry_point)
-        except AttributeError:
-            if callable(spec.entry_point):
-                cls = spec.entry_point(**_kwargs)
-            else:
-                cls = gym.envs.registration.load(spec.entry_point)
-
-        return partial(cls, **_kwargs)
-
-# Logger stores in trained_models by default
-def create_logger(args):
-    from torch.utils.tensorboard import SummaryWriter
-    """Use hyperparms to set a directory to output diagnostic files."""
-
-    arg_dict = args.__dict__
-    assert "seed" in arg_dict, \
-    "You must provide a 'seed' key in your command line arguments"
-    assert "logdir" in arg_dict, \
-    "You must provide a 'logdir' key in your command line arguments."
-    assert "env_name" in arg_dict, \
-    "You must provide a 'env_name' key in your command line arguments."
-
-    # sort the keys so the same hyperparameters will always have the same hash
-    arg_dict = OrderedDict(sorted(arg_dict.items(), key=lambda t: t[0]))
-
-    # remove seed so it doesn't get hashed, store value for filename
-    # same for logging directory
-    run_name = arg_dict.pop('run_name')
-    seed = str(arg_dict.pop("seed"))
-    logdir = str(arg_dict.pop('logdir'))
-    env_name = str(arg_dict.pop('env_name'))
-
-    # see if this run has a unique name, if so then that is going to be the name of the folder, even if it overrirdes
-    if run_name is not None:
-        logdir = os.path.join(logdir, env_name)
-        output_dir = os.path.join(logdir, run_name)
-    else:
-        # see if we are resuming a previous run, if we are mark as continued
-        if args.previous is not None:
-            output_dir = args.previous[0:-1] + '-cont'
-        else:
-            # get a unique hash for the hyperparameter settings, truncated at 10 chars
-            arg_hash   = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:6] + '-seed' + seed
-            logdir     = os.path.join(logdir, env_name)
-            output_dir = os.path.join(logdir, arg_hash)
-
-    # create a directory with the hyperparm hash as its name, if it doesn't
-    # already exist.
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Create a file with all the hyperparam settings in human-readable plaintext,
-    # also pickle file for resuming training easily
-    info_path = os.path.join(output_dir, "experiment.info")
-    pkl_path = os.path.join(output_dir, "experiment.pkl")
-    with open(pkl_path, 'wb') as file:
-        pickle.dump(args, file)
-    with open(info_path, 'w') as file:
-        for key, val in arg_dict.items():
-            file.write("%s: %s" % (key, val))
-            file.write('\n')
-
-    logger = SummaryWriter(output_dir, flush_secs=0.1) # flush_secs=0.1 actually slows down quite a bit, even on parallelized set ups
-    print("Logging to " + color.BOLD + color.ORANGE + str(output_dir) + color.END)
-
-    logger.dir = output_dir
-    return logger
-
-
-def eval_policy(policy, args, run_args):
-
-    import tty
-    import termios
-    import select
-    import numpy as np
-    from cassie import CassieEnv, CassieStandingEnv
-
-    def isData():
-        return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
-
-    max_traj_len = args.traj_len
-    visualize = True
-
-    if run_args.env_name == "Cassie-v0":
-        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
-    else:
-        env = CassieStandingEnv(state_est=run_args.state_est)
-    
-
-    old_settings = termios.tcgetattr(sys.stdin)
-
-    orient_add = 0
-
-    try:
-        tty.setcbreak(sys.stdin.fileno())
-
-        state = env.reset_for_test()
-        done = False
-        timesteps = 0
-        eval_reward = 0
-        speed = 0.0
-
-        while True:
-        
-            if isData():
-                c = sys.stdin.read(1)
-                if c == 'w':
-                    speed += 0.1
-                elif c == 's':
-                    speed -= 0.1
-                elif c == 'l':
-                    orient_add += .1
-                    print("Increasing orient_add to: ", orient_add)
-                elif c == 'k':
-                    orient_add -= .1
-                    print("Decreasing orient_add to: ", orient_add)
-                elif c == 'p':
-                    push = 100
-                    push_dir = 2
-                    force_arr = np.zeros(6)
-                    force_arr[push_dir] = push
-                    env.sim.apply_force(force_arr)
-
-                env.update_speed(speed)
-                print("speed: ", env.speed)
-            
-            # Update Orientation
-            quaternion = euler2quat(z=orient_add, y=0, x=0)
-            iquaternion = inverse_quaternion(quaternion)
-
-            if env.state_est:
-                curr_orient = state[1:5]
-                curr_transvel = state[14:17]
-            else:
-                curr_orient = state[2:6]
-                curr_transvel = state[20:23]
-            
-            new_orient = quaternion_product(iquaternion, curr_orient)
-
-            if new_orient[0] < 0:
-                new_orient = -new_orient
-
-            new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
-            
-            if env.state_est:
-                state[1:5] = torch.FloatTensor(new_orient)
-                state[14:17] = torch.FloatTensor(new_translationalVelocity)
-                # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
-            else:
-                state[2:6] = torch.FloatTensor(new_orient)
-                state[20:23] = torch.FloatTensor(new_translationalVelocity)
-
-            if hasattr(env, 'simrate'):
-                start = time.time()
-                
-            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
-            state, reward, done, _ = env.step(action)
-            if visualize:
-                env.render()
-            eval_reward += reward
-            timesteps += 1
-
-            if hasattr(env, 'simrate'):
-                # assume 30hz (hack)
-                end = time.time()
-                delaytime = max(0, 1000 / 30000 - (end-start))
-                time.sleep(delaytime)
-
-        print("Eval reward: ", eval_reward)
-
-    finally:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+import sys, pickle, argparse
+from util import color, print_logo, env_factory, create_logger, eval_policy, parse_previous
 
 if __name__ == "__main__":
-    import sys, argparse, time
-    parser = argparse.ArgumentParser()
 
     print_logo(subtitle="Maintained by Oregon State University's Dynamic Robotics Lab")
+    parser = argparse.ArgumentParser()
 
     """
         General arguments for configuring the environment
     """
     parser.add_argument("--traj", default="walking", type=str, help="reference trajectory to use. options are 'aslip', 'walking', 'stepping'")
-    parser.add_argument("--clock_based", default=False, action='store_true')
-    parser.add_argument("--state_est", default=True, action='store_true')
-    parser.add_argument("--dyn_random", default=False, action='store_true')
-    parser.add_argument("--no_delta", default=False, action='store_true')
-    parser.add_argument("--reward", default="iros_paper", )
-    parser.add_argument("--mirror", default=False, action='store_true')             # mirror actions or not
+    parser.add_argument("--not_clock_based", default=True, action='store_false', dest='clock_based')
+    parser.add_argument("--not_state_est", default=True, action='store_false', dest='state_est')
+    parser.add_argument("--not_dyn_random", default=True, action='store_false', dest='dyn_random')
+    parser.add_argument("--not_no_delta", default=True, action='store_false', dest='no_delta')
+    parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
+    parser.add_argument("--reward", default="iros_paper", type=str)
+
 
     """
         General arguments for configuring the logger
@@ -340,6 +100,8 @@ if __name__ == "__main__":
 
         args.recurrent = recurrent
 
+        args = parse_previous(args)
+
         run_experiment(args)
 
     elif sys.argv[1] == 'td3_sync':
@@ -381,6 +143,7 @@ if __name__ == "__main__":
         parser.add_argument("--noise_clip", default=0.5, type=float)                    # Range to clip target policy noise
         parser.add_argument("--policy_freq", default=2, type=int)                       # Frequency of delayed policy updates
         args = parser.parse_args()
+        args = parse_previous(args)
 
         run_experiment(args)
 
@@ -435,6 +198,7 @@ if __name__ == "__main__":
         parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
 
         args = parser.parse_args()
+        args = parse_previous(args)
 
         run_experiment(args)
 
@@ -477,6 +241,8 @@ if __name__ == "__main__":
 
         args = parser.parse_args()
         args.num_steps = args.num_steps // args.num_procs
+        args = parse_previous(args)
+
         run_experiment(args)
 
     elif sys.argv[1] == 'eval':
@@ -486,13 +252,15 @@ if __name__ == "__main__":
         parser.add_argument("--path", type=str, default="./trained_models/ppo/Cassie-v0/7b7e24-seed0/", help="path to folder containing policy and run details")
         parser.add_argument("--env_name", default="Cassie-v0", type=str)
         parser.add_argument("--traj_len", default=400, type=str)
-        parser.add_argument("--history", default=0, type=int)                                         # number of previous states to use as input
+        parser.add_argument("--history", default=0, type=int)                                    # number of previous states to use as input
+        parser.add_argument("--debug", default=False, action='store_true')
+        parser.add_argument("--no_viz", default=False, action='store_true')
         args = parser.parse_args()
-
 
         run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 
         policy = torch.load(args.path + "actor.pt")
+        # policy.eval()
 
         eval_policy(policy, args, run_args)
         

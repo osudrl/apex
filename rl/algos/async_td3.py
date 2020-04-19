@@ -36,7 +36,7 @@ def run_experiment(args):
     np.random.seed(args.seed)
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, state_est=args.state_est, mirror=args.mirror)
+    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history)
     max_traj_len = args.max_traj_len
 
     obs_dim = env_fn().observation_space.shape[0]

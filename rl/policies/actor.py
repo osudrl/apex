@@ -148,7 +148,7 @@ class FF_Actor(Actor):
     return self.action
 
 class LSTM_Actor(Actor):
-  def __init__(self, input_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=torch.tanh, max_action=1):
+  def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=torch.tanh, max_action=1):
     super(LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()

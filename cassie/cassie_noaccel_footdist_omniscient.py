@@ -15,7 +15,7 @@ import copy
 
 import pickle
 
-class CassieEnv_v2:
+class CassieEnv_noaccel_footdist_omniscient:
     def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -102,14 +102,14 @@ class CassieEnv_v2:
         self.slope_rand = False
         self.joint_rand = False
         # Record default dynamics parameters
-        if self.dynamics_randomization:
+        if True: #self.dynamics_randomization:  Always use dyn rand
             self.default_damping = self.sim.get_dof_damping()
             self.default_mass = self.sim.get_body_mass()
             self.default_ipos = self.sim.get_body_ipos()
             self.default_fric = self.sim.get_geom_friction()
 
-            weak_factor = 0.5
-            strong_factor = 0.5
+            weak_factor = 0.7
+            strong_factor = 1.3
 
             pelvis_damp_range = [[self.default_damping[0], self.default_damping[0]], 
                                 [self.default_damping[1], self.default_damping[1]], 
@@ -163,7 +163,10 @@ class CassieEnv_v2:
 
             self.mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
 
-        self.sim.set_geom_friction([0.6, 1e-4, 5e-5], "floor")
+            self.damp_noise = np.zeros(len(self.damp_range))
+            self.mass_noise = np.zeros(len(self.mass_range))
+            self.fric_noise = np.zeros(3)
+
         # self.delta_x_min, self.delta_x_max = self.default_ipos[3] - 0.05, self.default_ipos[3] + 0.05
         # self.delta_y_min, self.delta_y_max = self.default_ipos[4] - 0.05, self.default_ipos[4] + 0.05
 
@@ -190,7 +193,7 @@ class CassieEnv_v2:
     def set_up_state_space(self):
 
         mjstate_size   = 40
-        state_est_size = 46
+        state_est_size = 51#46
 
         speed_size     = 1
 
@@ -199,35 +202,81 @@ class CassieEnv_v2:
         # Find the mirrored trajectory
         if self.aslip_traj:
             ref_traj_size = 18
-            mirror_taskspace = [6,7,8,9,10,11,0,1,2,3,4,5,12,13,14,15,16,17]
-            mirrored_traj = [x + state_est_size for x in mirror_taskspace] if self.state_est else [x + mjstate_size for x in mirror_taskspace]
+            # mirror_taskspace = [6,7,8,9,10,11,0.1,1,2,3,4,5,12,13,14,15,16,17]
+            mirrored_traj = [6,7,8,9,10,11,0.1,1,2,3,4,5,12,13,14,15,16,17]
+            # mirrored_traj = [x + state_est_size for x in mirror_taskspace] if self.state_est else [x + mjstate_size for x in mirror_taskspace]
         else:
             ref_traj_size = 40
-            if self.state_est:
-                mirrored_traj = [ 46,  47,  48,  49,  50,  51, -59, -60,  61,  62,  63,  64,  65, -52, -53,  54,  55,  56,  57,  58,  66,  67,  68,  69,  70,  71,-79, -80,  81,  82,  83,  84,  85, -72, -73,  74,  75,  76,  77, 78]
-            else:
-                mirrored_traj = [ 42,  43,  44,  45,  46,  47, -55, -56,  57,  58,  59,  60,  61, -48, -49,  50,  51,  52,  53,  54,  62,  63,  64,  65,  66,  67, -75, -76,  77,  78,  79,  80,  81, -68, -69,  70,  71,  72,  73, 74]
+            mirrored_traj = np.array([0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12,
+                                        20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
+            # if self.state_est:
+            #     mirrored_traj = [ 46,  47,  48,  49,  50,  51, -59, -60,  61,  62,  63,  64,  65, -52, -53,  54,  55,  56,  57,  58,  66,  67,  68,  69,  70,  71,-79, -80,  81,  82,  83,  84,  85, -72, -73,  74,  75,  76,  77, 78]
+            # else:
+            #     mirrored_traj = [ 42,  43,  44,  45,  46,  47, -55, -56,  57,  58,  59,  60,  61, -48, -49,  50,  51,  52,  53,  54,  62,  63,  64,  65,  66,  67, -75, -76,  77,  78,  79,  80,  81, -68, -69,  70,  71,  72,  73, 74]
 
         # construct mirrored observations for clock-based
         if self.clock_based:
             if self.state_est:
-                observation_space = np.zeros(state_est_size + clock_size + speed_size)
-                clock_inds = [46, 47]
-                mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48]
+                # observation_space = np.zeros(state_est_size + clock_size + speed_size)
+                obs_size = state_est_size + clock_size + speed_size
+                clock_inds = [51, 52]
+                # mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48]
+                mirrored_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, 21, 22,
+                                    23, 24, 25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 36, 37, 38, 42,
+                                    43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47, 51, 52, 53])
             else:
-                observation_space = np.zeros(mjstate_size + clock_size + speed_size)
+                # observation_space = np.zeros(mjstate_size + clock_size + speed_size)
+                obs_size = mjstate_size + clock_size + speed_size
                 clock_inds = [40, 41]
+                # clock_inds = [45, 46]
                 mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42]
-        
+                # mirrored_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, 10, -18, -19, 20, 21, 22, 23, 24, -11, -12, 13, 14, 15,
+                #                     16, 17, 25, 26, 27, 28, 29, 30, -38, -39, 40, 41, 42, 43, 44, -31, -32,
+                #                     33, 34, 35, 36, 37, 45, 46, 47])
+
         # construct mirrored observations for traj-based. Here we assume that traj-based has no speed input
         else:
             if self.state_est:
-                observation_space = np.zeros(state_est_size + ref_traj_size)
-                mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42] + mirrored_traj
+                # observation_space = np.zeros(state_est_size + ref_traj_size)
+                obs_size = state_est_size
+                # mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42] + mirrored_traj
+                mirrored_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, 21, 22,
+                                    23, 24, 25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 36, 37, 38, 42,
+                                    43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47])
             else:
-                observation_space = np.zeros(mjstate_size + ref_traj_size)
-                mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32] + mirrored_traj
+                # observation_space = np.zeros(mjstate_size + ref_traj_size)
+                obs_size = mjstate_size
+                mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32] #+ mirrored_traj
+                # mirrored_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6,  7,  8,  9, 10, -18, -19, 20, 21, 22, 23, 24, -11, -12, 13, 14, 15,
+                #                     16, 17, 25, 26, 27, 28, 29, 30, -38, -39, 40, 41, 42, 43, 44, -31, -32,
+                #                     33, 34, 35, 36, 37])
             clock_inds = None
+            mirrored_traj_sign = np.multiply(np.sign(mirrored_traj), obs_size+np.floor(np.abs(mirrored_traj)))
+            mirrored_obs = np.concatenate([mirrored_obs, mirrored_traj_sign])
+            obs_size += ref_traj_size
+
+        # print("mirrored obs no traj: ", mirrored_obs)
+        # NOTE: mirror loss only set up for clock based with state estimation so far. 
+        damp_mirror = len(mirrored_obs) + np.array([0, 1, 2, 3, 4, 5, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+                        6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
+        mass_mirror = len(mirrored_obs) + 32 + np.array([0, 1, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+        fric_mirror = len(mirrored_obs) + 32 + 26 + np.array([0, 1, 2])
+        mirrored_obs = np.concatenate([np.array(mirrored_obs), damp_mirror, mass_mirror, fric_mirror])
+        mirrored_obs = mirrored_obs.astype(int)
+        obs_size += 32+26+3
+        observation_space = np.zeros(obs_size)
+        # print("mir obs check: ", np.all(np.sort(np.abs(mirrored_obs)) == np.arange(obs_size)))
+        # print("mir obs check: ", np.sort(np.abs(mirrored_obs)))
+        # print("mir obs check: ", np.sort(np.abs(mirrored_obs)) == np.arange(obs_size))
+        
+        mirrored_obs = mirrored_obs.tolist()
+        # print("mirrored_obs: ", mirrored_obs)
+        # print("mir obs len: ", len(mirrored_obs))
+        # print("obs_size: ", obs_size)
+        
+        # exit()
+        # observation_space = np.concatenate([observation_space, np.zeros(32+26+3)])
+        
 
         return observation_space, clock_inds, mirrored_obs
 
@@ -347,8 +396,8 @@ class CassieEnv_v2:
 
         if self.dynamics_randomization:
             #### Dynamics Randomization ####
-            # damp_noise = [np.random.uniform(a, b) for a, b in self.damp_range]
-            # mass_noise = [np.random.uniform(a, b) for a, b in self.mass_range]
+            self.damp_noise = np.clip([np.random.uniform(a, b) for a, b in self.damp_range], 0, None)
+            self.mass_noise = np.clip([np.random.uniform(a, b) for a, b in self.mass_range], 0, None)
             # com_noise = [0, 0, 0] + [np.random.uniform(self.delta_x_min, self.delta_x_min)] + [np.random.uniform(self.delta_y_min, self.delta_y_max)] + [0] + list(self.default_ipos[6:])
             # fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
             # fric_noise = []
@@ -357,11 +406,11 @@ class CassieEnv_v2:
             # rolling = np.random.uniform(5e-5, 5e-4)
             # for _ in range(int(len(self.default_fric)/3)):
             #     fric_noise += [translational, torsional, rolling]
-            fric_noise = [np.random.uniform(0.6, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)]
-            # self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
-            # self.sim.set_body_mass(np.clip(mass_noise, 0, None))
+            self.fric_noise = np.clip([np.random.uniform(0.6, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)], 0, None)
+            self.sim.set_dof_damping(self.damp_noise)
+            self.sim.set_body_mass(self.mass_noise)
             # self.sim.set_body_ipos(com_noise)
-            self.sim.set_geom_friction(np.clip(fric_noise, 0, None), "floor")
+            self.sim.set_geom_friction(self.fric_noise, "floor")
             self.sim.set_const()
 
         if self.slope_rand:
@@ -404,8 +453,11 @@ class CassieEnv_v2:
         self.cassie_state = self.sim.step_pd(self.u)
 
         if self.dynamics_randomization:
-            # self.sim.set_dof_damping(self.default_damping)
-            # self.sim.set_body_mass(self.default_mass)
+            self.damp_noise = self.default_damping
+            self.mass_noise = self.default_mass
+            self.fric_noise = self.default_fric
+            self.sim.set_dof_damping(self.default_damping)
+            self.sim.set_body_mass(self.default_mass)
             # self.sim.set_body_ipos(self.default_ipos)
             self.sim.set_geom_friction(self.default_fric)
             self.sim.set_const()
@@ -444,6 +496,8 @@ class CassieEnv_v2:
             return aslip_TaskSpace_reward(self, action)
         elif self.reward_func == "iros_paper":
             return iros_paper_reward(self)
+        elif self.reward_func == "5k_speed_reward":
+            return old_speed_reward(self)
         else:
             raise NotImplementedError
 
@@ -548,7 +602,8 @@ class CassieEnv_v2:
 
         # Use state estimator
         robot_state = np.concatenate([
-            [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height], # pelvis height
+            self.cassie_state.leftFoot.position[:],     # left foot position
+            self.cassie_state.rightFoot.position[:],     # right foot position
             new_orient,                                 # pelvis orientation
             motor_pos,                                     # actuated joint positions
 
@@ -562,10 +617,13 @@ class CassieEnv_v2:
             self.cassie_state.joint.velocity[:]                                      # unactuated joint velocities
         ])
 
+        # Make dynamics parameters vector
+        dyn_state = np.concatenate([self.damp_noise, self.mass_noise, self.fric_noise])
+
         if self.state_est:
-            state = np.concatenate([robot_state, ext_state])
+            state = np.concatenate([robot_state, ext_state, dyn_state])
         else:
-            state = np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
+            state = np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state, dyn_state])
 
         self.state_history.insert(0, state)
         self.state_history = self.state_history[:self.history+1]

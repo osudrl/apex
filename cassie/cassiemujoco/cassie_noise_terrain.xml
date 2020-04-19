@@ -14,7 +14,6 @@
   <default>
     <joint limited='true'/>
     <motor ctrllimited='true'/>
-    <!-- <geom contype='0' conaffinity='0' condim='1' solref='0.005 1' friction='.4 0.0001 0.00001'/> -->
     <geom contype='0' conaffinity='0' condim='1' solref='0.005 1'/>
     <equality solref='0.005 1'/>
     <default class='cassie'>
@@ -67,10 +66,12 @@
     <mesh name='right-foot-crank'   scale='1 1 -1' file='foot-crank.stl'/>
     <mesh name='right-plantar-rod'  scale='1 1 -1' file='plantar-rod.stl'/>
     <mesh name='right-foot'         scale='1 1 -1' file='foot.stl'/>
+    <hfield name='hf1' file="/homes/jdao/apex/cassie/cassiemujoco/terrains/noisy.png" size="20 5 0.015 0.0001"/>
   </asset>
 
   <worldbody>
-    <geom name='floor' pos='0 0 -0.01' size='100 5 .125' type='plane' material='plane' condim='3' conaffinity='15' priority='1'/>
+    <geom name='floor'   pos='9 0 -0.01'     size='20 10 0.125' type='plane' material='plane' condim='3' conaffinity='15'/>
+    <geom name='hfield1' pos='0.0 0 0.0' hfield='hf1'     type='hfield'                 condim='3' conaffinity='15'/>
 
     <light mode='trackcom' pos='0 0 5' dir='0 0 -1'/>
     <light directional='true' pos='0 0 3' dir='0 0 -1' diffuse='0.2 0.2 0.2' specular='0 0 0'/>
