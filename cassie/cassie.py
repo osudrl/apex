@@ -416,6 +416,42 @@ class CassieEnv_v2:
 
         return self.get_full_state()
 
+    def full_reset(self):
+        self.phase = 0
+        self.time = 0
+        self.counter = 0
+        self.orient_add = 0
+        self.orient_time = 500
+        self.y_offset = 0
+        self.phase_add = 1
+
+        self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
+
+        if self.aslip_traj:
+            self.speed = 0
+            # print("current speed: {}".format(self.speed))
+            self.trajectory = self.trajectories[0] # switch the current trajectory
+            self.phaselen = self.trajectory.length - 1
+        else:
+            self.speed = 0
+
+        self.sim.full_reset()
+
+        # Need to reset u? Or better way to reset cassie_state than taking step
+        self.cassie_state = self.sim.step_pd(self.u)
+
+        if self.dynamics_randomization:
+            # self.sim.set_dof_damping(self.default_damping)
+            # self.sim.set_body_mass(self.default_mass)
+            # self.sim.set_body_ipos(self.default_ipos)
+            self.sim.set_geom_friction(self.default_fric)
+            self.sim.set_const()
+
+        if self.slope_rand:
+            self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
+
+        return self.get_full_state()
+
     # Helper function for updating the speed, used in visualization tests
     def update_speed(self, new_speed):
         if self.aslip_traj:
