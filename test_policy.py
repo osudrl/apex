@@ -75,7 +75,9 @@ elif args.test == "perturb":
     np.save(os.path.join(args.path, "eval_perturbs.npy"), save_data)
 elif args.test == "sensitivity":
     print("Testing sensitivity")
-    eval_sensitivity(cassie_env, policy, incr=args.sens_incr, hi_factor=args.hi_factor, lo_factor=args.lo_factor)
+    save_data = eval_sensitivity(cassie_env, policy, incr=args.sens_incr, hi_factor=args.hi_factor, lo_factor=args.lo_factor)
+    print(save_data)
+    np.save(os.path.join(args.path, "eval_sensitivity.npy"), save_data)
 
 # vis_commands(cassie_env, policy, num_steps=200, num_commands=6, max_speed=3, min_speed=0)
 # save_data = eval_commands(cassie_env, policy, num_steps=200, num_commands=2, max_speed=3, min_speed=0, num_iters=1)
