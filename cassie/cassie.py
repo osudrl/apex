@@ -382,7 +382,7 @@ class CassieEnv_v2:
         self.time = 0
         self.counter = 0
         self.orient_add = 0
-        self.orient_time = 500
+        self.orient_time = np.inf
         self.y_offset = 0
         self.phase_add = 1
 
@@ -421,7 +421,7 @@ class CassieEnv_v2:
         self.time = 0
         self.counter = 0
         self.orient_add = 0
-        self.orient_time = 500
+        self.orient_time = np.inf
         self.y_offset = 0
         self.phase_add = 1
 

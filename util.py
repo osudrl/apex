@@ -157,6 +157,7 @@ def eval_policy(policy, args, run_args):
 
     max_traj_len = args.traj_len
     visualize = not args.no_viz
+    print("env name: ", args.env_name)
     if args.env_name == "Cassie-v0":
         env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     elif args.env_name == "CassiePlayground-v0":
@@ -165,7 +166,7 @@ def eval_policy(policy, args, run_args):
         env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     else:
         env = CassieStandingEnv(state_est=run_args.state_est)
-
+    
     if args.debug:
         env.debug = True
 
@@ -178,6 +179,9 @@ def eval_policy(policy, args, run_args):
 
     orient_add = 0
 
+    if visualize:
+        env.render()
+    render_state = True
     try:
         tty.setcbreak(sys.stdin.fileno())
 
@@ -187,7 +191,7 @@ def eval_policy(policy, args, run_args):
         eval_reward = 0
         speed = 0.0
 
-        while True:
+        while render_state:
         
             if isData():
                 c = sys.stdin.read(1)
@@ -211,46 +215,48 @@ def eval_policy(policy, args, run_args):
                 env.update_speed(speed)
                 print("speed: ", env.speed)
             
-            # Update Orientation
-            quaternion = euler2quat(z=orient_add, y=0, x=0)
-            iquaternion = inverse_quaternion(quaternion)
-
-            if env.state_est:
-                curr_orient = state[1:5]
-                curr_transvel = state[14:17]
-            else:
-                curr_orient = state[2:6]
-                curr_transvel = state[20:23]
-            
-            new_orient = quaternion_product(iquaternion, curr_orient)
-
-            if new_orient[0] < 0:
-                new_orient = -new_orient
-
-            new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
-            
-            if env.state_est:
-                state[1:5] = torch.FloatTensor(new_orient)
-                state[14:17] = torch.FloatTensor(new_translationalVelocity)
-                # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
-            else:
-                state[2:6] = torch.FloatTensor(new_orient)
-                state[20:23] = torch.FloatTensor(new_translationalVelocity)
-
             if hasattr(env, 'simrate'):
                 start = time.time()
+
+            if (not env.vis.ispaused()):
+                # Update Orientation
+                quaternion = euler2quat(z=orient_add, y=0, x=0)
+                iquaternion = inverse_quaternion(quaternion)
+
+                if env.state_est:
+                    curr_orient = state[1:5]
+                    curr_transvel = state[14:17]
+                else:
+                    curr_orient = state[2:6]
+                    curr_transvel = state[20:23]
                 
-            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
-            state, reward, done, _ = env.step(action)
+                new_orient = quaternion_product(iquaternion, curr_orient)
+
+                if new_orient[0] < 0:
+                    new_orient = -new_orient
+
+                new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+                
+                if env.state_est:
+                    state[1:5] = torch.FloatTensor(new_orient)
+                    state[14:17] = torch.FloatTensor(new_translationalVelocity)
+                    # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+                else:
+                    state[2:6] = torch.FloatTensor(new_orient)
+                    state[20:23] = torch.FloatTensor(new_translationalVelocity)          
+                    
+                action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+                state, reward, done, _ = env.step(action)
+                
+                eval_reward += reward
+                timesteps += 1
+
+                if args.no_viz:
+                    yaw = quaternion2euler(new_orient)[2]
+                    print("stp = {}  yaw = {:.2f}  spd = {}  ep_r = {:.2f}  stp_r = {:.2f}".format(timesteps, yaw, speed, eval_reward, reward))
+
             if visualize:
-                env.render()
-            eval_reward += reward
-            timesteps += 1
-
-            if args.no_viz:
-                yaw = quaternion2euler(new_orient)[2]
-                print("stp = {}  yaw = {:.2f}  spd = {}  ep_r = {:.2f}  stp_r = {:.2f}".format(timesteps, yaw, speed, eval_reward, reward))
-
+                render_state = env.render()
             if hasattr(env, 'simrate'):
                 # assume 30hz (hack)
                 end = time.time()

@@ -275,7 +275,6 @@ class CassieEnv_noaccel_footdist_omniscient:
         # print("mir obs len: ", len(mirrored_obs))
         # print("obs_size: ", obs_size)
         
-        exit()
         # observation_space = np.concatenate([observation_space, np.zeros(32+26+3)])
         
 
@@ -431,7 +430,7 @@ class CassieEnv_noaccel_footdist_omniscient:
         self.time = 0
         self.counter = 0
         self.orient_add = 0
-        self.orient_time = 500
+        self.orient_time = np.inf
         self.y_offset = 0
         self.phase_add = 1
 
