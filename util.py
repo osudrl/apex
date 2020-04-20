@@ -150,7 +150,7 @@ def eval_policy(policy, args, run_args):
     import termios
     import select
     import numpy as np
-    from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient
+    from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_noaccel_footdist
 
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
@@ -164,6 +164,8 @@ def eval_policy(policy, args, run_args):
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     elif args.env_name == "CassieNoaccelFootDistOmniscient":
         env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif args.env_name == "CassieNoaccelFootDist":
+        env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     else:
         env = CassieStandingEnv(state_est=run_args.state_est)
     
