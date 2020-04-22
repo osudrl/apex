@@ -201,6 +201,12 @@ def eval_policy(policy, args, run_args):
                     speed += 0.1
                 elif c == 's':
                     speed -= 0.1
+                elif c == 'j':
+                    env.phase_add += .1
+                    print("Increasing frequency to: {:.1f}".format(env.phase_add))
+                elif c == 'h':
+                    env.phase_add -= .1
+                    print("Decreasing frequency to: {:.1f}".format(env.phase_add))
                 elif c == 'l':
                     orient_add += .1
                     print("Increasing orient_add to: ", orient_add)
