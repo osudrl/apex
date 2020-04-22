@@ -106,7 +106,7 @@ def create_logger(args):
     run_name = arg_dict.pop('run_name')
     seed = str(arg_dict.pop("seed"))
     logdir = str(arg_dict.pop('logdir'))
-    env_name = str(arg_dict.pop('env_name'))
+    env_name = str(arg_dict['env_name'])
 
     # see if this run has a unique name, if so then that is going to be the name of the folder, even if it overrirdes
     if run_name is not None:
@@ -158,13 +158,13 @@ def eval_policy(policy, args, run_args):
     max_traj_len = args.traj_len
     visualize = not args.no_viz
     print("env name: ", args.env_name)
-    if args.env_name == "Cassie-v0":
+    if run_args.env_name == "Cassie-v0":
         env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif args.env_name == "CassiePlayground-v0":
+    elif run_args.env_name == "CassiePlayground-v0":
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif args.env_name == "CassieNoaccelFootDistOmniscient":
+    elif run_args.env_name == "CassieNoaccelFootDistOmniscient":
         env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif args.env_name == "CassieNoaccelFootDist":
+    elif run_args.env_name == "CassieNoaccelFootDist":
         env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     else:
         env = CassieStandingEnv(state_est=run_args.state_est)
