@@ -5,7 +5,7 @@ from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 from .trajectory import CassieTrajectory, getAllTrajectories
 from cassie.quaternion_function import *
 from .rewards import *
-from .missions import CommandTrajectory
+from .missions import CommandTrajectory, add_waypoints
 
 from math import floor
 
@@ -18,8 +18,24 @@ import pickle
 import torch
 
 class CassiePlayground:
-  def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="command", history=0):
-      self.sim = CassieSim("./cassie/cassiemujoco/cassie_copy.xml")
+  def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="command", history=0, mission=None):
+      
+      # Only use mission argument for visualizing the waypoints in a test.
+      if mission != None:
+          dirname = os.path.dirname(__file__)
+          input_file = os.path.join(dirname, "cassiemujoco", "cassie.xml")
+          output_file = os.path.join(dirname, "cassiemujoco", "cassie_waypoints.xml")
+          waypoints_file = os.path.join(dirname, "missions", mission, "waypoints.csv")
+          add_waypoints(input_file, output_file, waypoints_file)
+      else:
+          mission = "default"
+
+      dirname = os.path.dirname(__file__)
+      traj_path = os.path.join(dirname, "missions", mission)
+      self.command_traj = CommandTrajectory(traj_path)
+      self.last_position = [0.0, 0.0, 1.0]
+
+      self.sim = CassieSim("./cassie/cassiemujoco/cassie_waypoints.xml")
       self.vis = None
 
       self.reward_func = reward
@@ -46,11 +62,6 @@ class CassiePlayground:
               traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
           self.trajectory = CassieTrajectory(traj_path)
           self.speed = 0
-
-      dirname = os.path.dirname(__file__)
-      traj_path = os.path.join(dirname, "missions", "command_trajectory.pkl")
-      self.command_traj = CommandTrajectory(traj_path)
-      self.last_position = [0.0, 0.0, 1.0]
 
       self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
 
