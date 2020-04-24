@@ -38,6 +38,7 @@ class CassieEnv_v2:
             self.speed = self.speeds[0]
             self.trajectory = self.trajectories[0]
             self.aslip_traj = True
+            self.clock_based = False
         else:
             self.aslip_traj = False
             if traj == "walking":
