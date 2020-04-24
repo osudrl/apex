@@ -22,13 +22,13 @@ _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # Initialize libcassiesim
 cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_waypoints.xml"))
 # cassie_mujoco_init(str.encode("../model/cassie.xml"))
 
 
 # Interface classes
 class CassieSim:
     def __init__(self, modelfile):
-        #cassie_mujoco_init(str.encode(_dir_path+modelfile.encode('utf-8')))
         self.c = cassie_sim_init(modelfile.encode('utf-8'))
         self.nv = 32
         self.nbody = 26

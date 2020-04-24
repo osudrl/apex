@@ -46,8 +46,8 @@ def get_ref_aslip_ext_state(self, phase=None, offset=None):
     if offset is not None:
         cpos[2] += offset
         # need to update these because they 
-        lpos[2] += offset
-        rpos[2] += offset
+        lpos[2] -= offset
+        rpos[2] -= offset
 
     return rpos, rvel, lpos, lvel, cpos, cvel
 
@@ -136,25 +136,26 @@ def aslip_TaskSpace_reward(self, action):
     phase_to_match = self.phase + 1
 
     # offset now directly in trajectories
-    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_ext_state(self, phase_to_match, offset=None)
+    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_ext_state(self, phase_to_match, offset=0.1)
 
     footpos_error        = 0
     compos_error         = 0
     com_vel_error        = 0
-    action_penalty       = 0
     foot_orient_penalty  = 0
 
     # enforce distance between feet and com
     lfoot = self.cassie_state.leftFoot.position[:]
     rfoot = self.cassie_state.rightFoot.position[:]
-    for j in [0, 1, 2]:
-        footpos_error += np.linalg.norm(lfoot[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot[j] - ref_rfoot[j])
+    footpos_error += np.linalg.norm(lfoot - ref_lfoot)
+    # for j in [0, 1, 2]:
+    #     footpos_error += np.linalg.norm(lfoot[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot[j] - ref_rfoot[j])
     
     # enforce com position matching
     com_pos = self.cassie_state.pelvis.position[:]
     com_pos[2] -= self.cassie_state.terrain.height
-    for j in [0, 1, 2]:
-        compos_error += np.linalg.norm(ref_cpos[j] - com_pos[j])
+    compos_error += np.linalg.norm(ref_cpos - com_pos)
+    # for j in [0, 1, 2]:
+    #     compos_error += np.linalg.norm(ref_cpos[j] - com_pos[j])
     
     if self.debug:
         print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
@@ -165,28 +166,24 @@ def aslip_TaskSpace_reward(self, action):
 
     # try to match com velocity
     cvel = self.cassie_state.pelvis.translationalVelocity
-    for j in [0, 1, 2]:
-        com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
-
-    # action smoothing penalty
-    action_penalty = np.linalg.norm(action - self.prev_action)
+    com_vel_error += np.linalg.norm(cvel - ref_cvel)
+    # for j in [0, 1, 2]:
+    #     com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
 
     # foot orientation penalty
     foot_orient_penalty = self.l_foot_orient + self.r_foot_orient
 
-    reward = 0.3 * np.exp(-footpos_error) +    \
-             0.1 * np.exp(-compos_error) +    \
-             0.3 * np.exp(-com_vel_error) +    \
-             0.2 * np.exp(-action_penalty) +     \
-             0.1 * np.exp(-foot_orient_penalty)
+    reward = 0.2 * np.exp(-footpos_error) +    \
+             0.2 * np.exp(-footpos_error) +    \
+             0.4 * np.exp(-com_vel_error) +    \
+             0.2 * np.exp(-foot_orient_penalty)
 
-    if self.debug:
-        print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\com_pos:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\naction_penalty:\t{6:.2f}, % = {7:.2f}\nfoot_orient_penalty:\t{8:.2f}, % = {9:.2f}\n\n".format(
-        0.3 * np.exp(-footpos_error),          0.3 * np.exp(-footpos_error) / reward * 100,
-        0.1 * np.exp(-compos_error),           0.1 * np.exp(-compos_error) / reward * 100,
-        0.3 * np.exp(-com_vel_error),          0.3 * np.exp(-com_vel_error) / reward * 100,
-        0.2 * np.exp(-action_penalty),         0.2 * np.exp(-action_penalty) / reward * 100,
-        0.1 * np.exp(-foot_orient_penalty),    0.1 * np.exp(-foot_orient_penalty) / reward * 100,
+    if True:
+        print("reward: {8}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_pos:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\nfoot_orient_penalty:\t{6:.2f}, % = {7:.2f}\n\n".format(
+        0.2 * np.exp(-footpos_error),          0.4 * np.exp(-footpos_error) / reward * 100,
+        0.2 * np.exp(-compos_error),           0.3 * np.exp(-compos_error) / reward * 100,
+        0.4 * np.exp(-com_vel_error),          0.4 * np.exp(-com_vel_error) / reward * 100,
+        0.2 * np.exp(-foot_orient_penalty),    0.2 * np.exp(-foot_orient_penalty) / reward * 100,
         reward
         )
         )
