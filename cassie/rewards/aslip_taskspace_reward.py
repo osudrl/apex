@@ -178,7 +178,7 @@ def aslip_TaskSpace_reward(self, action):
              0.4 * np.exp(-com_vel_error) +    \
              0.2 * np.exp(-foot_orient_penalty)
 
-    if True:
+    if self.debug:
         print("reward: {8}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_pos:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\nfoot_orient_penalty:\t{6:.2f}, % = {7:.2f}\n\n".format(
         0.2 * np.exp(-footpos_error),          0.4 * np.exp(-footpos_error) / reward * 100,
         0.2 * np.exp(-compos_error),           0.3 * np.exp(-compos_error) / reward * 100,
