@@ -16,8 +16,11 @@ import copy
 import pickle
 
 class CassieEnv_v2:
-    def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
+        dirname = os.path.dirname(__file__)
+        xml_path = os.path.join(dirname, "cassiemujoco", "cassie.xml")
+        self.sim = CassieSim(xml_path)
+        # self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
 
         self.reward_func = reward
@@ -37,7 +40,6 @@ class CassieEnv_v2:
             self.aslip_traj = True
         else:
             self.aslip_traj = False
-            dirname = os.path.dirname(__file__)
             if traj == "walking":
                 traj_path = os.path.join(dirname, "trajectory", "stepdata.bin")
             elif traj == "stepping":
@@ -63,7 +65,7 @@ class CassieEnv_v2:
         self.cassie_state = state_out_t()
 
         self.simrate = simrate # simulate X mujoco steps with same pd target
-                                # 60 brings simulation from 2000Hz to roughly 30Hz
+                                # 50 brings simulation from 2000Hz to exactly 40Hz
 
         self.time    = 0 # number of time steps in current episode
         self.phase   = 0 # portion of the phase the robot is in
@@ -94,8 +96,10 @@ class CassieEnv_v2:
 
         # global flat foot orientation, can be useful part of reward function:
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
-        self.avg_lfoot_quat = np.zeros(4)
-        self.avg_rfoot_quat = np.zeros(4)
+        
+        # tracking various variables for reward funcs
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
 
         #### Dynamics Randomization ####
         self.dynamics_randomization = False
@@ -273,9 +277,21 @@ class CassieEnv_v2:
         self.cassie_state = self.sim.step_pd(self.u)
 
     def step(self, action, return_omniscient_state=False):
-        for _ in range(self.simrate):
+        
+        # reset mujoco tracking variables
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
+
+        for i in range(self.simrate):
             self.step_simulation(action)
+            # Foot Orientation Cost
+            self.l_foot_orient += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
+            self.r_foot_orient += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
                
+        self.l_foot_orient      /= self.simrate
+        self.r_foot_orient      /= self.simrate
+
+
         height = self.sim.qpos()[2]
         self.curr_action = action
 
@@ -290,10 +306,6 @@ class CassieEnv_v2:
         done = not(height > 0.4 and height < 3.0)
 
         reward = self.compute_reward(action)
-
-        # reset avg foot quaternion
-        self.avg_lfoot_quat = np.zeros(4)
-        self.avg_rfoot_quat = np.zeros(4)
 
         # update previous action
         self.prev_action = action
@@ -345,6 +357,10 @@ class CassieEnv_v2:
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
         self.orient_time = 500#random.randint(50, 200) 
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
+
+        # reset mujoco tracking variables
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
 
         if self.dynamics_randomization:
             #### Dynamics Randomization ####
@@ -403,6 +419,10 @@ class CassieEnv_v2:
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
+
+        # reset mujoco tracking variables
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
 
         if self.dynamics_randomization:
             # self.sim.set_dof_damping(self.default_damping)

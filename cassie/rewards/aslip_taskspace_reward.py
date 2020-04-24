@@ -108,7 +108,7 @@ def aslip_reward(self, action):
     action_penalty = np.linalg.norm(action - self.prev_action)
 
     # foot orientation penalty
-    foot_orient_penalty = np.linalg.norm(self.avg_rfoot_quat - self.neutral_foot_orient) + np.linalg.norm(self.avg_lfoot_quat - self.neutral_foot_orient)
+    foot_orient_penalty = self.l_foot_orient + self.r_foot_orient
 
     reward = 0.3 * np.exp(-joint_error) +       \
                 0.175 * np.exp(-footpos_error) +    \
@@ -171,8 +171,8 @@ def aslip_TaskSpace_reward(self, action):
     # action smoothing penalty
     action_penalty = np.linalg.norm(action - self.prev_action)
 
-    # global foot orientation penalty
-    foot_orient_penalty = np.linalg.norm(self.avg_rfoot_quat - self.neutral_foot_orient) + np.linalg.norm(self.avg_lfoot_quat - self.neutral_foot_orient)
+    # foot orientation penalty
+    foot_orient_penalty = self.l_foot_orient + self.r_foot_orient
 
     reward = 0.3 * np.exp(-footpos_error) +    \
              0.1 * np.exp(-compos_error) +    \
