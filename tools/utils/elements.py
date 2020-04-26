@@ -41,6 +41,7 @@ class Robot:
         self.positions = trajectory.positions
         self.velocities = trajectory.vels
         self.thetas = trajectory.thetas
+        self.accels = trajectory.accels
         self.trajlen = len(trajectory.positions)
         
         # ground truth's position:
@@ -62,6 +63,7 @@ class Robot:
 
     def update(self,time_passed):
 
+        curr_accel = self.accels[self.counter]
         curr_vel = self.velocities[self.counter]
         curr_theta = self.thetas[self.counter]
         track_pos = self.positions[self.counter]
@@ -74,10 +76,10 @@ class Robot:
         # follower's new position: execute angle and velocity command for time passed
         t_diff = time_passed - self.prev_time
         vx, vy = curr_vel * np.cos(curr_theta), curr_vel * np.sin(curr_theta)
-        # ax, ay = curr_accel * np.cos(curr_theta), curr_accel * np.sin(curr_theta)
+        ax, ay = curr_accel * np.cos(curr_theta), curr_accel * np.sin(curr_theta)
         # gotta subtract the y velocity add because pygame counts y from top down
-        # self.f_px, self.f_py = self.f_px + vx * t_diff + 0.5 * ax * t_diff**2, self.f_py - vy * t_diff + 0.5 * ay * t_diff**2
-        self.f_px, self.f_py = self.f_px + vx * t_diff, self.f_py - vy * t_diff
+        self.f_px, self.f_py = self.f_px + vx * t_diff + 0.5 * ax * t_diff**2, self.f_py - vy * t_diff + 0.5 * ay * t_diff**2
+        # self.f_px, self.f_py = self.f_px + vx * t_diff, self.f_py - vy * t_diff
 
         # increment t_idx on 30 Hz cycle
         if time_passed - self.prev_inc_time > (1 / self.frequency):
@@ -122,11 +124,12 @@ class Waypoint:
         pygame.draw.circle(screen, self.color, (self.px, self.py), self.radius)
 
 class Trajectory:
-    def __init__(self, t_new, positions, thetas, vels):
+    def __init__(self, t_new, positions, thetas, vels, accels):
         self.param = t_new
         self.positions = positions
         self.thetas = thetas
         self.vels = vels
+        self.accels = accels
         self.width = 2
         self.color = (100,200,100)
         self.arrow_color = (200,200,200)

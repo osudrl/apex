@@ -1,9 +1,11 @@
 import pickle
 import numpy as np
+import os
 
 class CommandTrajectory:
-    def __init__(self, filepath):
-        with open(filepath, "rb") as f:
+    def __init__(self, mission_name):
+        mission_path = os.path.join(mission_name, "command_trajectory.pkl")
+        with open(mission_path, "rb") as f:
             trajectory = pickle.load(f)
 
         self.global_pos = np.copy(trajectory["compos"])

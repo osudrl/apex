@@ -1,7 +1,8 @@
-from cassie import CassieEnv
+from cassie import CassieEnv, CassiePlayground
 from rl.policies.actor import GaussianMLP_Actor
 from tools.test_commands import *
 from tools.eval_perturb import *
+from tools.eval_mission import *
 from collections import OrderedDict
 
 import torch
@@ -28,6 +29,8 @@ parser.add_argument("--pert_size", type=float, default=200, help="Size of pertur
 parser.add_argument("--pert_incr", type=float, default=10.0, help="How much to increment the perturbation size after each success")
 parser.add_argument("--pert_body", type=str, default="cassie-pelvis", help="Body to apply perturbation to")
 parser.add_argument("--num_angles", type=int, default=4, help="How many angles to test (angles are evenly divided into 2*pi)")
+# Test Mission args
+parser.add_argument("--viz", default=False, action='store_true')
 
 args = parser.parse_args()
 run_args = pickle.load(open(os.path.join(args.path, "experiment.pkl"), "rb"))
@@ -68,6 +71,21 @@ elif args.test == "perturb":
         save_data = compute_perturbs_multi(env_fn, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size, 
                     perturb_incr=args.pert_incr, perturb_body=args.pert_body, num_angles=args.num_angles, num_procs=args.n_procs)
     np.save(os.path.join(args.path, "eval_perturbs.npy"), save_data)
+elif args.test == "mission":
+    missions = ["straight", "curvy", "90_left", "90_right"]
+    if not args.viz:
+        print("Testing missions")
+        save_data = []
+       
+        for mission in missions:
+            print(mission + " mission:")
+            cassie_env = CassiePlayground(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, mission=mission)
+            save_data.append(eval_mission(cassie_env, policy))
+        np.save(os.path.join(args.path, "eval_missions.npy"), save_data)
+    else:
+        save_data = np.load(os.path.join(args.path, "eval_missions.npy"), allow_pickle=True)
+        plot_mission_data(save_data, missions)
+
 
 
 # vis_commands(cassie_env, policy, num_steps=200, num_commands=6, max_speed=3, min_speed=0)

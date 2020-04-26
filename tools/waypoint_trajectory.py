@@ -1,7 +1,7 @@
 import pygame
 from utils.elements import Mouse, Robot, Waypoint, Trajectory, Grid
 
-from scipy.interpolate import make_interp_spline, BSpline, interp1d, PchipInterpolator, UnivariateSpline
+from scipy.interpolate import make_interp_spline, BSpline, interp1d, PchipInterpolator, UnivariateSpline, CubicSpline
 from scipy.integrate import quad
 
 import matplotlib.pyplot as plt
@@ -78,53 +78,32 @@ class World:
             # pchip interpolation --- position
             pos_spl = PchipInterpolator(t, np.c_[x,y])
             x_new, y_new = pos_spl(t_new).T
-            points = [list(t) for t in zip(x_new, y_new)]
+
+            # For some very stupid reason, the derivative of parametric spline in scipy doesn't return sensible values, so creating a new unparamtrized spline
+            actual_time = np.linspace(0, len(self.waypoints)*TIME_BETWEEN_WAYPOINTS, x_new.shape[0])
+            # dt, dx, dy = np.diff(actual_time), np.diff(x_new), np.diff(y_new)
+            # dxdt, dydt = np.divide(dx, dt), np.divide(dy, dt)
             
+            dxdt, dydt = np.gradient(x_new, actual_time), np.gradient(y_new, actual_time)
+            vels = np.sqrt( np.power(dxdt, 2) + np.power(dydt, 2))
+
+            # animated_plot(actual_time, dxdt, dydt) # velocity components
+
+            # get acceleration
+            d2xdt2, d2ydt2 = np.gradient(dxdt, actual_time), np.gradient(dydt, actual_time)
+            accels = np.sqrt( np.power(d2xdt2, 2) + np.power(d2ydt2, 2))
+
+            # animated_plot(actual_time, d2xdt2, d2ydt2) # acceleration components
+
+            # recalculate positions in terms of computed vels and accelerations
+            points = [list(t) for t in zip(x_new, y_new)]
+
             # get theta data
             theta_new = [np.arctan2((SCREEN_HEIGHT-y_new[i]) - (SCREEN_HEIGHT-y_new[i-1]), x_new[i] - x_new[i-1]) for i in range(1, len(points))]
-            theta_new.append(0.0)
-
-            # get velocity data with finite differencing
-            # vel_spl = pos_spl.derivative()
-            vx_new, vy_new = np.divide(np.diff(x_new), (1/frequency)), np.divide(np.diff(y_new), (1/frequency))
-            # set final velocity to be zero
-            vx_new = np.append(vx_new, 0.0)
-            vy_new = np.append(vy_new, 0.0)
-            # vx_new, vy_new = vel_spl(t_new).T
-            # Mean Value Theorem to obtain average velocity between intervals
-            # instant_vels = np.sqrt( np.power(vx_new, 2) + np.power(vy_new, 2))
-            # vels = [abs((instant_vels[i] + instant_vels[i-1]) / 2)  for i in range(1, len(instant_vels))]
-            # vels.append(0.0)
-            vels = np.sqrt( np.power(vx_new, 2) + np.power(vy_new, 2))
-
-            # print(vels)
-            # input()
-
-            # ax_new, ay_new = np.divide(np.diff(vx_new), (1/frequency)), np.divide(np.diff(vy_new), (1/frequency))
-            # ax_new = np.append(ax_new, 0.0)
-            # ay_new = np.append(ay_new, 0.0)
-            # accel = np.sqrt( np.power(ax_new, 2) + np.power(ay_new, 2))
-            # accel_spl = vel_spl.derivative()
-            # accel = accel_spl(t_new)
-            # animated_plot(t_new, x_new, y_new)
-            # animated_plot(t_new, ax_new, ay_new)
-            # plt.plot(t_new, accel, label="accel")
-            # print(vels)
-            # input()
-            # vels = [np.sqrt(np.power(x_new[i] - x_new[i-1], 2) + np.power(y_new[i] - y_new[i-1], 2) / (1 / frequency) ) for i in range(1, len(points))]
-            # vels.insert(0, 0.0)
-
-            # vel_spl = pos_spl.derivative()
-            # print(vel_spl(t_new))
-            # xdot, ydot = vel_spl(t_new).T
-            # vmag = np.sqrt(np.power(xdot, 2) + np.power(ydot, 2))
-            # print((xdot, ydot))
-            # input()
-            # vels = [ (vmag[i] - vmag[i-1]) / (1 / frequency) for i in range(1, len(points))]
-            # print("\nposes:\n{}\n\nthetas:\n{}\n\nvels:\n{}\n\n".format(points, theta_new, vels))
+            theta_new = [theta_new[0]] + theta_new
 
             # send to trajectory
-            self.trajectory = Trajectory(t_new, points, theta_new, vels)
+            self.trajectory = Trajectory(t_new, points, theta_new, vels, accels)
             if self.robot is not None:
                 self.robot.trajectory = self.trajectory.positions
             return t_new, x_new, y_new, theta_new, vels, pos_spl
