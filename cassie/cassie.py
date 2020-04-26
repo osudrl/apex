@@ -477,8 +477,9 @@ class CassieEnv_v2:
     # Helper function for updating the speed, used in visualization tests
     def update_speed(self, new_speed):
         if self.aslip_traj:
-            self.speed = new_speed
-            self.trajectory = self.trajectories[(np.abs(self.speeds - self.speed)).argmin()]
+            idx = (np.abs(self.speeds - new_speed)).argmin()
+            self.speed = idx / 10
+            self.trajectory = self.trajectories[idx]
             old_phaselen = self.phaselen
             self.phaselen = self.trajectory.length - 1
             # update phase
@@ -488,6 +489,13 @@ class CassieEnv_v2:
             self.offset = ref_pos[self.pos_idx]
         else:
             self.speed = new_speed
+        
+        # Make sure that if speed is above 2, freq is at least 1.2
+        if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
+            self.phase_add = 1.3 + 0.7*random.random()
+        else:
+            self.phase_add = 1 + random.random()
+
 
     def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())
@@ -501,6 +509,8 @@ class CassieEnv_v2:
             return aslip_reward(self, action)
         elif self.reward_func == "aslip_TaskSpace":
             return aslip_TaskSpace_reward(self, action)
+        elif self.reward_func == "aslip_DirectMatch":
+            return aslip_DirectMatch_reward(self, action)
         elif self.reward_func == "iros_paper":
             return iros_paper_reward(self)
         else:
@@ -581,7 +591,7 @@ class CassieEnv_v2:
                 ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.phaselen - 1))
             else:
                 ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.phase))
-        
+
         # OTHER TRAJECTORY
         else:
             ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
