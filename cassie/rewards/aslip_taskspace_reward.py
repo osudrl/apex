@@ -73,7 +73,7 @@ def aslip_reward(self, action):
     foot_orient_penalty  = 0
 
     # enforce distance between feet and com
-    ref_rfoot, ref_lfoot  = self.get_ref_footdist(self.phase + 1)
+    ref_rfoot, ref_lfoot  = get_ref_footdist(self.phase + 1)
 
     # left foot
     lfoot = self.cassie_state.leftFoot.position[:]
