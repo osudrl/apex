@@ -291,7 +291,11 @@ class PPO:
         with torch.no_grad():
           kl = kl_divergence(pdf, old_pdf)
 
-        return actor_loss.item(), pdf.entropy().mean().item(), critic_loss.item(), ratio.mean().item(), kl.mean().item(), mirror_loss.item()
+        if mirror_observation is not None and mirror_action is not None:
+            mirror_loss_return = mirror_loss.item()
+        else:
+            mirror_loss_return = 0
+        return actor_loss.item(), pdf.entropy().mean().item(), critic_loss.item(), ratio.mean().item(), kl.mean().item(), mirror_loss_return
 
     def train(self,
               env_fn,
@@ -318,8 +322,7 @@ class PPO:
                 obs_mirr = env.mirror_observation
 
         if hasattr(env, 'mirror_action'):
-          act_mirr = env.mirror_action
-
+            act_mirr = env.mirror_action
 
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))

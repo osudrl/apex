@@ -28,6 +28,7 @@ cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 # Interface classes
 class CassieSim:
     def __init__(self, modelfile):
+        #cassie_mujoco_init(str.encode(_dir_path+modelfile.encode('utf-8')))
         self.c = cassie_sim_init(modelfile.encode('utf-8'))
         self.nv = 32
         self.nbody = 26

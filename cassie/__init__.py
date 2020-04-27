@@ -3,6 +3,7 @@ from .cassie import CassieEnv_v2 as CassieEnv
 from .cassie_standing_env import CassieStandingEnv
 from .cassie import CassieEnv_v2
 from .cassie_noaccel_footdist_omniscient import CassieEnv_noaccel_footdist_omniscient
+from .cassie_noaccel_footdist_env import CassieEnv_noaccel_footdist
 
 
 

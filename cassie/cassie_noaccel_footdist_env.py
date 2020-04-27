@@ -15,7 +15,7 @@ import copy
 
 import pickle
 
-class CassieEnv_noaccel_footdist_omniscient:
+class CassieEnv_noaccel_footdist:
     def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -255,17 +255,11 @@ class CassieEnv_noaccel_footdist_omniscient:
             mirrored_obs = np.concatenate([mirrored_obs, mirrored_traj_sign])
             obs_size += ref_traj_size
 
-        # print("mirrored obs no traj: ", mirrored_obs)
         # NOTE: mirror loss only set up for clock based with state estimation so far. 
-        damp_mirror = len(mirrored_obs) + np.array([0, 1, 2, 3, 4, 5, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-                        6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
-        mass_mirror = len(mirrored_obs) + 32 + np.array([0, 1, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
-        fric_mirror = len(mirrored_obs) + 32 + 26 + np.array([0, 1, 2])
-        mirrored_obs = np.concatenate([np.array(mirrored_obs), damp_mirror, mass_mirror, fric_mirror])
-        obs_size += 32+26+3
         observation_space = np.zeros(obs_size)
-        check_arr = np.arange(obs_size, dtype=np.float64)
-        check_arr[0] = 0.1
+
+        # check_arr = np.arange(obs_size, dtype=np.float64)
+        # check_arr[0] = 0.1
         # print("mir obs check: ", np.all(np.sort(np.abs(mirrored_obs)) == check_arr))
         # print("mir obs check: ", np.sort(np.abs(mirrored_obs)))
         # print("mir obs check: ", np.sort(np.abs(mirrored_obs)) == check_arr)
@@ -275,6 +269,7 @@ class CassieEnv_noaccel_footdist_omniscient:
         # print("mir obs len: ", len(mirrored_obs))
         # print("obs_size: ", obs_size)
         
+        # exit()
         # observation_space = np.concatenate([observation_space, np.zeros(32+26+3)])
         
 
@@ -430,7 +425,7 @@ class CassieEnv_noaccel_footdist_omniscient:
         self.time = 0
         self.counter = 0
         self.orient_add = 0
-        self.orient_time = np.inf
+        self.orient_time = 500
         self.y_offset = 0
         self.phase_add = 1
 
@@ -617,13 +612,11 @@ class CassieEnv_noaccel_footdist_omniscient:
             self.cassie_state.joint.velocity[:]                                      # unactuated joint velocities
         ])
 
-        # Make dynamics parameters vector
-        dyn_state = np.concatenate([self.damp_noise, self.mass_noise, self.fric_noise])
-
+        #TODO: Set up foot position for non state est
         if self.state_est:
-            state = np.concatenate([robot_state, ext_state, dyn_state])
+            state = np.concatenate([robot_state, ext_state])
         else:
-            state = np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state, dyn_state])
+            state = np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
 
         self.state_history.insert(0, state)
         self.state_history = self.state_history[:self.history+1]

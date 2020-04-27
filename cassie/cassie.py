@@ -16,7 +16,10 @@ import copy
 import pickle
 
 class CassieEnv_v2:
-    def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
+    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
+        dirname = os.path.dirname(__file__)
+        #xml_path = os.path.join(dirname, "cassiemujoco", "cassie.xml")
+        #self.sim = CassieSim(xml_path)
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
 
@@ -35,9 +38,9 @@ class CassieEnv_v2:
             self.speed = self.speeds[0]
             self.trajectory = self.trajectories[0]
             self.aslip_traj = True
+            self.clock_based = False
         else:
             self.aslip_traj = False
-            dirname = os.path.dirname(__file__)
             if traj == "walking":
                 traj_path = os.path.join(dirname, "trajectory", "stepdata.bin")
             elif traj == "stepping":
@@ -63,7 +66,7 @@ class CassieEnv_v2:
         self.cassie_state = state_out_t()
 
         self.simrate = simrate # simulate X mujoco steps with same pd target
-                                # 60 brings simulation from 2000Hz to roughly 30Hz
+                                # 50 brings simulation from 2000Hz to exactly 40Hz
 
         self.time    = 0 # number of time steps in current episode
         self.phase   = 0 # portion of the phase the robot is in
@@ -94,8 +97,10 @@ class CassieEnv_v2:
 
         # global flat foot orientation, can be useful part of reward function:
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
-        self.avg_lfoot_quat = np.zeros(4)
-        self.avg_rfoot_quat = np.zeros(4)
+        
+        # tracking various variables for reward funcs
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
 
         #### Dynamics Randomization ####
         self.dynamics_randomization = False
@@ -199,35 +204,36 @@ class CassieEnv_v2:
         # Find the mirrored trajectory
         if self.aslip_traj:
             ref_traj_size = 18
-            mirror_taskspace = [6,7,8,9,10,11,0,1,2,3,4,5,12,13,14,15,16,17]
-            mirrored_traj = [x + state_est_size for x in mirror_taskspace] if self.state_est else [x + mjstate_size for x in mirror_taskspace]
+            mirrored_traj = np.array([6,7,8,9,10,11,0.1,1,2,3,4,5,12,13,14,15,16,17])
         else:
             ref_traj_size = 40
-            if self.state_est:
-                mirrored_traj = [ 46,  47,  48,  49,  50,  51, -59, -60,  61,  62,  63,  64,  65, -52, -53,  54,  55,  56,  57,  58,  66,  67,  68,  69,  70,  71,-79, -80,  81,  82,  83,  84,  85, -72, -73,  74,  75,  76,  77, 78]
-            else:
-                mirrored_traj = [ 42,  43,  44,  45,  46,  47, -55, -56,  57,  58,  59,  60,  61, -48, -49,  50,  51,  52,  53,  54,  62,  63,  64,  65,  66,  67, -75, -76,  77,  78,  79,  80,  81, -68, -69,  70,  71,  72,  73, 74]
-
-        # construct mirrored observations for clock-based
-        if self.clock_based:
-            if self.state_est:
-                observation_space = np.zeros(state_est_size + clock_size + speed_size)
-                clock_inds = [46, 47]
-                mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42, 46, 47, 48]
-            else:
-                observation_space = np.zeros(mjstate_size + clock_size + speed_size)
-                clock_inds = [40, 41]
-                mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32, 40, 41, 42]
-        
-        # construct mirrored observations for traj-based. Here we assume that traj-based has no speed input
+            mirrored_traj = np.array([0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12,
+                                        20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
+            
+        if self.state_est:
+            base_mir_obs = np.array([0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42])
+            obs_size = state_est_size
         else:
-            if self.state_est:
-                observation_space = np.zeros(state_est_size + ref_traj_size)
-                mirrored_obs = [0.1, 1, 2, 3, 4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, 16, 17, 18, 19, 20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, 32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42] + mirrored_traj
-            else:
-                observation_space = np.zeros(mjstate_size + ref_traj_size)
-                mirrored_obs = [0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32] + mirrored_traj
+            base_mir_obs = np.array([0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
+            obs_size = mjstate_size
+        if self.clock_based:
+            append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+speed_size)])
+            mirrored_obs = np.concatenate([base_mir_obs, append_obs])
+            clock_inds = append_obs[0:clock_size].tolist()
+            obs_size += clock_size + speed_size
+        else:
+            mirrored_traj_sign = np.multiply(np.sign(mirrored_traj), obs_size+np.floor(np.abs(mirrored_traj)))
+            mirrored_obs = np.concatenate([base_mir_obs, mirrored_traj_sign])
             clock_inds = None
+            obs_size += ref_traj_size
+
+        observation_space = np.zeros(obs_size)
+        mirrored_obs = mirrored_obs.tolist()
+
+        # check_arr = np.arange(obs_size, dtype=np.float64)
+        # check_arr[0] = 0.1
+        # print("mir obs check: ", np.all(np.sort(np.abs(mirrored_obs)) == check_arr))
+        # exit()
 
         return observation_space, clock_inds, mirrored_obs
 
@@ -272,9 +278,21 @@ class CassieEnv_v2:
         self.cassie_state = self.sim.step_pd(self.u)
 
     def step(self, action, return_omniscient_state=False):
-        for _ in range(self.simrate):
+        
+        # reset mujoco tracking variables
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
+
+        for i in range(self.simrate):
             self.step_simulation(action)
+            # Foot Orientation Cost
+            self.l_foot_orient += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
+            self.r_foot_orient += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
                
+        self.l_foot_orient      /= self.simrate
+        self.r_foot_orient      /= self.simrate
+
+
         height = self.sim.qpos()[2]
         self.curr_action = action
 
@@ -289,10 +307,6 @@ class CassieEnv_v2:
         done = not(height > 0.4 and height < 3.0)
 
         reward = self.compute_reward(action)
-
-        # reset avg foot quaternion
-        self.avg_lfoot_quat = np.zeros(4)
-        self.avg_rfoot_quat = np.zeros(4)
 
         # update previous action
         self.prev_action = action
@@ -345,6 +359,10 @@ class CassieEnv_v2:
         self.orient_time = 500#random.randint(50, 200) 
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
+        # reset mujoco tracking variables
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
+
         if self.dynamics_randomization:
             #### Dynamics Randomization ####
             # damp_noise = [np.random.uniform(a, b) for a, b in self.damp_range]
@@ -376,12 +394,12 @@ class CassieEnv_v2:
 
         return self.get_full_state()
 
-    def reset_for_test(self):
+    def reset_for_test(self, full_reset=False):
         self.phase = 0
         self.time = 0
         self.counter = 0
         self.orient_add = 0
-        self.orient_time = 500
+        self.orient_time = np.inf
         self.y_offset = 0
         self.phase_add = 1
 
@@ -395,53 +413,20 @@ class CassieEnv_v2:
         else:
             self.speed = 0
 
-        qpos, qvel = self.get_ref_state(self.phase)
+        if not full_reset:
+            qpos, qvel = self.get_ref_state(self.phase)
+            self.sim.set_qpos(qpos)
+            self.sim.set_qvel(qvel)
 
-        self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel)
-
-        # Need to reset u? Or better way to reset cassie_state than taking step
-        self.cassie_state = self.sim.step_pd(self.u)
-
-        if self.dynamics_randomization:
-            # self.sim.set_dof_damping(self.default_damping)
-            # self.sim.set_body_mass(self.default_mass)
-            # self.sim.set_body_ipos(self.default_ipos)
-            self.sim.set_geom_friction(self.default_fric)
-            self.sim.set_const()
-
-        if self.slope_rand:
-            self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
-
-        return self.get_full_state()
-
-    def full_reset(self):
-        self.phase = 0
-        self.time = 0
-        self.counter = 0
-        self.orient_add = 0
-        self.orient_time = 500
-        self.y_offset = 0
-        self.phase_add = 1
-
-        self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
-
-        if self.aslip_traj:
-            self.speed = 0
-            # print("current speed: {}".format(self.speed))
-            self.trajectory = self.trajectories[0] # switch the current trajectory
-            self.phaselen = self.trajectory.length - 1
+            # Need to reset u? Or better way to reset cassie_state than taking step
+            self.cassie_state = self.sim.step_pd(self.u)
         else:
-            self.speed = 0
-
-        self.sim.full_reset()
-
-        # Need to reset u? Or better way to reset cassie_state than taking step
-        self.cassie_state = self.sim.step_pd(self.u)
+            self.sim.full_reset()
+            self.reset_cassie_state()
 
         if self.dynamics_randomization:
-            # self.sim.set_dof_damping(self.default_damping)
-            # self.sim.set_body_mass(self.default_mass)
+            self.sim.set_dof_damping(self.default_damping)
+            self.sim.set_body_mass(self.default_mass)
             # self.sim.set_body_ipos(self.default_ipos)
             self.sim.set_geom_friction(self.default_fric)
             self.sim.set_const()
@@ -450,6 +435,19 @@ class CassieEnv_v2:
             self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
 
         return self.get_full_state()
+
+    def reset_cassie_state(self):
+        # Only reset parts of cassie_state that is used in get_full_state
+        self.cassie_state.pelvis.position[:] = [0, 0, 1.01]
+        self.cassie_state.pelvis.orientation[:] = [1, 0, 0, 0]
+        self.cassie_state.pelvis.rotationalVelocity[:] = np.zeros(3)
+        self.cassie_state.pelvis.translationalVelocity[:] = np.zeros(3)
+        self.cassie_state.pelvis.translationalAcceleration[:] = np.zeros(3)
+        self.cassie_state.terrain.height = 0
+        self.cassie_state.motor.position[:] = [0.0045, 0, 0.4973, -1.1997, -1.5968, 0.0045, 0, 0.4973, -1.1997, -1.5968]
+        self.cassie_state.motor.velocity[:] = np.zeros(10)
+        self.cassie_state.joint.position[:] = [0, 1.4267, -1.5968, 0, 1.4267, -1.5968]
+        self.cassie_state.joint.velocity[:] = np.zeros(6)
 
     # Helper function for updating the speed, used in visualization tests
     def update_speed(self, new_speed):

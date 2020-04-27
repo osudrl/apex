@@ -19,7 +19,7 @@ from functools import partial
 # simulating 2 cycle then to the given phase
 @torch.no_grad()
 def reset_to_phase(env, policy, phase):
-    state = torch.Tensor(env.full_reset())
+    state = torch.Tensor(env.reset_for_test(full_reset=True))
     env.speed = 0.5
     for i in range(2*(env.phaselen + 1)):
         action = policy(state, True)
@@ -39,7 +39,7 @@ def compute_perturbs(cassie_env, policy, wait_time=4, perturb_duration=0.2, pert
 
     # Get states at each phase:
     num_steps = cassie_env.phaselen + 1
-    state = torch.Tensor(cassie_env.full_reset())
+    state = torch.Tensor(cassie_env.reset_for_test(full_reset=True))
     max_force = np.zeros((num_steps, num_angles))
 
     eval_start = time.time()
@@ -147,7 +147,7 @@ def compute_perturbs_multi(env_fn, policy, wait_time=4, perturb_duration=0.2, pe
     cassie_env = env_fn()
     # Get states at each phase:
     num_steps = cassie_env.phaselen + 1
-    state = torch.Tensor(cassie_env.full_reset())
+    state = torch.Tensor(cassie_env.reset_for_test(full_reset=True))
     cassie_env.speed = 0.5
     cassie_env.side_speed = 0
     cassie_env.phase_add = 1
