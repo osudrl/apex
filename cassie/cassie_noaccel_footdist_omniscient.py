@@ -188,6 +188,10 @@ class CassieEnv_noaccel_footdist_omniscient:
         # for RNN policies
         self.critic_state = None
 
+        # Reward terms
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
+
         self.debug = False
 
     def set_up_state_space(self):
@@ -321,9 +325,21 @@ class CassieEnv_noaccel_footdist_omniscient:
         self.cassie_state = self.sim.step_pd(self.u)
 
     def step(self, action, return_omniscient_state=False):
+
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
+
+        neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
         for _ in range(self.simrate):
             self.step_simulation(action)
+
+            # Foot Orientation Cost
+            self.l_foot_orient += (1 - np.inner(neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
+            self.r_foot_orient += (1 - np.inner(neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
                
+        self.l_foot_orient      /= self.simrate
+        self.r_foot_orient      /= self.simrate
+
         height = self.sim.qpos()[2]
         self.curr_action = action
 
@@ -383,7 +399,7 @@ class CassieEnv_noaccel_footdist_omniscient:
             self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
-            self.speed = (random.randint(-3, 40)) / 10
+            self.speed = (random.randint(-3, 30)) / 10
         # Make sure that if speed is above 2, freq is at least 1.2
         if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
             self.phase_add = 1.3 + 0.7*random.random()
@@ -422,6 +438,10 @@ class CassieEnv_noaccel_footdist_omniscient:
             # Set motor and joint foot to be same offset
             self.joint_offsets[4] = self.joint_offsets[12]
             self.joint_offsets[9] = self.joint_offsets[15]
+
+        # Reward terms
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
 
         return self.get_full_state()
 
@@ -465,6 +485,10 @@ class CassieEnv_noaccel_footdist_omniscient:
         if self.slope_rand:
             self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
 
+        # Reward terms
+        self.l_foot_orient = 0
+        self.r_foot_orient = 0
+
         return self.get_full_state()
 
     # Helper function for updating the speed, used in visualization tests
@@ -498,6 +522,8 @@ class CassieEnv_noaccel_footdist_omniscient:
             return iros_paper_reward(self)
         elif self.reward_func == "5k_speed_reward":
             return old_speed_reward(self)
+        elif self.reward_func == "5k_speed_footorient":
+            return old_speed_footorient_reward(self)
         else:
             raise NotImplementedError
 

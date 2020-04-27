@@ -120,8 +120,9 @@ class PPO:
 
         self.save_path = save_path
 
+        os.environ['OMP_NUM_THREADS'] = '1'
         if args['redis_address'] is not None:
-            ray.init(redis_address=args['redis_address'])
+            ray.init(num_cpos=self.n_proc, redis_address=args['redis_address'])
         else:
             ray.init(num_cpus=self.n_proc)
 

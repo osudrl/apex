@@ -126,6 +126,8 @@ def eval_commands_worker(env_fn, policy, num_steps, num_commands, max_speed, min
                 # print("curr schedule: ", speed_schedule[speed_ind-1])
     return save_data, time.time() - start_t
 
+# TODO: Change to create workers, then pass a single iter to each one. This way, in case a worker finishes before the others
+# it can start running more iters. Can also add running stats of how many more tests to run, w/ loading bar
 def eval_commands_multi(env_fn, policy, num_steps=200, num_commands=4, max_speed=3, min_speed=0, num_iters=4, num_procs=4, filename="test_eval_command.npy"):
     start_t1 = time.time()
     ray.init(num_cpus=num_procs)
@@ -148,6 +150,7 @@ def eval_commands_multi(env_fn, policy, num_steps=200, num_commands=4, max_speed
     # print("total_data: ", total_data)
     np.save(filename, total_data)
     print("total time: ", time.time() - start_t1)
+    ray.shutdown()
 
 def report_stats(filename):
     data = np.load(filename)

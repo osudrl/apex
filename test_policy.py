@@ -3,7 +3,9 @@ from rl.policies.actor import GaussianMLP_Actor
 from tools.test_commands import *
 from tools.eval_perturb import *
 from tools.eval_mission import *
+from tools.compare_pols import *
 from collections import OrderedDict
+from util import env_factory
 
 import torch
 import pickle
@@ -14,8 +16,11 @@ import numpy as np
 parser = argparse.ArgumentParser()
 # General args
 parser.add_argument("--path", type=str, default="./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2", help="path to folder containing policy and run details")
+parser.add_argument("--path2", type=str, default="./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2", help="path to folder containing 2nd policy to compare against")
 parser.add_argument("--n_procs", type=int, default=4, help="Number of procs to use for multi-processing")
-parser.add_argument("--test", type=str, default="full", help="Test to run (options: \"full\", \"commands\", and \"perturb\")")
+parser.add_argument("--test", type=str, default="full", help="Test to run (options: \"full\", \"commands\", and \"perturb\", and \"compare\")")
+parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")
+parser.add_argument("--full", default=False, action="store_true", help="Whether to run full eval or not (run all tests)")
 # Test Commands args
 parser.add_argument("--n_steps", type=int, default=200, help="Number of steps to for a full command cycle (1 speed change and 1 orientation change)")
 parser.add_argument("--n_commands", type=int, default=6, help="Number of commands in a single test iteration")
@@ -25,35 +30,29 @@ parser.add_argument("--n_iter", type=int, default=10000, help="Number of command
 # Test Perturbs args
 parser.add_argument("--wait_time", type=float, default=4.0, help="How long to wait after perturb to count as success")
 parser.add_argument("--pert_dur", type=float, default=0.2, help="How long to apply perturbation")
-parser.add_argument("--pert_size", type=float, default=200, help="Size of perturbation to start sweep from")
+parser.add_argument("--pert_size", type=float, default=50, help="Size of perturbation to start sweep from")
 parser.add_argument("--pert_incr", type=float, default=10.0, help="How much to increment the perturbation size after each success")
 parser.add_argument("--pert_body", type=str, default="cassie-pelvis", help="Body to apply perturbation to")
-parser.add_argument("--num_angles", type=int, default=4, help="How many angles to test (angles are evenly divided into 2*pi)")
+parser.add_argument("--num_angles", type=int, default=100, help="How many angles to test (angles are evenly divided into 2*pi)")
 # Test Mission args
 parser.add_argument("--viz", default=False, action='store_true')
 
 args = parser.parse_args()
 run_args = pickle.load(open(os.path.join(args.path, "experiment.pkl"), "rb"))
-cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
-env_fn = partial(CassieEnv, traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
+print(run_args)
+# cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
+# env_fn = partial(CassieEnv, traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
+# Make mirror False so that env_factory returns a regular wrap env function and not a symmetric env function that can be called to return
+# a cassie environment (symmetric env cannot be called to make another env)
+env_fn = env_factory(run_args.env_name, traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
+                    mirror=False, clock_based=run_args.clock_based, reward=run_args.reward, history=run_args.history)
+cassie_env = env_fn()
 policy = torch.load(os.path.join(args.path, "actor.pt"))
-policy.eval()
+if args.eval:
+    policy.eval()
 
-# plot_perturb("./test_perturb_eval_phase.npy")
-# save_data = compute_perturbs(cassie_env, policy, wait_time=4, perturb_duration=0.2, perturb_size=100, perturb_incr=10, perturb_body="cassie-pelvis", num_angles=4)
-# np.save("test_perturb_eval_phase.npy", save_data)
-# wait_time = 4
-# perturb_duration = 0.2
-# perturb_size = 100
-# perturb_incr = 10
-# perturb_body = "cassie-pelvis"
-# num_angles = 4
-# exit()
-
-# If not command line arg, assume run all tests
-if len(sys.argv) == 1:
-    print("Running full test") 
-elif args.test == "commands":
+#TODO: make returning/save data in file inside function consist for all testing functions
+def test_commands(cassie_env, policy, args):
     print("Testing speed and orient commands")
     if args.n_procs == 1:
         save_data = eval_commands(cassie_env, policy, num_steps=args.n_steps, num_commands=args.n_commands, 
@@ -62,7 +61,8 @@ elif args.test == "commands":
     else:
         eval_commands_multi(env_fn, policy, num_steps=args.n_steps, num_commands=args.n_commands, max_speed=args.max_speed, 
                 min_speed=args.min_speed, num_iters=args.n_iter, num_procs=args.n_procs, filename=os.path.join(args.path, "eval_commands.npy"))
-elif args.test == "perturb":
+
+def test_perturbs(cassie_env, policy, args):
     print("Testing perturbations")
     if args.n_procs == 1:
         save_data = compute_perturbs(cassie_env, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size, 
@@ -71,6 +71,16 @@ elif args.test == "perturb":
         save_data = compute_perturbs_multi(env_fn, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size, 
                     perturb_incr=args.pert_incr, perturb_body=args.pert_body, num_angles=args.num_angles, num_procs=args.n_procs)
     np.save(os.path.join(args.path, "eval_perturbs.npy"), save_data)
+
+# If not command line arg, assume run all tests
+if args.full:
+    print("Running full test")
+    test_commands(cassie_env, policy, args)
+    test_perturbs(cassie_env, policy, args)
+elif args.test == "commands":
+    test_commands(cassie_env, policy, args)
+elif args.test == "perturb":
+    test_perturbs(cassie_env, policy, args)
 elif args.test == "mission":
     missions = ["straight", "curvy", "90_left", "90_right"]
     if not args.viz:
@@ -85,6 +95,10 @@ elif args.test == "mission":
     else:
         save_data = np.load(os.path.join(args.path, "eval_missions.npy"), allow_pickle=True)
         plot_mission_data(save_data, missions)
+elif args.test == "compare":
+    print("running compare")
+    compare_pols(args.path, args.path2)
+
 
 
 

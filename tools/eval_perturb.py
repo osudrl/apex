@@ -191,6 +191,7 @@ def compute_perturbs_multi(env_fn, policy, wait_time=4, perturb_duration=0.2, pe
     # max_force = np.concatenate(result, axis=1)
     # print("max force: ", max_force)
     print("total time: ", time.time() - start_t)
+    ray.shutdown()
     return max_force
 
 
