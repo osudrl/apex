@@ -3,6 +3,7 @@ from rl.policies.actor import GaussianMLP_Actor
 from tools.test_commands import *
 from tools.eval_perturb import *
 from tools.eval_mission import *
+from tools.eval_sensitivity import *
 from collections import OrderedDict
 
 import torch
@@ -15,7 +16,7 @@ parser = argparse.ArgumentParser()
 # General args
 parser.add_argument("--path", type=str, default="./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2", help="path to folder containing policy and run details")
 parser.add_argument("--n_procs", type=int, default=4, help="Number of procs to use for multi-processing")
-parser.add_argument("--test", type=str, default="full", help="Test to run (options: \"full\", \"commands\", and \"perturb\")")
+parser.add_argument("--test", type=str, default="full", help="Test to run (options: \"full\", \"commands\", \"sensitivity\", and \"perturb\")")
 # Test Commands args
 parser.add_argument("--n_steps", type=int, default=200, help="Number of steps to for a full command cycle (1 speed change and 1 orientation change)")
 parser.add_argument("--n_commands", type=int, default=6, help="Number of commands in a single test iteration")
@@ -31,6 +32,10 @@ parser.add_argument("--pert_body", type=str, default="cassie-pelvis", help="Body
 parser.add_argument("--num_angles", type=int, default=4, help="How many angles to test (angles are evenly divided into 2*pi)")
 # Test Mission args
 parser.add_argument("--viz", default=False, action='store_true')
+# Test parameter sensitivity args
+parser.add_argument("--sens_incr", type=float, default=0.05, help="Size of increments for the sensityivity sweep")
+parser.add_argument("--hi_factor", type=float, default=15, help="High factor")
+parser.add_argument("--lo_factor", type=float, default=0, help="Low factor")
 
 args = parser.parse_args()
 run_args = pickle.load(open(os.path.join(args.path, "experiment.pkl"), "rb"))
@@ -85,8 +90,11 @@ elif args.test == "mission":
     else:
         save_data = np.load(os.path.join(args.path, "eval_missions.npy"), allow_pickle=True)
         plot_mission_data(save_data, missions)
-
-
+elif args.test == "sensitivity":
+    print("Testing sensitivity")
+    save_data = eval_sensitivity(cassie_env, policy, incr=args.sens_incr, hi_factor=args.hi_factor, lo_factor=args.lo_factor)
+    print(save_data)
+    np.save(os.path.join(args.path, "eval_sensitivity.npy"), save_data)
 
 # vis_commands(cassie_env, policy, num_steps=200, num_commands=6, max_speed=3, min_speed=0)
 # save_data = eval_commands(cassie_env, policy, num_steps=200, num_commands=2, max_speed=3, min_speed=0, num_iters=1)
