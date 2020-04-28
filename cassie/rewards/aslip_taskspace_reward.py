@@ -72,9 +72,11 @@ def aslip_reward(self, action):
     # action_penalty       = 0
     foot_orient_penalty  = 0
 
-    # enforce distance between feet and com
-    ref_rfoot, ref_lfoot  = get_ref_footdist(self, self.phase + 1)
+    phase_to_match = self.phase + 1
 
+    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_state(self, phase_to_match)
+
+    # enforce distance between feet and com
     # left foot
     lfoot = self.cassie_state.leftFoot.position[:]
     rfoot = self.cassie_state.rightFoot.position[:]
@@ -87,8 +89,6 @@ def aslip_reward(self, action):
         print(footpos_error)
 
     # try to match com velocity
-    ref_cvel = get_ref_com_vel(self, self.phase + 1)
-
     # center of mass vel: x, y, z
     cvel = self.cassie_state.pelvis.translationalVelocity
     for j in [0, 1, 2]:

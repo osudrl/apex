@@ -355,7 +355,7 @@ class CassieEnv_v2:
         if self.aslip_traj:
             random_speed_idx = random.randint(0, self.num_speeds-1)
             self.speed = self.speeds[random_speed_idx]
-            print("current speed: {}\tcurrent traj: {}".format(self.speed, random_speed_idx))
+            # print("current speed: {}\tcurrent traj: {}".format(self.speed, random_speed_idx))
             self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
