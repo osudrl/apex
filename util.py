@@ -213,6 +213,10 @@ def eval_policy(policy, args, run_args):
                 elif c == 'k':
                     orient_add -= .1
                     print("Decreasing orient_add to: ", orient_add)
+                elif c == 'r':
+                    state = env.reset()
+                    speed = env.speed
+                    print("Resetting environment via env.reset()")
                 elif c == 'p':
                     push = 100
                     push_dir = 2

@@ -25,7 +25,7 @@ def get_ref_com_vel(self, phase=None):
 
     return cvel
 
-def get_ref_aslip_ext_state(self, phase=None, offset=None):
+def get_ref_aslip_state(self, phase=None, offset=None):
 
     if phase is None:
         phase = self.phase
@@ -73,7 +73,7 @@ def aslip_reward(self, action):
     foot_orient_penalty  = 0
 
     # enforce distance between feet and com
-    ref_rfoot, ref_lfoot  = get_ref_footdist(self.phase + 1)
+    ref_rfoot, ref_lfoot  = get_ref_footdist(self, self.phase + 1)
 
     # left foot
     lfoot = self.cassie_state.leftFoot.position[:]
@@ -87,7 +87,7 @@ def aslip_reward(self, action):
         print(footpos_error)
 
     # try to match com velocity
-    ref_cvel = self.get_ref_com_vel(self.phase + 1)
+    ref_cvel = get_ref_com_vel(self, self.phase + 1)
 
     # center of mass vel: x, y, z
     cvel = self.cassie_state.pelvis.translationalVelocity
@@ -95,7 +95,7 @@ def aslip_reward(self, action):
         com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
 
     # each joint pos, skipping feet
-    for i, j in enumerate(self.reward_pos_idx):
+    for i, j in enumerate(self.pos_idx):
         target = ref_pos[j]
         actual = qpos[j]
 
@@ -134,7 +134,7 @@ def aslip_TaskSpace_reward(self, action):
     phase_to_match = self.phase + 1
 
     # offset now directly in trajectories
-    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_ext_state(self, phase_to_match, offset=0.1)
+    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_state(self, phase_to_match)
 
     footpos_error        = 0
     compos_error         = 0
@@ -194,7 +194,7 @@ def aslip_DirectMatch_reward(self, action):
     phase_to_match = self.phase + 1
 
     # offset now directly in trajectories
-    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_ext_state(self, phase_to_match, offset=0.1)
+    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_state(self, phase_to_match)
 
     footpos_error        = 0
     footvel_error        = 0

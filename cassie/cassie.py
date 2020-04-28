@@ -2,7 +2,7 @@
 
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
-from .trajectory import CassieTrajectory, getAllTrajectories
+from .trajectory import *
 from cassie.quaternion_function import *
 from .rewards import *
 
@@ -102,6 +102,10 @@ class CassieEnv_v2:
         # tracking various variables for reward funcs
         self.l_foot_orient = 0
         self.r_foot_orient = 0
+
+        # TODO: should this be mujoco tracking var or use state estimator. real command interface will use state est
+        # Track pelvis position as baseline for pelvis tracking command inputs
+        self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
 
         #### Dynamics Randomization ####
         self.dynamics_randomization = False
@@ -284,6 +288,10 @@ class CassieEnv_v2:
         self.l_foot_orient = 0
         self.r_foot_orient = 0
 
+        # save last pelvis position before stepping through environment
+        self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
+        # print(self.last_pelvis_pos)
+
         for i in range(self.simrate):
             self.step_simulation(action)
             # Foot Orientation Cost
@@ -327,6 +335,8 @@ class CassieEnv_v2:
         self.time = 0
         self.counter = 0
 
+        self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
+
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
         qpos, qvel = self.get_ref_state(self.phase)
@@ -345,7 +355,7 @@ class CassieEnv_v2:
         if self.aslip_traj:
             random_speed_idx = random.randint(0, self.num_speeds-1)
             self.speed = self.speeds[random_speed_idx]
-            # print("current speed: {}".format(self.speed))
+            print("current speed: {}\tcurrent traj: {}".format(self.speed, random_speed_idx))
             self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
@@ -403,6 +413,8 @@ class CassieEnv_v2:
         self.orient_time = np.inf
         self.y_offset = 0
         self.phase_add = 1
+
+        self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
 
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
@@ -588,9 +600,9 @@ class CassieEnv_v2:
         # ASLIP TRAJECTORY
         elif self.aslip_traj and not self.clock_based:
             if(self.phase == 0):
-                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.phaselen - 1))
+                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state.pelvis.position[:], self.last_pelvis_pos, self.phaselen - 1))
             else:
-                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.phase))
+                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state.pelvis.position[:], self.last_pelvis_pos, self.phaselen - 1))
 
         # OTHER TRAJECTORY
         else:
