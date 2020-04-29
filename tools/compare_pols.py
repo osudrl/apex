@@ -50,10 +50,32 @@ def compare_pols(pol1, pol2):
     # pol1_command_stats = process_commands(pol1_command)
     pol2_command_stats = process_commands(pol2_command)
 
-    pdf = fpdf.FPDF()
+    pdf = fpdf.FPDF(format='letter', unit='in')
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, "Policy Robustness Comparison", "C")
+    pdf.set_font('Times','',10.0) 
+    # Effective page width, or just epw
+    epw = pdf.w - 2*pdf.l_margin
+    th = pdf.font_size
+
+    pdf.cell(epw, 2*th, "Policy Robustness Comparison", 0, 1, "C")
+    pdf.ln(2*th)
+
+    pdf.cell(epw, 2*th, "Command Test", 0, 1, "L")
+    pdf.ln(th)
+    # Set column width to 1/4 of effective page width to distribute content 
+    # evenly across table and page
+    col_width = epw / 3
+    # pol_names = os.path.basename(pol1) + "\t" + os.path.basename(pol2)
+    pdf.cell(col_width, 2*th, "", border=1, align="C")
+    pdf.cell(col_width, 2*th, os.path.basename(pol1), border=1, align="C")
+    pdf.cell(col_width, 2*th, os.path.basename(pol2), border=1, align="C")
+    pdf.ln(2*th)
+    for key in pol2_command_stats.keys():
+        pdf.cell(col_width, 2*th, key, border=1, align="C")
+        pdf.cell(col_width, 2*th, str(pol2_command_stats[key]), border=1, align="C")
+        pdf.cell(col_width, 2*th, str(pol2_command_stats[key]), border=1, align="C")
+        pdf.ln(2*th)
+    print(pol2_command_stats.keys())
 
 
 

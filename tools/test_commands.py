@@ -6,6 +6,7 @@ import time
 import math
 import random
 import ray
+import copy, sys
 from functools import partial
 
 # Quaternion utility functions. Due to python relative imports and directory structure can't cleanly use cassie.quaternion_function
@@ -50,6 +51,75 @@ def euler2quat(z=0, y=0, x=0):
     if result[0] < 0:
     	result = -result
     return result
+
+@ray.remote
+class eval_worker(object):
+    def __init__(self, id_num, env_fn, policy, num_steps, max_speed, min_speed):
+        self.id_num = id_num
+        self.cassie_env = env_fn()
+        self.policy = copy.deepcopy(policy)
+        self.num_steps = num_steps
+        self.max_speed = max_speed
+        self.min_speed = min_speed
+
+    @torch.no_grad()
+    def run_test(self, speed_schedule, orient_schedule):
+        start_t = time.time()
+        save_data = np.zeros(6)
+        state = torch.Tensor(self.cassie_env.reset_for_test(full_reset=True))
+        self.cassie_env.speed = 0.5
+        self.cassie_env.side_speed = 0
+        self.cassie_env.phase_add = 1
+        num_commands = len(orient_schedule)
+        count = 0
+        orient_ind = 0
+        speed_ind = 1 
+        orient_add = 0
+        passed = 1
+        while not (speed_ind == num_commands and orient_ind == num_commands and count == self.num_steps) and passed:
+            # Update speed command
+            if count == self.num_steps:
+                count = 0
+                self.cassie_env.speed = speed_schedule[speed_ind]
+                self.cassie_env.speed = np.clip(self.cassie_env.speed, self.min_speed, self.max_speed)
+                if self.cassie_env.speed > 1.4:
+                    self.cassie_env.phase_add = 1.5
+                else:
+                    self.cassie_env.phase_add = 1
+                speed_ind += 1
+            # Update orientation command
+            elif count == self.num_steps // 2:
+                orient_add += orient_schedule[orient_ind]
+                orient_ind += 1
+            # Update orientation
+            # TODO: Make update orientation function in each env to this will work with an abitrary environment
+            quaternion = euler2quat(z=orient_add, y=0, x=0)
+            iquaternion = inverse_quaternion(quaternion)
+            curr_orient = state[1:5]
+            curr_transvel = state[15:18]
+
+            new_orient = quaternion_product(iquaternion, curr_orient)
+            if new_orient[0] < 0:
+                new_orient = -new_orient
+            new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+            state[1:5] = torch.FloatTensor(new_orient)
+            state[15:18] = torch.FloatTensor(new_translationalVelocity)
+
+            # Get action
+            action = self.policy(state, True)
+            action = action.data.numpy()
+            state, reward, done, _ = self.cassie_env.step(action)
+            state = torch.Tensor(state)
+            if self.cassie_env.sim.qpos()[2] < 0.4:
+                passed = 0
+            count += 1
+        if passed:
+            save_data[0] = passed
+            save_data[1] = -1
+        else:
+            save_data[:] = np.array([passed, count//(self.num_steps//2), self.cassie_env.speed, orient_add,\
+                        self.cassie_env.speed-speed_schedule[max(0, speed_ind-2)], orient_schedule[orient_ind-1]])
+        return self.id_num, save_data, time.time() - start_t
 
 @ray.remote
 @torch.no_grad()
@@ -151,6 +221,77 @@ def eval_commands_multi(env_fn, policy, num_steps=200, num_commands=4, max_speed
     np.save(filename, total_data)
     print("total time: ", time.time() - start_t1)
     ray.shutdown()
+
+def eval_commands_multi2(env_fn, policy, num_steps=200, num_commands=4, max_speed=3, min_speed=0, num_iters=4, num_procs=4, filename="test_eval_command.npy"):
+    start_t1 = time.time()
+    ray.init(num_cpus=num_procs)
+    total_data = np.zeros((num_iters, 6))
+    # Make all args
+    all_speed_schedule = np.zeros((num_iters, num_commands))
+    all_orient_schedule = np.zeros((num_iters, num_commands))
+    for i in range(num_iters):
+        all_speed_schedule[i, 0] = 0.5
+        for j in range(num_commands-1):
+            speed_add = random.choice([-1, 1])*random.uniform(0.4, 1.3)
+            if all_speed_schedule[i, j] + speed_add < min_speed or all_speed_schedule[i, j] + speed_add > max_speed:
+                speed_add *= -1
+            all_speed_schedule[i, j+1] = all_speed_schedule[i, j] + speed_add
+        orient_schedule = np.random.uniform(np.pi/6, np.pi/3, num_commands)
+        orient_sign = np.random.choice((-1, 1), num_commands)
+        all_orient_schedule[i, :] = orient_schedule * orient_sign
+    # Make and start eval workers
+    workers = [eval_worker.remote(i, env_fn, policy, num_steps, max_speed, min_speed) for i in range(num_procs)]
+    eval_ids = [workers[i].run_test.remote(all_speed_schedule[i, :], all_orient_schedule[i, :]) for i in range(num_procs)]
+    print("started workers")
+    curr_arg_ind = num_procs
+    curr_data_ind = 0
+    bar_width = 30
+    sys.stdout.write(progress_bar(0, num_iters, bar_width, 0))
+    sys.stdout.flush()
+    eval_start = time.time()
+    while curr_arg_ind < num_iters:
+        # print("on arg ind: ", curr_arg_ind)
+        done_id = ray.wait(eval_ids, num_returns=1, timeout=None)[0][0]
+        # print(done_id)
+        # print(done_id[0][0])
+        # exit()
+        worker_id, data, eval_time = ray.get(done_id)
+        total_data[curr_data_ind, :] = data
+        eval_ids.remove(done_id)
+        eval_ids.append(workers[worker_id].run_test.remote(all_speed_schedule[curr_arg_ind, :], all_orient_schedule[curr_arg_ind, :]))
+        curr_arg_ind += 1
+        curr_data_ind += 1
+
+        sys.stdout.write("\r{}".format(progress_bar(curr_data_ind, num_iters, bar_width, (time.time()-eval_start))))
+        sys.stdout.flush()
+    
+    result = ray.get(eval_ids)
+    for ret_tuple in result:
+        total_data[curr_data_ind, :] = ret_tuple[1]
+    sys.stdout.write("\r{}".format(progress_bar(num_iters, num_iters, bar_width, time.time()-eval_start)))
+    print("")
+    print("Got all results")
+    # total_data = np.concatenate([result[i][0] for i in range(num_procs)], axis=0)
+    # print("timings: ", [result[i][1] for i in range(num_procs)])
+    # print("sim timings: ", [result[i][2] for i in range(num_procs)])
+    # # max_force = np.concatenate(result, axis=1)
+    # print("total_data: ", total_data)
+    np.save(filename, total_data)
+    print("total time: ", time.time() - start_t1)
+    ray.shutdown()
+
+def progress_bar(curr_ind, total_ind, bar_width, elapsed_time):
+    num_bar = int((curr_ind / total_ind) // (1/bar_width))
+    num_space = int(bar_width - num_bar)
+    outstring = "[{}]".format("-"*num_bar + " "*num_space)
+    outstring += " {:.2f}% complete".format(curr_ind / total_ind * 100)
+    if elapsed_time == 0:
+        time_left = "N/A"
+        outstring += " {:.1f} elapsed, {} left".format(elapsed_time, time_left)
+    else:
+        time_left = elapsed_time/curr_ind*(total_ind-curr_ind)
+        outstring += " {:.1f} elapsed, {:.1f} left".format(elapsed_time, time_left)
+    return outstring
 
 def report_stats(filename):
     data = np.load(filename)
