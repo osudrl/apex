@@ -36,7 +36,16 @@ class CassieAslipTrajectory:
         self.cpos = np.copy(trajectory["cpos"])
         self.cvel = np.copy(trajectory["cvel"])
 
-def get_ref_aslip_ext_state(self, current_pos, last_pos, phase=None, offset=None):
+# delta position : difference between desired taskspace position and current position.
+def get_ref_aslip_ext_state(self, current_state, last_compos, phase=None, offset=None):
+
+    current_compos = np.array(current_state.pelvis.position[:])
+    current_compos[2] -= current_state.terrain.height
+    current_lpos = np.array(current_state.leftFoot.position[:])
+    current_rpos = np.array(current_state.rightFoot.position[:])
+
+    # compos is global, while lpos and rpos are relative to compos. So only need to adjust compos
+    current_compos = current_compos - last_compos
 
     if phase is None:
         phase = self.phase
@@ -59,7 +68,9 @@ def get_ref_aslip_ext_state(self, current_pos, last_pos, phase=None, offset=None
         # need to update these because they 
         lpos[2] -= offset
         rpos[2] -= offset
-
-    cpos[:] = cpos[:]+last_pos - current_pos
+    
+    cpos = cpos - current_compos
+    lpos = lpos - current_lpos
+    rpos = rpos - current_rpos
 
     return rpos, rvel, lpos, lvel, cpos, cvel

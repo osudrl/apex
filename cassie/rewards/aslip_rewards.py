@@ -52,6 +52,7 @@ def get_ref_aslip_state(self, phase=None, offset=None):
     return rpos, rvel, lpos, lvel, cpos, cvel
 
 def aslip_reward(self, action):
+
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())
 
@@ -61,8 +62,7 @@ def aslip_reward(self, action):
     # TODO: see magnitude of state variables to gauge contribution to reward
     # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
-    # weight = [0.05, 0.05, 0.25, 0.25, 0.05, 
-    #           0.05, 0.05, 0.25, 0.25, 0.05]
+    weight = [0.05, 0.05, 0.25, 0.25, 0.05, 0.05, 0.05, 0.25, 0.25, 0.05]
 
     #weight = [.1] * 10
 
@@ -79,22 +79,21 @@ def aslip_reward(self, action):
 
     # enforce distance between feet and com
     # left foot
-    lfoot = self.cassie_state.leftFoot.position[:]
-    rfoot = self.cassie_state.rightFoot.position[:]
+    lfoot = self.l_foot_pos
+    rfoot = self.r_foot_pos
     for j in [0, 1, 2]:
         footpos_error += np.linalg.norm(lfoot[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot[j] - ref_rfoot[j])
     footpos_error *= 30 # the higher this number is the closer it must match
 
-    if self.debug:
-        print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
-        print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
-        print(footpos_error)
-
+    # if self.debug:
+    #     print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
+    #     print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
+    #     print(footpos_error)
     # try to match com velocity
     # center of mass vel: x, y, z
-    cvel = self.cassie_state.pelvis.translationalVelocity
+    cvel = qvel[0:3]
     for j in [0, 1, 2]:
-        com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
+        com_vel_error += 30 * np.linalg.norm(cvel[j] - ref_cvel[j])
 
     # each joint pos, skipping feet
     for i, j in enumerate(self.pos_idx):
@@ -104,10 +103,10 @@ def aslip_reward(self, action):
         if j == 20 or j == 34:
             joint_error += 0
         else:
-            joint_error += (target - actual) ** 2
+            joint_error += 30 * weight[i] * (target - actual) ** 2
 
     # foot orientation penalty
-    foot_orient_penalty = 1 * (self.l_foot_orient + self.r_foot_orient)
+    foot_orient_penalty = 1 * (self.l_foot_orient_cost + self.r_foot_orient_cost)
 
     com_orient_penalty = 30 * np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
 
@@ -127,7 +126,7 @@ def aslip_reward(self, action):
         reward
         )
         )
-        print("actual speed: {}\tdesired_speed: {}".format(qvel[0], self.speed))
+        print("actual speed: {}\tdesired_speed: {}".format(np.linalg.norm(qvel[0:3]), np.linalg.norm(ref_cvel)))
     return reward
 
 def aslip_TaskSpace_reward(self, action):
@@ -140,59 +139,66 @@ def aslip_TaskSpace_reward(self, action):
     ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_state(self, phase_to_match)
 
     footpos_error        = 0
-    compos_error         = 0
     com_vel_error        = 0
     foot_orient_penalty  = 0
-    com_orient_penalty   = 0
+    # com_orient_penalty   = 0 # formerly straight_diff
+    com_drift_error      = 0
+    action_penalty       = 0
 
 
     # enforce distance between feet and com
-    lfoot = self.cassie_state.leftFoot.position[:]
-    rfoot = self.cassie_state.rightFoot.position[:]
+    lfoot = self.l_foot_pos
+    rfoot = self.r_foot_pos
     footpos_error += 30 * (np.linalg.norm(lfoot - ref_lfoot) + np.linalg.norm(rfoot - ref_rfoot))
 
     # enforce com position matching
-    com_pos = self.cassie_state.pelvis.position[:]
-    com_pos[2] -= self.cassie_state.terrain.height
-    compos_error += 30 * np.linalg.norm(ref_cpos - com_pos)
+    # com_pos = self.cassie_state.pelvis.position[:]
+    # com_pos[2] -= self.cassie_state.terrain.height
+    # compos_error += 30 * np.linalg.norm(ref_cpos - com_pos)
     
-    if self.debug:
-        print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
-        print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
-        print(footpos_error)
-        print("ref_cpos:  {}   cpos: {}".format(ref_cpos, com_pos))
-        print(compos_error)
+    # if self.debug:
+    #     print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
+    #     print("ref_lfoot: {}  lfoot: {}".format(ref_lfoot, lfoot))
+    #     print(footpos_error)
 
     # try to match com velocity
-    cvel = self.cassie_state.pelvis.translationalVelocity
-    com_vel_error += np.linalg.norm(cvel - ref_cvel)
+    cvel = qvel[0:3]
+    com_vel_error += 30 * np.linalg.norm(cvel - ref_cvel)
 
     # foot orientation penalty
-    foot_orient_penalty = 1 * (self.l_foot_orient + self.r_foot_orient)
+    foot_orient_penalty = 1 * (self.l_foot_orient_cost + self.r_foot_orient_cost)
 
-    com_orient_penalty = 30 * np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    # com_orient_penalty = 30 * np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
 
-    reward = 0.2 * np.exp(-footpos_error) +    \
-             0.2 * np.exp(-compos_error) +    \
-             0.2 * np.exp(-com_vel_error) +    \
-             0.2 * np.exp(-foot_orient_penalty) + \
-             0.2 * np.exp(-com_orient_penalty)
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+        straight_diff = 0
+    
+    com_drift_error = straight_diff + np.abs(qpos[2] - ref_cpos[2])
+
+    action_penalty = np.linalg.norm(action - self.prev_action)
+
+    reward = 0.3 * np.exp(-footpos_error) +    \
+             0.1 * np.exp(-action_penalty) + \
+             0.3 * np.exp(-com_vel_error) +    \
+             0.1 * np.exp(-foot_orient_penalty) + \
+             0.2 * np.exp(-straight_diff)
     
     # like a height termination 
     # if com_pos[2] < 0.7:
     #     reward = 0
 
     if self.debug:
-        print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_pos:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\nfoot_orient_penalty:\t{6:.2f}, % = {7:.2f}\ncom_orient_penalty:\t{8:.2f}, % = {9:.2f}\n\n".format(
-        0.2 * np.exp(-footpos_error),          0.2 * np.exp(-footpos_error) / reward * 100,
-        0.2 * np.exp(-compos_error),           0.2 * np.exp(-compos_error) / reward * 100,
-        0.2 * np.exp(-com_vel_error),          0.2 * np.exp(-com_vel_error) / reward * 100,
-        0.2 * np.exp(-foot_orient_penalty),    0.2 * np.exp(-foot_orient_penalty) / reward * 100,
-        0.2 * np.exp(-com_orient_penalty),     0.2 * np.exp(-com_orient_penalty) / reward * 100,
+        print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\naction_penalty:\t{2:.2f}, % = {3:.2f}\ncom_vel:\t{4:.2f}, % = {5:.2f}\nfoot_orient_penalty:\t{6:.2f}, % = {7:.2f}\ncom_drift_error:\t{8:.2f}, % = {9:.2f}\n\n".format(
+        0.3 * np.exp(-footpos_error),          0.3 * np.exp(-footpos_error) / reward * 100,
+        0.1 * np.exp(-action_penalty),           0.1 * np.exp(-action_penalty) / reward * 100,
+        0.3 * np.exp(-com_vel_error),          0.3 * np.exp(-com_vel_error) / reward * 100,
+        0.1 * np.exp(-foot_orient_penalty),    0.1 * np.exp(-foot_orient_penalty) / reward * 100,
+        0.2 * np.exp(-com_drift_error),     0.2 * np.exp(-com_drift_error) / reward * 100,
         reward
         )
         )
-        print("actual speed: {}\tdesired_speed: {}".format(qvel[0], self.speed))
+        print("actual speed: {}\tdesired_speed: {}".format(np.linalg.norm(qvel[0:3]), np.linalg.norm(ref_cvel)))
     return reward
 
 # USING State Est, need to see if using mujoco is better
@@ -212,30 +218,28 @@ def aslip_DirectMatch_reward(self, action):
     com_orient_penalty   = 0
 
     # enforce distance between feet and com
-    lfoot = self.cassie_state.leftFoot.position[:]
-    rfoot = self.cassie_state.rightFoot.position[:]
+    lfoot = self.l_foot_pos
+    rfoot = self.r_foot_pos
     footpos_error += 30 * (np.linalg.norm(lfoot - ref_lfoot) + np.linalg.norm(rfoot - ref_rfoot))
     # for j in [0, 1, 2]:
     #     footpos_error += np.linalg.norm(lfoot[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot[j] - ref_rfoot[j])
     
-    lfoot = self.cassie_state.leftFoot.footTranslationalVelocity[:]
-    rfoot = self.cassie_state.rightFoot.footTranslationalVelocity[:]
-    footvel_error += 3 * (np.linalg.norm(lfoot - ref_lvel) + np.linalg.norm(rfoot - ref_rvel))
+    lfoot = self.l_foot_vel
+    rfoot = self.r_foot_vel
+    footvel_error += 30 * (np.linalg.norm(lfoot - ref_lvel) + np.linalg.norm(rfoot - ref_rvel))
 
     # enforce com position matching
-    com_pos = self.cassie_state.pelvis.position[:]
-    com_pos[2] -= self.cassie_state.terrain.height
+    com_pos = qpos[0:3]
+    com_pos[0] -= self.last_pelvis_pos[0]
     compos_error += 30 * (np.linalg.norm(com_pos - ref_cpos))
     # for j in [0, 1, 2]:
     #     compos_error += np.linalg.norm(ref_cpos[j] - com_pos[j])
 
     # try to match com velocity
-    cvel = self.cassie_state.pelvis.translationalVelocity
-    com_vel_error += 3 * (np.linalg.norm(cvel - ref_cvel))
+    cvel = qvel[0:3]
+    com_vel_error += 30 * (np.linalg.norm(cvel - ref_cvel))
     # for j in [0, 1, 2]:
     #     com_vel_error += np.linalg.norm(cvel[j] - ref_cvel[j])
-
-    com_orient_penalty = 30 * np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
 
     if self.debug:
         print("ref_rfoot: {}  rfoot: {}".format(ref_rfoot, rfoot))
@@ -264,7 +268,7 @@ def aslip_DirectMatch_reward(self, action):
         reward
         )
         )
-        print("actual speed: {}\tdesired_speed: {}".format(qvel[0], self.speed))
+        print("actual speed: {}\tdesired_speed: {}".format(np.linalg.norm(qvel[0:3]), np.linalg.norm(ref_cvel)))
     return reward
 
 

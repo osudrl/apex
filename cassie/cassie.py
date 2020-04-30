@@ -88,11 +88,13 @@ class CassieEnv_v2:
         self.vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
         # CONFIGURE OFFSET for No Delta Policies
-        if self.aslip_traj:
-            ref_pos, ref_vel = self.get_ref_state(self.phase)
-            self.offset = ref_pos[self.pos_idx]
-        else:
-            self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+        # if self.aslip_traj:
+        #     ref_pos, ref_vel = self.get_ref_state(self.phase)
+        #     self.offset = ref_pos[self.pos_idx]
+        # else:
+        #     self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+        self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+
 
         self.phase_add = 1
 
@@ -100,6 +102,13 @@ class CassieEnv_v2:
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
         
         # tracking various variables for reward funcs
+        self.stepcount = 0
+        self.l_high = False
+        self.r_high = False
+        self.l_foot_vel = np.zeros(3)
+        self.r_foot_vel = np.zeros(3)
+        self.l_foot_pos = np.zeros(3)
+        self.r_foot_pos = np.zeros(3)
         self.l_foot_orient = 0
         self.r_foot_orient = 0
 
@@ -108,9 +117,9 @@ class CassieEnv_v2:
         self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
 
         #### Dynamics Randomization ####
-        self.dynamics_randomization = False
-        self.slope_rand = False
-        self.joint_rand = False
+        self.dynamics_randomization = dynamics_randomization
+        self.slope_rand = dynamics_randomization
+        self.joint_rand = dynamics_randomization
         # Record default dynamics parameters
         if self.dynamics_randomization:
             self.default_damping = self.sim.get_dof_damping()
@@ -258,9 +267,9 @@ class CassieEnv_v2:
         if self.joint_rand:
             target -= self.joint_offsets[0:10]
 
-        curr_fpos = np.zeros(6)
-        self.sim.foot_pos(curr_fpos)
-        prev_foot = copy.deepcopy(curr_fpos)
+        foot_pos = np.zeros(6)
+        self.sim.foot_pos(foot_pos)
+        prev_foot = copy.deepcopy(foot_pos)
         self.u = pd_in_t()
         for i in range(5):
             # TODO: move setting gains out of the loop?
@@ -281,26 +290,48 @@ class CassieEnv_v2:
             self.u.rightLeg.motorPd.dTarget[i] = 0
 
         self.cassie_state = self.sim.step_pd(self.u)
+        self.sim.foot_pos(foot_pos)
+        self.l_foot_vel = (foot_pos[0:3] - prev_foot[0:3]) / 0.0005
+        self.r_foot_vel = (foot_pos[3:6] - prev_foot[3:6]) / 0.0005
+        foot_forces = self.sim.get_foot_forces()
+        if self.l_high and foot_forces[0] > 0:
+            self.l_high = False
+            self.stepcount += 1
+        elif not self.l_high and foot_pos[2] >= 0.2:
+            self.l_high = True
+        if self.r_high and foot_forces[0] > 0:
+            self.stepcount += 1
+            self.r_high = False
+        elif not self.r_high and foot_pos[5] >= 0.2:
+            self.r_high = True
+        
 
     def step(self, action, return_omniscient_state=False):
         
         # reset mujoco tracking variables
-        self.l_foot_orient = 0
-        self.r_foot_orient = 0
-
-        # save last pelvis position before stepping through environment
-        self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
-        # print(self.last_pelvis_pos)
+        foot_pos = np.zeros(6)
+        self.l_foot_pos = np.zeros(3)
+        self.r_foot_pos = np.zeros(3)
+        self.l_foot_orient_cost = 0
+        self.r_foot_orient_cost = 0
+        self.last_pelvis_pos = self.sim.qpos()[0:3]
 
         for i in range(self.simrate):
             self.step_simulation(action)
+            qpos = np.copy(self.sim.qpos())
+            qvel = np.copy(self.sim.qvel())
+            # Relative Foot Position tracking
+            self.sim.foot_pos(foot_pos)
+            self.l_foot_pos += qpos[0:3] - foot_pos[0:3]
+            self.r_foot_pos += qpos[0:3] - foot_pos[3:6]
             # Foot Orientation Cost
-            self.l_foot_orient += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
-            self.r_foot_orient += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
-               
-        self.l_foot_orient      /= self.simrate
-        self.r_foot_orient      /= self.simrate
-
+            self.l_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
+            self.r_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
+        
+        self.l_foot_pos              /= self.simrate
+        self.r_foot_pos              /= self.simrate
+        self.l_foot_orient_cost      /= self.simrate
+        self.r_foot_orient_cost      /= self.simrate
 
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -335,8 +366,6 @@ class CassieEnv_v2:
         self.time = 0
         self.counter = 0
 
-        self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
-
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
         qpos, qvel = self.get_ref_state(self.phase)
@@ -348,6 +377,8 @@ class CassieEnv_v2:
 
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
+
+        self.last_pelvis_pos = self.sim.qpos()[0:3]
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -371,8 +402,8 @@ class CassieEnv_v2:
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
         # reset mujoco tracking variables
-        self.l_foot_orient = 0
-        self.r_foot_orient = 0
+        self.l_foot_orient_cost = 0
+        self.r_foot_orient_cost = 0
 
         if self.dynamics_randomization:
             #### Dynamics Randomization ####
@@ -414,8 +445,6 @@ class CassieEnv_v2:
         self.y_offset = 0
         self.phase_add = 1
 
-        self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
-
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
         if self.aslip_traj:
@@ -430,6 +459,8 @@ class CassieEnv_v2:
 
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
+
+        self.last_pelvis_pos = self.sim.qpos()[0:3]
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -470,6 +501,8 @@ class CassieEnv_v2:
             self.speed = 0
 
         self.sim.full_reset()
+
+        self.last_pelvis_pos = self.sim.qpos()[0:3]
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
@@ -558,13 +591,15 @@ class CassieEnv_v2:
         # gets dropped out of state variable for input reasons
 
         ###### Setting variable speed  #########
-        pos[0] *= self.speed
-        pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter * self.speed
+        if not self.aslip_traj:
+            pos[0] *= self.speed
+            pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter * self.speed
         ######                          ########
 
         # setting lateral distance target to 0?
         # regardless of reference trajectory?
-        pos[1] = 0
+        if not self.aslip_traj:
+            pos[1] = 0
 
         if not self.aslip_traj:
             vel[0] *= self.speed
@@ -600,9 +635,9 @@ class CassieEnv_v2:
         # ASLIP TRAJECTORY
         elif self.aslip_traj and not self.clock_based:
             if(self.phase == 0):
-                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state.pelvis.position[:], self.last_pelvis_pos, self.phaselen - 1))
+                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1))
             else:
-                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state.pelvis.position[:], self.last_pelvis_pos, self.phaselen - 1))
+                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1))
 
         # OTHER TRAJECTORY
         else:

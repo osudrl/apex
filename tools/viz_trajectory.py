@@ -90,7 +90,7 @@ elif trajectory_type == "aslip":
     cpos = traj.cpos
     cvel = traj.cvel
     
-    offset = 0.1
+    offset = 0.2
 
     cpos[:,2] += offset
     # need to update these because they 
@@ -118,6 +118,7 @@ elif trajectory_type == "aslip":
     ax.plot(rpos[:,0]+cpos[:,0], rpos[:,1]+cpos[:,1], rpos[:,2]+cpos[:,2], 'o-', label='right')
     ax.plot(lpos[:,0]+cpos[:,0], lpos[:,1]+cpos[:,1], lpos[:,2]+cpos[:,2], 'o-', label='left')
     set_axes_equal(ax)
+    ax.set_zlim3d([0.0, 1.0])
 
     # 3d plot of each foot
     fig = plt.figure(figsize=(10,10))
