@@ -447,7 +447,7 @@ def run_experiment(args):
     torch.set_num_threads(1)
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, no_delta=args.no_delta, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history)
+    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, no_delta=args.no_delta, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history, aslipVertOffset=None)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -489,6 +489,7 @@ def run_experiment(args):
     print(" ├ dyn_random:     {}".format(args.dyn_random))
     print(" ├ no_delta:       {}".format(args.no_delta))
     print(" ├ mirror:         {}".format(args.mirror))
+    print(" ├ reward:         {}".format(args.reward))
     print(" └ obs_dim:        {}".format(obs_dim))
 
     print()

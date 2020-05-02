@@ -16,7 +16,7 @@ import copy
 import pickle
 
 class CassieEnv_v2:
-    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
+    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0, aslipVertOffset=None):
 
         dirname = os.path.dirname(__file__)
         #xml_path = os.path.join(dirname, "cassiemujoco", "cassie.xml")
@@ -40,6 +40,7 @@ class CassieEnv_v2:
             self.trajectory = self.trajectories[0]
             self.aslip_traj = True
             self.clock_based = False
+            self.vertOffset = aslipVertOffset
         else:
             self.aslip_traj = False
             if traj == "walking":
@@ -322,8 +323,8 @@ class CassieEnv_v2:
             qvel = np.copy(self.sim.qvel())
             # Relative Foot Position tracking
             self.sim.foot_pos(foot_pos)
-            self.l_foot_pos += qpos[0:3] - foot_pos[0:3]
-            self.r_foot_pos += qpos[0:3] - foot_pos[3:6]
+            self.l_foot_pos += foot_pos[0:3]
+            self.r_foot_pos += foot_pos[3:6]
             # Foot Orientation Cost
             self.l_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
             self.r_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
@@ -552,10 +553,14 @@ class CassieEnv_v2:
             return jonah_RNN_reward(self)
         elif self.reward_func == "aslip":
             return aslip_reward(self, action)
-        elif self.reward_func == "aslip_TaskSpace":
-            return aslip_TaskSpace_reward(self, action)
-        elif self.reward_func == "aslip_DirectMatch":
-            return aslip_DirectMatch_reward(self, action)
+        elif self.reward_func == "aslip_TaskSpaceStateEst":
+            return aslip_TaskSpaceStateEst_reward(self, action)
+        elif self.reward_func == "aslip_TaskSpaceMujoco":
+            return aslip_TaskSpaceMujoco_reward(self, action)
+        elif self.reward_func == "aslip_DirectMatchStateEst":
+            return aslip_DirectMatchStateEst_reward(self, action)
+        elif self.reward_func == "aslip_DirectMatchMujoco":
+            return aslip_DirectMatchMujoco_reward(self, action)
         elif self.reward_func == "iros_paper":
             return iros_paper_reward(self)
         else:
@@ -635,9 +640,9 @@ class CassieEnv_v2:
         # ASLIP TRAJECTORY
         elif self.aslip_traj and not self.clock_based:
             if(self.phase == 0):
-                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1))
+                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1, offset=self.vertOffset))
             else:
-                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1))
+                ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1, offset=self.vertOffset))
 
         # OTHER TRAJECTORY
         else:
@@ -694,6 +699,30 @@ class CassieEnv_v2:
 
         return self.vis.draw(self.sim)
     
+
+    def get_traj_and_state_info(self):
+
+        traj_info = get_ref_aslip_unaltered_state(self, self.phase)
+        traj_info = [traj_info[4], traj_info[2], traj_info[0]]
+        traj_cmd_info = get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phase, offset=self.vertOffset)
+        traj_cmd_info = [traj_cmd_info[4], traj_cmd_info[2], traj_cmd_info[0]]
+        pelvis_pos = self.cassie_state.pelvis.position[:]
+        pelvis_pos[2] - self.cassie_state.terrain.height
+        lf_pos = self.cassie_state.leftFoot.position[:]
+        rf_pos = self.cassie_state.rightFoot.position[:]
+        lf_pos = [pelvis_pos[i] + lf_pos[i] for i in range(3)]
+        rf_pos = [pelvis_pos[i] + rf_pos[i] for i in range(3)]
+        robot_state_info = np.array([pelvis_pos, lf_pos, rf_pos])
+        qpos = self.sim.qpos()
+
+        actual_compos = qpos[0:3]
+        actual_lf = self.l_foot_pos
+        actual_rf = self.r_foot_pos
+        actual_state_info = np.array([actual_compos, actual_lf, actual_rf])
+
+        return traj_info, traj_cmd_info, robot_state_info, actual_state_info
+
+
 # Currently unused
 # def get_omniscient_state(self):
 #     full_state = self.get_full_state()

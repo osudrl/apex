@@ -17,6 +17,7 @@ if __name__ == "__main__":
     parser.add_argument("--not_no_delta", default=True, action='store_false', dest='no_delta')
     parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
     parser.add_argument("--reward", default="iros_paper", type=str)
+    parser.add_argument("--aslipVertOffset", default=None, type=float)
 
 
     """

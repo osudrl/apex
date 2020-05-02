@@ -10,6 +10,7 @@ and using that as the input to the network.
 - this should prevent the com x input from being used like a clock.
 - get_ref_aslip_ext_state below
 """
+
 def getAllTrajectories(speeds):
     trajectories = []
 
@@ -72,5 +73,31 @@ def get_ref_aslip_ext_state(self, current_state, last_compos, phase=None, offset
     cpos = cpos - current_compos
     lpos = lpos - current_lpos
     rpos = rpos - current_rpos
+
+    return rpos, rvel, lpos, lvel, cpos, cvel
+
+def get_ref_aslip_unaltered_state(self, phase=None, offset=None):
+
+    if phase is None:
+        phase = self.phase
+
+    if phase > self.phaselen:
+        phase = 0
+
+    phase = int(phase)
+
+    rpos = np.copy(self.trajectory.rpos[phase])
+    rvel = np.copy(self.trajectory.rvel[phase])
+    lpos = np.copy(self.trajectory.lpos[phase])
+    lvel = np.copy(self.trajectory.lvel[phase])
+    cpos = np.copy(self.trajectory.cpos[phase])
+    cvel = np.copy(self.trajectory.cvel[phase])
+
+    # Manual z offset to get taller walking
+    if offset is not None:
+        cpos[2] += offset
+        # need to update these because they 
+        lpos[2] -= offset
+        rpos[2] -= offset
 
     return rpos, rvel, lpos, lvel, cpos, cvel

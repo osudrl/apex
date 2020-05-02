@@ -27,7 +27,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, reward=None, history=0, **kwargs):
+def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, reward=None, history=0, aslipVertOffset=None, **kwargs):
     from functools import partial
 
     """
@@ -48,7 +48,7 @@ def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics
         from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient
 
         if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history, aslipVertOffset=aslipVertOffset)
         elif path == 'CassiePlayground-v0':
             env_fn = partial(CassiePlayground, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
@@ -159,7 +159,7 @@ def eval_policy(policy, args, run_args):
     visualize = not args.no_viz
     print("env name: ", args.env_name)
     if args.env_name == "Cassie-v0":
-        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, aslipVertOffset=run_args.aslipVertOffset)
     elif args.env_name == "CassiePlayground-v0":
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
     elif args.env_name == "CassieNoaccelFootDistOmniscient":

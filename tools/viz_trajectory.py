@@ -8,6 +8,107 @@ import matplotlib.pyplot as plt
 
 import pickle
 import numpy as np
+import torch
+import time
+
+def eval_policy(policy, args, run_args):
+
+    cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
+    cassie_env.debug = args.debug
+    visualize = not args.no_viz
+    traj_len = args.traj_len
+
+    traj_info = [] # 
+    traj_cmd_info = [] # what actually gets sent to robot as state
+    robot_state_info = [] # robot's estimated state
+    actual_state_info = [] # actual mujoco state of the robot
+
+    state = torch.Tensor(cassie_env.reset_for_test())
+    cassie_env.update_speed(0.5)
+    print(cassie_env.speed)
+    count, passed, done = 0, 1, False
+    while count < traj_len and not done:
+        
+        if visualize:
+            cassie_env.render()
+
+        # Get action and act
+        action = policy(state, True)
+        action = action.data.numpy()
+        state, reward, done, _ = cassie_env.step(action)
+        state = torch.Tensor(state)
+
+        # print(cassie_env.phase)
+
+        # See if end state reached
+        if done or cassie_env.sim.qpos()[2] < 0.4:
+            passed = 0
+            print("failed")
+
+        # Get trajectory info and robot info
+        a, b, c, d = cassie_env.get_traj_and_state_info()
+        traj_info.append(a)
+        traj_cmd_info.append(b)
+        robot_state_info.append(c)
+        actual_state_info.append(d)
+
+        count += 1
+
+    traj_info = np.array(traj_info)
+    traj_cmd_info = np.array(traj_cmd_info)
+    robot_state_info = np.array(robot_state_info)
+    actual_state_info = np.array(actual_state_info)
+
+    fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+
+    # print(traj_info)
+
+    print(traj_info.shape)
+    axs[0][0].set_title("XZ plane of traj_info")
+    axs[0][0].plot(traj_info[:,0,0], traj_info[:,0,2], 'o-', label='cpos')
+    axs[0][0].plot(traj_info[:,1,0], traj_info[:,1,2], 'o-', label='lpos')
+    axs[0][0].plot(traj_info[:,2,0], traj_info[:,2,2], 'o-', label='rpos')
+
+    print(traj_cmd_info.shape)
+    axs[0][1].set_title("XZ plane of traj_cmd_info")
+    axs[0][1].plot(traj_cmd_info[:,0,0], traj_cmd_info[:,0,2], label='cpos')
+    axs[0][1].plot(traj_cmd_info[:,1,0], traj_cmd_info[:,1,2], label='lpos')
+    axs[0][1].plot(traj_cmd_info[:,2,0], traj_cmd_info[:,2,2], label='rpos')
+
+    print(robot_state_info.shape)
+    axs[1][0].set_title("XZ plane of robot_state_info")
+    axs[1][0].plot(robot_state_info[:,0,0], robot_state_info[:,0,2], label='cpos')
+    axs[1][0].plot(robot_state_info[:,1,0], robot_state_info[:,1,2], label='lpos')
+    axs[1][0].plot(robot_state_info[:,2,0], robot_state_info[:,2,2], label='rpos')
+
+    print(actual_state_info.shape)
+    axs[1][1].set_title("XZ plane of actual_state_info")
+    axs[1][1].plot(actual_state_info[:,0,0], actual_state_info[:,0,2], label='cpos')
+    axs[1][1].plot(actual_state_info[:,1,0], actual_state_info[:,1,2], label='lpos')
+    axs[1][1].plot(actual_state_info[:,2,0], actual_state_info[:,2,2], label='rpos')
+
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--path", type=str, default="../trained_models/ppo/Cassie-v0/traj-aslip_aslip_64_5096/", help="path to folder containing policy and run details")
+parser.add_argument("--traj_len", default=200, type=str)
+parser.add_argument("--debug", default=False, action='store_true')
+parser.add_argument("--no_viz", default=False, action='store_true')
+
+args = parser.parse_args()
+
+run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
+
+policy = torch.load(args.path + "actor.pt")
+# policy.eval()  # NOTE: for some reason the saved nodelta_neutral_stateest_symmetry policy needs this but it breaks all new policies...
+
+eval_policy(policy, args, run_args)
+
 
 
 def set_axes_equal(ax):
@@ -39,7 +140,11 @@ def set_axes_equal(ax):
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
 
-trajectory_type = input("Enter the type of trajectory [iros_paper, aslip, mission]:\n")
+# trajectory_type = input("Enter the type of trajectory [iros_paper, aslip, mission]:\n")
+"""
+
+trajectory_type = "aslipRT"
+
 
 if trajectory_type == "iros_paper":
     env = CassieEnv(traj="walking")
@@ -129,5 +234,9 @@ elif trajectory_type == "aslip":
 
     plt.show()
 
-elif trajectory_type == "command":
-    raise NotImplementedError
+elif trajectory_type == "aslipRT":
+    policy = torch.load("../trained_models/ppo/Cassie-v0/traj-aslip_aslip_64_5096/" + "actor.pt")
+
+    eval_policy(policy)
+
+"""
