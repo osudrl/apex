@@ -27,7 +27,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, reward=None, history=0, **kwargs):
+def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, reward=None, history=0, **kwargs):
     from functools import partial
 
     """
@@ -48,15 +48,15 @@ def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics
         from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_noaccel_footdist
 
         if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassiePlayground-v0':
-            env_fn = partial(CassiePlayground, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+            env_fn = partial(CassiePlayground, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
-            env_fn = partial(CassieStandingEnv, state_est=state_est)
+            env_fn = partial(CassieStandingEnv, simrate=simrate, state_est=state_est)
         elif path == 'CassieNoaccelFootDistOmniscient':
-            env_fn = partial(CassieEnv_noaccel_footdist_omniscient, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=True, no_delta=no_delta, reward=reward, history=history)
+            env_fn = partial(CassieEnv_noaccel_footdist_omniscient, simrate=simrate, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=True, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieNoaccelFootDist':
-            env_fn = partial(CassieEnv_noaccel_footdist, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+            env_fn = partial(CassieEnv_noaccel_footdist, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
 
         # TODO for Yesh: make mirrored_obs an attribute of environment, configured based on setup parameters
         if mirror:
