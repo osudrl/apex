@@ -353,8 +353,8 @@ class CassieEnv_v2:
         self.prev_action = action
 
         # TODO: make 0.3 a variable/more transparent
-        if reward < 0.3:
-            done = True
+        # if reward < 0.3:
+        #     done = True
 
         if return_omniscient_state:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
