@@ -3,11 +3,8 @@ from rl.policies.actor import GaussianMLP_Actor
 from tools.test_commands import *
 from tools.eval_perturb import *
 from tools.eval_mission import *
-<<<<<<< HEAD
 from tools.compare_pols import *
-=======
 from tools.eval_sensitivity import *
->>>>>>> 96dc77f20f6eee00ac8a28994233856fd6e5dbc5
 from collections import OrderedDict
 from util import env_factory
 
@@ -32,7 +29,7 @@ parser.add_argument("--max_speed", type=float, default=3.0, help="Maximum allowa
 parser.add_argument("--min_speed", type=float, default=0.0, help="Minimum allowable speed to test")
 parser.add_argument("--n_iter", type=int, default=10000, help="Number of command cycles to test")
 # Test Perturbs args
-parser.add_argument("--wait_time", type=float, default=4.0, help="How long to wait after perturb to count as success")
+parser.add_argument("--wait_time", type=float, default=3.0, help="How long to wait after perturb to count as success")
 parser.add_argument("--pert_dur", type=float, default=0.2, help="How long to apply perturbation")
 parser.add_argument("--pert_size", type=float, default=50, help="Size of perturbation to start sweep from")
 parser.add_argument("--pert_incr", type=float, default=10.0, help="How much to increment the perturbation size after each success")
@@ -47,12 +44,11 @@ parser.add_argument("--lo_factor", type=float, default=0, help="Low factor")
 
 args = parser.parse_args()
 run_args = pickle.load(open(os.path.join(args.path, "experiment.pkl"), "rb"))
-print(run_args)
 # cassie_env = CassieEnv(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
 # env_fn = partial(CassieEnv, traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
 # Make mirror False so that env_factory returns a regular wrap env function and not a symmetric env function that can be called to return
 # a cassie environment (symmetric env cannot be called to make another env)
-env_fn = env_factory(run_args.env_name, traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
+env_fn = env_factory(run_args.env_name, traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
                     mirror=False, clock_based=run_args.clock_based, reward=run_args.reward, history=run_args.history)
 cassie_env = env_fn()
 policy = torch.load(os.path.join(args.path, "actor.pt"))

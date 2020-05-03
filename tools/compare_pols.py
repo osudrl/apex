@@ -39,9 +39,6 @@ def process_commands(data):
 
     return stats
 
-if len(sys.argv) != 2:
-    print("Error: Only takes in two policies as input")
-
 def compare_pols(pol1, pol2):
     print("opening file ", os.path.join(pol1, "eval_commands.npy"))
     # pol1_command = np.load(os.path.join(pol1, "eval_commands.npy"))
