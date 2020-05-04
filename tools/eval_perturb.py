@@ -211,22 +211,16 @@ def progress_bar(curr_ind, total_ind, bar_width, elapsed_time, est_total_time):
         outstring += ", {:.1f}s elapsed, {:.1f}s ({:.1f}) left".format(elapsed_time, time_left, est_total_time-elapsed_time)
     return outstring
 
-def plot_perturb(filename):
+def plot_perturb(filename, plotname, max_force):
     data = np.load(filename)
-    print("max data: ", np.max(data))
-    data = np.mean(data, axis=0)
-    print("data: ", data.shape)
+    data = np.mean(data, axis=1)
     num_angles = len(data)
     
-    max_force = 50*np.ceil(np.max(data) / 50)
-    print("max force: ", max_force)
-
     num_cells = 100
     fig, ax1 = plt.subplots(subplot_kw=dict(projection='polar'))
     ax1.patch.set_alpha(0)
     offset = 2*np.pi/100/2
     theta, r = np.mgrid[0-offset:2*np.pi-offset:complex(0,num_angles+1), 0:max_force:complex(0, num_cells)]
-    print(theta.shape)
     color_data = np.zeros(theta.shape)
     for i in range(color_data.shape[0]-1):
         idx = int(np.floor(data[i] / (max_force / num_cells)))
@@ -251,8 +245,8 @@ def plot_perturb(filename):
     img = plt.imread(os.path.join(os.path.dirname(os.path.realpath(__file__)), "cassie_top_white.png"))
     ax_image.imshow(img, alpha=.3)
     ax_image.axis('off')
-    plt.show()
-    plt.savefig("./test_perturb_eval_phase.png")
+    # plt.show()
+    plt.savefig(plotname)
 
 ################################
 ##### DEPRACATED FUNCTIONS #####
