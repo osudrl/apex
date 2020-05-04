@@ -21,7 +21,6 @@ parser.add_argument("--path2", type=str, default="./trained_models/nodelta_neutr
 parser.add_argument("--n_procs", type=int, default=4, help="Number of procs to use for multi-processing")
 parser.add_argument("--test", type=str, default="full", help="Test to run (options: \"full\", \"commands\", and \"perturb\", and \"compare\")")
 parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")
-parser.add_argument("--full", default=False, action="store_true", help="Whether to run full eval or not (run all tests)")
 # Test Commands args
 parser.add_argument("--n_steps", type=int, default=200, help="Number of steps to for a full command cycle (1 speed change and 1 orientation change)")
 parser.add_argument("--n_commands", type=int, default=6, help="Number of commands in a single test iteration")
@@ -77,7 +76,7 @@ def test_perturbs(cassie_env, policy, args):
     np.save(os.path.join(args.path, "eval_perturbs.npy"), save_data)
 
 # If not command line arg, assume run all tests
-if args.full:
+if args.test == "full":
     print("Running full test")
     test_commands(cassie_env, policy, args)
     test_perturbs(cassie_env, policy, args)
