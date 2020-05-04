@@ -196,7 +196,7 @@ def compute_perturbs_multi(env_fn, policy, wait_time=4, perturb_duration=0.2, pe
     print("")
     print("total time: ", time.time() - start_t)
     ray.shutdown()
-    return max_force
+    return total_data
 
 def progress_bar(curr_ind, total_ind, bar_width, elapsed_time, est_total_time):
     num_bar = int((curr_ind / total_ind) // (1/bar_width))

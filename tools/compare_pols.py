@@ -91,6 +91,8 @@ def draw_headers(pdf, pol1, pol2, key_col_width, min_width):
     return pol1_width, pol2_width
 
 def compare_pols(pol1, pol2):
+    pol1 = pol1.strip("/")
+    pol2 = pol2.strip("/")
     # For spacing concerns later, need pol1 to be the "longer" (name wise) of the two
     if len(os.path.basename(pol2)) > len(os.path.basename(pol1)):
         temp = pol1
