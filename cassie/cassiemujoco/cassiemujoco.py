@@ -91,6 +91,9 @@ class CassieSim:
 
     # def set_cassie_state(self, copy_state):
     #     cassie_sim_set_cassiestate(self.c, copy_state)
+    
+    def variable_hold(self, level):
+        cassie_sim_variable_hold(self.c, level)
 
     def hold(self):
         cassie_sim_hold(self.c)

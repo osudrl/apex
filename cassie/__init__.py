@@ -6,7 +6,6 @@ from .cassie_noaccel_footdist_omniscient import CassieEnv_noaccel_footdist_omnis
 from .cassie_noaccel_footdist_env import CassieEnv_noaccel_footdist
 
 
-
 from .cassiemujoco import *
 
 

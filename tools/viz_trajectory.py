@@ -13,7 +13,7 @@ import time
 
 def eval_policy(policy, args, run_args):
 
-    cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
+    cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history, reward="aslip")
     cassie_env.debug = args.debug
     visualize = not args.no_viz
     traj_len = args.traj_len
@@ -24,7 +24,7 @@ def eval_policy(policy, args, run_args):
     actual_state_info = [] # actual mujoco state of the robot
 
     state = torch.Tensor(cassie_env.reset_for_test())
-    cassie_env.update_speed(0.5)
+    cassie_env.update_speed(2.0)
     print(cassie_env.speed)
     count, passed, done = 0, 1, False
     while count < traj_len and not done:
@@ -38,10 +38,13 @@ def eval_policy(policy, args, run_args):
         state, reward, done, _ = cassie_env.step(action)
         state = torch.Tensor(state)
 
+        print(reward)
+
         # print(cassie_env.phase)
 
         # See if end state reached
         if done or cassie_env.sim.qpos()[2] < 0.4:
+            print(done)
             passed = 0
             print("failed")
 
@@ -94,13 +97,15 @@ def eval_policy(policy, args, run_args):
 
 
 parser = argparse.ArgumentParser()
-
-parser.add_argument("--path", type=str, default="../trained_models/ppo/Cassie-v0/traj-aslip_aslip_64_5096/", help="path to folder containing policy and run details")
-parser.add_argument("--traj_len", default=200, type=str)
+parser.add_argument("--path", type=str, default=None, help="path to folder containing policy and run details")
+parser.add_argument("--traj_len", default=400, type=str)
 parser.add_argument("--debug", default=False, action='store_true')
 parser.add_argument("--no_viz", default=False, action='store_true')
 
 args = parser.parse_args()
+
+args.path = "../trained_models/ppo/Cassie-v0/IK_traj-aslip_aslip_comorientheight_1024_8192_seed-0_NEW-aslip_TaskSpaceMujoco/"
+args.path = "../trained_models/ppo/Cassie-v0/IK_traj-aslip_aslip_comorientheight_1024_8192_seed-0_NEW-aslip_strict/"
 
 run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 

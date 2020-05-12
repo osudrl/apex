@@ -379,6 +379,9 @@ cassie_sim_xquat.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_char_p]
 cassie_sim_clear_forces = _libraries['./libcassiemujoco.so'].cassie_sim_clear_forces
 cassie_sim_clear_forces.restype = None
 cassie_sim_clear_forces.argtypes = [POINTER_T(struct_cassie_sim)]
+cassie_sim_variable_hold = _libraries['./libcassiemujoco.so'].cassie_sim_variable_hold
+cassie_sim_variable_hold.restype = None
+cassie_sim_variable_hold.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c_int]
 cassie_sim_hold = _libraries['./libcassiemujoco.so'].cassie_sim_hold
 cassie_sim_hold.restype = None
 cassie_sim_hold.argtypes = [POINTER_T(struct_cassie_sim)]
@@ -713,7 +716,7 @@ __all__ = \
     'cassie_pelvis_out_t', 'cassie_cleanup',
     'struct_c__SA_state_radio_out_t', 'cassie_vis_valid',
     'pd_input_setup', 'pd_leg_in_t', 'cassie_mujoco_init',
-    'cassie_state_copy', 'cassie_core_sim_setup', 'battery_out_t',
+    'cassie_state_copy', 'cassie_core_sim_setup', 'battery_out_t', 'cassie_sim_variable_hold',
     'cassie_sim_hold', 'struct_CassieCoreSim', 'cassie_core_sim_step',
     'pack_cassie_out_t', 'cassie_out_t', 'radio_in_t',
     'unpack_cassie_out_t', 'struct_c__SA_pd_task_in_t',

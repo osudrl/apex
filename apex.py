@@ -16,15 +16,24 @@ if __name__ == "__main__":
     parser.add_argument("--not_dyn_random", default=True, action='store_false', dest='dyn_random')
     parser.add_argument("--not_no_delta", default=True, action='store_false', dest='no_delta')
     parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
+    parser.add_argument("--learn_gains", default=False, action='store_true', dest='learn_gains')             # learn PD gains or not
+    parser.add_argument("--ik_baseline", default=False, action='store_true', dest='ik_baseline')             # use ik as baseline for aslip + delta policies?
     parser.add_argument("--reward", default="iros_paper", type=str)
-    parser.add_argument("--aslipVertOffset", default=None, type=float)
-
+    # parser.add_argument("--gainsDivide", default=1.0, type=float)
 
     """
         General arguments for configuring the logger
     """
     parser.add_argument("--run_name", default=None)                                    # run name
 
+
+    """
+        Arguments generally used for Curriculum Learning
+    """
+    parser.add_argument("--exchange_reward", default=None)                              # Can only be used with previous (below)
+    parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
+    parser.add_argument("--hold_level", type=int, default=None)                         # Level for holding the pelvis in place (1 highest hold - 4 least hold)
+    parser.add_argument("--fixed_speed", type=float, default=None)                      # Fixed speed to train/test at
 
     if len(sys.argv) < 2:
         print("Usage: python apex.py [option]", sys.argv)
@@ -216,7 +225,6 @@ if __name__ == "__main__":
         parser.add_argument("--algo_name", default="ppo")                                   # algo name
         parser.add_argument("--env_name", "-e",   default="Cassie-v0")
         parser.add_argument("--logdir", type=str, default="./trained_models/ppo/")          # Where to log diagnostics to
-        parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
         parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
         parser.add_argument("--history", default=0, type=int)                                         # number of previous states to use as input
         parser.add_argument("--redis_address", type=str, default=None)                      # address of redis server (for cluster setups)
@@ -241,6 +249,7 @@ if __name__ == "__main__":
         parser.add_argument("--recurrent",   action='store_true')
 
         args = parser.parse_args()
+
         args.num_steps = args.num_steps // args.num_procs
         args = parse_previous(args)
 

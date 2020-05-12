@@ -446,8 +446,11 @@ def run_experiment(args):
 
     torch.set_num_threads(1)
 
+    if args.ik_baseline and args.no_delta:
+        args.ik_baseline = False
+
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, no_delta=args.no_delta, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history, aslipVertOffset=None)
+    env_fn = env_factory(args.env_name, traj=args.traj, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -484,11 +487,14 @@ def run_experiment(args):
 
     print()
     print("Environment: {}".format(args.env_name))
+    print(" ├ traj:           {}".format(args.traj))
     print(" ├ clock_based:    {}".format(args.clock_based))
     print(" ├ state_est:      {}".format(args.state_est))
     print(" ├ dyn_random:     {}".format(args.dyn_random))
     print(" ├ no_delta:       {}".format(args.no_delta))
     print(" ├ mirror:         {}".format(args.mirror))
+    print(" ├ ik baseline:    {}".format(args.ik_baseline))
+    print(" ├ learn gains:    {}".format(args.learn_gains))
     print(" ├ reward:         {}".format(args.reward))
     print(" └ obs_dim:        {}".format(obs_dim))
 

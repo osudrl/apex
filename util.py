@@ -27,7 +27,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, reward=None, history=0, aslipVertOffset=None, **kwargs):
+def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, ik_baseline=False, learn_gains=False, reward=None, history=0, hold_level=None, fixed_speed=None):
     from functools import partial
 
     """
@@ -40,15 +40,15 @@ def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    # if history > 0:
-    #   raise NotImplementedError
+
 
     # Custom Cassie Environment
     if path in ['Cassie-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieNoaccelFootDist']:
         from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient
 
         if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history, aslipVertOffset=aslipVertOffset)
+            # env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, hold_level=hold_level)
         elif path == 'CassiePlayground-v0':
             env_fn = partial(CassiePlayground, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
@@ -115,7 +115,10 @@ def create_logger(args):
     else:
         # see if we are resuming a previous run, if we are mark as continued
         if args.previous is not None:
-            output_dir = args.previous[0:-1] + '-cont'
+            if args.exchange_reward is not None:
+                output_dir = args.previous[0:-1] + "_NEW-" + args.reward
+            else:
+                output_dir = args.previous[0:-1] + '-cont'
         else:
             # get a unique hash for the hyperparameter settings, truncated at 10 chars
             arg_hash   = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:6] + '-seed' + seed
@@ -159,7 +162,8 @@ def eval_policy(policy, args, run_args):
     visualize = not args.no_viz
     print("env name: ", args.env_name)
     if args.env_name == "Cassie-v0":
-        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, aslipVertOffset=run_args.aslipVertOffset)
+        # env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, learn_gains=run_args.learn_gains, ik_baseline=run_args.ik_baseline, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, hold_level=args.hold_level)
     elif args.env_name == "CassiePlayground-v0":
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
     elif args.env_name == "CassieNoaccelFootDistOmniscient":
@@ -191,7 +195,9 @@ def eval_policy(policy, args, run_args):
         done = False
         timesteps = 0
         eval_reward = 0
-        speed = 0.0
+        speed = 1.0
+
+        env.update_speed(speed)
 
         while render_state:
         
@@ -258,6 +264,7 @@ def eval_policy(policy, args, run_args):
                     state[20:23] = torch.FloatTensor(new_translationalVelocity)          
                     
                 action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+
                 state, reward, done, _ = env.step(action)
                 
                 eval_reward += reward
@@ -291,8 +298,13 @@ def parse_previous(args):
         args.no_delta = run_args.no_delta
         args.mirror = run_args.mirror
         args.recurrent = run_args.recurrent
+        args.learn_gains = run_args.learn_gains
+        args.ik_baseline=run_args.ik_baseline,
         if args.env_name == "CassiePlayground-v0":
             args.reward = "command"
             args.run_name = run_args.run_name + "-playground"
+        if args.exchange_reward != None:
+            args.reward = args.exchange_reward
+            args.run_name = run_args.run_name + "_NEW-" + args.reward
     
     return args
