@@ -616,30 +616,30 @@ class CassieEnv_v2:
             self.early_term_cutoff = -0.3
             return aslip_comorientheight_reward(self, action)
 
-        elif self.reward_func == "aslip_heightpenalty":
-            self.early_term_cutoff = -0.3
-            return aslip_heightpenalty_reward(self, action)
-        elif self.reward_func == "aslip_comorient":
-            self.early_term_cutoff = 0.2
-            return aslip_comorient_reward(self, action)
-        elif self.reward_func == "aslip_comorient_heightpenalty":
-            self.early_term_cutoff = 0.2
-            return aslip_comorient_heightpenalty_reward(self, action)
-        elif self.reward_func == "aslip_strict":
-            self.early_term_cutoff = 0.1
-            return aslip_strict_reward(self, action)
+        # elif self.reward_func == "aslip_heightpenalty":
+        #     self.early_term_cutoff = -0.3
+        #     return aslip_heightpenalty_reward(self, action)
+        # elif self.reward_func == "aslip_comorient":
+        #     self.early_term_cutoff = 0.2
+        #     return aslip_comorient_reward(self, action)
+        # elif self.reward_func == "aslip_comorient_heightpenalty":
+        #     self.early_term_cutoff = 0.2
+        #     return aslip_comorient_heightpenalty_reward(self, action)
+        # elif self.reward_func == "aslip_strict":
+        #     self.early_term_cutoff = 0.1
+        #     return aslip_strict_reward(self, action)
         elif self.reward_func == "aslip_TaskSpaceMujoco":
             self.early_term_cutoff = 0.0
             return aslip_TaskSpaceMujoco_reward(self, action)
-        elif self.reward_func == "aslip_TaskSpaceStateEst":
-            self.early_term_cutoff = 0.0
-            return aslip_TaskSpaceStateEst_reward(self, action)
-        elif self.reward_func == "aslip_DirectMatchStateEst":
-            self.early_term_cutoff = 0.0
-            return aslip_DirectMatchStateEst_reward(self, action)
-        elif self.reward_func == "aslip_DirectMatchMujoco":
-            self.early_term_cutoff = 0.0
-            return aslip_DirectMatchMujoco_reward(self, action)
+        # elif self.reward_func == "aslip_TaskSpaceStateEst":
+        #     self.early_term_cutoff = 0.0
+        #     return aslip_TaskSpaceStateEst_reward(self, action)
+        # elif self.reward_func == "aslip_DirectMatchStateEst":
+        #     self.early_term_cutoff = 0.0
+        #     return aslip_DirectMatchStateEst_reward(self, action)
+        # elif self.reward_func == "aslip_DirectMatchMujoco":
+        #     self.early_term_cutoff = 0.0
+        #     return aslip_DirectMatchMujoco_reward(self, action)
 
         elif self.reward_func == "iros_paper":
             return iros_paper_reward(self)
@@ -784,11 +784,12 @@ class CassieEnv_v2:
     
 
     def get_traj_and_state_info(self):
-        # unaltered traj info from library
-        traj_info = get_ref_aslip_unaltered_state(self, self.phase)
+        # traj info used in rewards
+        traj_info = get_ref_aslip_global_state(self, self.phase)
+        # traj_info = get_ref_aslip_unaltered_state(self, self.phase)
         traj_info = [traj_info[4], traj_info[2], traj_info[0]]
         
-        # processed traj info
+        # traj info going into the policy
         # traj_cmd_info = get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phase, offset=self.vertOffset)
         traj_cmd_info = get_ref_aslip_unaltered_state(self, self.phase)
         traj_cmd_info = [traj_cmd_info[4], traj_cmd_info[2], traj_cmd_info[0]]
@@ -798,18 +799,18 @@ class CassieEnv_v2:
         pelvis_pos[2] - self.cassie_state.terrain.height
         lf_pos = self.cassie_state.leftFoot.position[:]
         rf_pos = self.cassie_state.rightFoot.position[:]
-        # lf_pos_global = [pelvis_pos[i] + lf_pos[i] for i in range(3)]
-        # rf_pos_global = [pelvis_pos[i] + rf_pos[i] for i in range(3)]
-        robot_state_info = np.array([pelvis_pos, lf_pos, rf_pos])
-        # robot_state_info = np.array([pelvis_pos, lf_pos_global, rf_pos_global])
+        lf_pos_global = [pelvis_pos[i] + lf_pos[i] for i in range(3)]
+        rf_pos_global = [pelvis_pos[i] + rf_pos[i] for i in range(3)]
+        # robot_state_info = np.array([pelvis_pos, lf_pos, rf_pos])
+        robot_state_info = np.array([pelvis_pos, lf_pos_global, rf_pos_global])
         
         # mujoco info
         qpos = self.sim.qpos()
         actual_compos = qpos[0:3]
-        # actual_lf = self.l_foot_pos
-        # actual_rf = self.r_foot_pos
-        actual_lf = self.l_foot_pos - qpos[0:3]
-        actual_rf = self.r_foot_pos - qpos[0:3]
+        actual_lf = self.l_foot_pos
+        actual_rf = self.r_foot_pos
+        # actual_lf = self.l_foot_pos - qpos[0:3]
+        # actual_rf = self.r_foot_pos - qpos[0:3]
         actual_state_info = np.array([actual_compos, actual_lf, actual_rf])
 
         return traj_info, traj_cmd_info, robot_state_info, actual_state_info

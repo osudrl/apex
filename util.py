@@ -48,7 +48,7 @@ def env_factory(path, traj="walking", clock_based=True, state_est=True, dynamics
 
         if path == 'Cassie-v0':
             # env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
-            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, hold_level=hold_level)
+            env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, hold_level=hold_level, fixed_speed=fixed_speed)
         elif path == 'CassiePlayground-v0':
             env_fn = partial(CassiePlayground, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
@@ -163,7 +163,7 @@ def eval_policy(policy, args, run_args):
     print("env name: ", args.env_name)
     if args.env_name == "Cassie-v0":
         # env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, learn_gains=run_args.learn_gains, ik_baseline=run_args.ik_baseline, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, hold_level=args.hold_level)
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, learn_gains=run_args.learn_gains, ik_baseline=run_args.ik_baseline, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, hold_level=args.hold_level, fixed_speed=args.fixed_speed)
     elif args.env_name == "CassiePlayground-v0":
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
     elif args.env_name == "CassieNoaccelFootDistOmniscient":
@@ -195,7 +195,7 @@ def eval_policy(policy, args, run_args):
         done = False
         timesteps = 0
         eval_reward = 0
-        speed = 1.0
+        speed = 0.0
 
         env.update_speed(speed)
 

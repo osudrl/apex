@@ -178,6 +178,9 @@ def get_ref_aslip_global_state(self, phase=None, offset=None):
     cpos = np.copy(self.trajectory.cpos[phase])
     cvel = np.copy(self.trajectory.cvel[phase])
 
+    # x offset for com based on current step count
+    cpos[0] += (self.trajectory.cpos[-1, 0] - self.trajectory.cpos[0, 0]) * self.counter
+
     # Manual z offset to get taller walking
     if offset is not None:
         cpos[2] += offset
@@ -185,7 +188,7 @@ def get_ref_aslip_global_state(self, phase=None, offset=None):
         lpos[2] -= offset
         rpos[2] -= offset
 
-    # Put feet into global coordinates
+    # Put feet into global coordinates. this also adjusts the x
     lpos += cpos
     rpos += cpos
 
