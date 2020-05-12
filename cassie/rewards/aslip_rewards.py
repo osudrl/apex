@@ -130,7 +130,70 @@ def aslip_joint_reward(self, action):
         print("actual speed: {}\tdesired_speed: {}".format(np.linalg.norm(qvel[0:3]), self.speed))
     return reward
 
-def aslip_reward(self, action):
+def aslip_old_reward(self, action):
+
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+
+    ref_pos, ref_vel = self.get_ref_state(self.phase)
+
+    # TODO: should be variable; where do these come from?
+    # TODO: see magnitude of state variables to gauge contribution to reward
+    weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
+
+    # mujoco state info
+    com_pos = qpos[0:3]
+    lfoot_pos = self.cassie_state.leftFoot.position[:]
+    rfoot_pos = self.cassie_state.rightFoot.position[:]
+    com_vel = self.cassie_state.pelvis.translationalVelocity
+    
+    footpos_error     = 0
+    com_vel_error     = 0
+    action_penalty    = 0
+    foot_orient_penalty = 0
+    straight_diff = 0
+
+    phase_to_match = self.phase + 1
+
+    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_unaltered_state(self, phase_to_match)
+
+    for j in [0, 1, 2]:
+        footpos_error += np.linalg.norm(lfoot_pos[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot_pos[j] - ref_rfoot[j])
+
+    for j in [0, 1, 2]:
+        com_vel_error += np.linalg.norm(com_vel[j] - ref_cvel[j])
+
+    # action penalty
+    action_penalty = np.linalg.norm(action - self.prev_action)
+
+    # foot orientation penalty
+    foot_orient_penalty = self.l_foot_orient_cost + self.r_foot_orient_cost
+
+    # straight difference penalty
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+        straight_diff = 0
+    
+    reward = 0.3 * np.exp(-footpos_error) +    \
+                0.3 * np.exp(-com_vel_error) +    \
+                0.1 * np.exp(-action_penalty) +     \
+                0.2 * np.exp(-foot_orient_penalty) + \
+                0.1 * np.exp(-straight_diff)
+
+    if self.debug:
+        print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_vel:\t{2:.2f}, % = {3:.2f}\naction_penalty:\t{4:.2f}, % = {5:.2f}\nfoot_orient_penalty:\t{6:.2f}, % = {7:.2f}\nstraight_diff:\t{8:.2f}, % = {9:.2f}\n\n".format(
+        0.3 * np.exp(-footpos_error),          0.3 * np.exp(-footpos_error) / reward * 100,
+        0.3 * np.exp(-com_vel_error),          0.3 * np.exp(-com_vel_error) / reward * 100,
+        0.1 * np.exp(-action_penalty),         0.1 * np.exp(-action_penalty) / reward * 100,
+        0.2 * np.exp(-foot_orient_penalty),    0.2 * np.exp(-foot_orient_penalty) / reward * 100,
+        0.1  * np.exp(-straight_diff),         0.1  * np.exp(-straight_diff) / reward * 100,
+        reward
+        )
+        )
+        print("actual speed: {}\tdesired_speed: {}".format(qvel[0], self.speed))
+    return reward
+
+def aslip_oldMujoco_reward(self, action):
 
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())

@@ -38,7 +38,7 @@ class CassieEnv_v2:
         self.early_term_cutoff = 0.3
         curriculum_defaults = {
             "hold_level" : None,
-            "fixed_speed" : False
+            "fixed_speed" : None
         }
         for (arg, default) in curriculum_defaults.items():
             setattr(self, arg, kwargs.get(arg, default))
@@ -383,7 +383,7 @@ class CassieEnv_v2:
             self.counter += 1
 
         # Early termination
-        done = not(height > 0.5 and height < 3.0)
+        done = not(height > 0.4 and height < 3.0)
 
         reward = self.compute_reward(action)
 
@@ -415,7 +415,7 @@ class CassieEnv_v2:
             else:
                 self.phase_add = 1 + random.random()
 
-        if self.fixed_speed:
+        if self.fixed_speed != None:
             self.speed = 0
 
         self.simsteps = 0
@@ -432,6 +432,9 @@ class CassieEnv_v2:
         # qpos[3:7] = quaternion
         # self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
+
+        if self.aslip_traj:
+            qvel = np.zeros(qvel.shape)
 
         self.sim.set_qpos(qpos)
         self.sim.set_qvel(qvel)
@@ -599,17 +602,20 @@ class CassieEnv_v2:
         qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-
-        if self.reward_func == "jonah_RNN":
-            return jonah_RNN_reward(self)
         
-        elif self.reward_func == "aslip_joint":
-            self.early_term_cutoff = 0.3
+        if self.reward_func == "aslip_joint":
+            self.early_term_cutoff = 0.05
             return aslip_joint_reward(self, action)        
-
-        elif self.reward_func == "aslip":
+        elif self.reward_func == "aslip_old":
             self.early_term_cutoff = 0.3
-            return aslip_reward(self, action)
+            return aslip_old_reward(self, action)      
+        elif self.reward_func == "aslip_oldMujoco":
+            self.early_term_cutoff = 0.3
+            return aslip_oldMujoco_reward(self, action)
+        elif self.reward_func == "aslip_comorientheight":
+            self.early_term_cutoff = -0.3
+            return aslip_comorientheight_reward(self, action)
+
         elif self.reward_func == "aslip_heightpenalty":
             self.early_term_cutoff = -0.3
             return aslip_heightpenalty_reward(self, action)
@@ -619,10 +625,6 @@ class CassieEnv_v2:
         elif self.reward_func == "aslip_comorient_heightpenalty":
             self.early_term_cutoff = 0.2
             return aslip_comorient_heightpenalty_reward(self, action)
-        elif self.reward_func == "aslip_comorientheight":
-            self.early_term_cutoff = -0.3
-            return aslip_comorientheight_reward(self, action)
-
         elif self.reward_func == "aslip_strict":
             self.early_term_cutoff = 0.1
             return aslip_strict_reward(self, action)
@@ -632,13 +634,13 @@ class CassieEnv_v2:
         elif self.reward_func == "aslip_TaskSpaceStateEst":
             self.early_term_cutoff = 0.0
             return aslip_TaskSpaceStateEst_reward(self, action)
-
         elif self.reward_func == "aslip_DirectMatchStateEst":
             self.early_term_cutoff = 0.0
             return aslip_DirectMatchStateEst_reward(self, action)
         elif self.reward_func == "aslip_DirectMatchMujoco":
             self.early_term_cutoff = 0.0
             return aslip_DirectMatchMujoco_reward(self, action)
+
         elif self.reward_func == "iros_paper":
             return iros_paper_reward(self)
         else:
