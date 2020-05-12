@@ -233,9 +233,10 @@ def eval_policy(policy, args, run_args):
                 quaternion = euler2quat(z=orient_add, y=0, x=0)
                 iquaternion = inverse_quaternion(quaternion)
 
+                # TODO: Should probably not assume these indices. Should make them not hard coded
                 if env.state_est:
                     curr_orient = state[1:5]
-                    curr_transvel = state[14:17]
+                    curr_transvel = state[15:18]
                 else:
                     curr_orient = state[2:6]
                     curr_transvel = state[20:23]
@@ -249,7 +250,7 @@ def eval_policy(policy, args, run_args):
                 
                 if env.state_est:
                     state[1:5] = torch.FloatTensor(new_orient)
-                    state[14:17] = torch.FloatTensor(new_translationalVelocity)
+                    state[15:18] = torch.FloatTensor(new_translationalVelocity)
                     # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
                 else:
                     state[2:6] = torch.FloatTensor(new_orient)
@@ -257,6 +258,11 @@ def eval_policy(policy, args, run_args):
                     
                 action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
                 state, reward, done, _ = env.step(action)
+
+                # if env.lfoot_vel[2] < -0.6:
+                #     print("left foot z vel over 0.6: ", env.lfoot_vel[2])
+                # if env.rfoot_vel[2] < -0.6:
+                #     print("right foot z vel over 0.6: ", env.rfoot_vel[2])
                 
                 eval_reward += reward
                 timesteps += 1
