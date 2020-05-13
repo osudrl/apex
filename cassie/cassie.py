@@ -614,13 +614,13 @@ class CassieEnv_v2:
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         
         if self.reward_func == "aslip_joint":
-            self.early_term_cutoff = 0.05
+            self.early_term_cutoff = 0.0
             return aslip_joint_reward(self, action)        
         elif self.reward_func == "aslip_old":
-            self.early_term_cutoff = 0.3
+            self.early_term_cutoff = 0.0
             return aslip_old_reward(self, action)      
         elif self.reward_func == "aslip_oldMujoco":
-            self.early_term_cutoff = 0.3
+            self.early_term_cutoff = 0.0
             return aslip_oldMujoco_reward(self, action)
         elif self.reward_func == "aslip_comorientheight":
             self.early_term_cutoff = -0.3
