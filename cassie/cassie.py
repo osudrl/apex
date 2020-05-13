@@ -391,9 +391,8 @@ class CassieEnv_v2:
             #     self.vis.draw(self.sim)
         elif height < 0.4 or height > 3.0:
             done = True
-
-        # Early termination
-        done = not(height > 0.4 and height < 3.0)
+        else:
+            done = False
 
         reward = self.compute_reward(action)
 
