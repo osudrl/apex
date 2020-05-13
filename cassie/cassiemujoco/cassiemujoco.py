@@ -69,6 +69,12 @@ class CassieSim:
         qaccp = cassie_sim_qacc(self.c)
         return qaccp[:32]
 
+    def xpos(self, body_name):
+        # print("in xquat")
+        xposp = cassie_sim_xpos(self.c, body_name.encode())
+        # print("got pointer")
+        return xposp[:3]
+
     def xquat(self, body_name):
         # print("in xquat")
         xquatp = cassie_sim_xquat(self.c, body_name.encode())
