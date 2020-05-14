@@ -61,7 +61,7 @@ def aslip_joint_reward(self, action):
 
     # TODO: should be variable; where do these come from?
     # TODO: see magnitude of state variables to gauge contribution to reward
-    weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
+    reward_pos_idx = [3,4,5,6,7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 
     # mujoco state info
     com_pos = qpos[0:3]
@@ -96,14 +96,14 @@ def aslip_joint_reward(self, action):
     # com_vel_error += 10 * (np.abs(self.speed - com_vel[0]))
 
     # each joint pos, skipping feet
-    for i, j in enumerate(self.pos_idx):
+    for i, j in enumerate(reward_pos_idx):
         target = ref_pos[j]
         actual = qpos[j]
 
         if j == 20 or j == 34:
             joint_error += 0
         else:
-            joint_error += 30 * weight[i] * (target - actual) ** 2
+            joint_error += (target - actual) ** 2
 
     # # action penalty
     # action_penalty = np.linalg.norm(action - self.prev_action)
@@ -211,6 +211,7 @@ def aslip_oldMujoco_reward(self, action):
     # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
     weight = [0.05, 0.05, 0.25, 0.25, 0.05, 0.05, 0.05, 0.25, 0.25, 0.05]
+    reward_pos_idx = [3,4,5,6,7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 
     #weight = [.1] * 10
 
@@ -247,7 +248,7 @@ def aslip_oldMujoco_reward(self, action):
         com_vel_error += np.linalg.norm(com_vel[j] - ref_cvel[j])
 
     # each joint pos, skipping feet
-    for i, j in enumerate(self.pos_idx):
+    for i, j in enumerate(reward_pos_idx):
         target = ref_pos[j]
         actual = qpos[j]
 
@@ -301,6 +302,7 @@ def aslip_comorientheight_reward(self, action):
     # weight = [0.15, 0.15, 0.1, 0.05, 0.05, 0.15, 0.15, 0.1, 0.05, 0.05]
 
     weight = [0.05, 0.05, 0.25, 0.25, 0.05, 0.05, 0.05, 0.25, 0.25, 0.05]
+    reward_pos_idx = [3,4,5,6,7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 
     #weight = [.1] * 10
 
@@ -337,7 +339,7 @@ def aslip_comorientheight_reward(self, action):
     # com_vel_error += np.linalg.norm(com_vel - ref_cvel)
 
     # each joint pos, skipping feet
-    for i, j in enumerate(self.pos_idx):
+    for i, j in enumerate(reward_pos_idx):
         target = ref_pos[j]
         actual = qpos[j]
 

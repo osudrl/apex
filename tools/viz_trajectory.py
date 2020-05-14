@@ -13,7 +13,7 @@ import time
 
 def eval_policy(policy, args, run_args):
 
-    cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history, reward="aslip_old")
+    cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history, reward="aslip_oldMujoco")
     cassie_env.debug = args.debug
     visualize = not args.no_viz
     traj_len = args.traj_len
@@ -104,7 +104,7 @@ parser.add_argument("--no_viz", default=False, action='store_true')
 
 args = parser.parse_args()
 
-args.path = "../trained_models/ppo/Cassie-v0/IK_traj-aslip_aslip_comorientheight_2048_12288_seed-0/"
+args.path = "../trained_models/ppo/Cassie-v0/IK_traj-aslip_aslip_old_2048_12288_seed-10/"
 
 run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 

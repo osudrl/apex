@@ -734,7 +734,7 @@ class CassieEnv_v2:
                 ext_state = np.concatenate(get_ref_aslip_unaltered_state(self, self.phaselen - 1))
             else:
                 # ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1, offset=self.vertOffset))
-                ext_state = np.concatenate(get_ref_aslip_unaltered_state(self, self.phaselen - 1))
+                ext_state = np.concatenate(get_ref_aslip_unaltered_state(self, self.phase))
 
         # OTHER TRAJECTORY
         else:
