@@ -468,7 +468,10 @@ def run_experiment(args):
             policy = Gaussian_LSTM_Actor(obs_dim, action_dim, fixed_std=np.exp(-2), env_name=args.env_name)
             critic = LSTM_V(obs_dim)
         else:
-            policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(-2), env_name=args.env_name)
+            if args.fixed_stddev:
+                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(args.std_dev), env_name=args.env_name)
+            else:
+                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=None, env_name=args.env_name)
             critic = FF_V(obs_dim)
 
         with torch.no_grad():
