@@ -15,7 +15,7 @@ import copy
 
 import pickle
 
-class CassieEnv_noaccel_footdist:
+class CassieEnv_footdist:
     def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -172,7 +172,7 @@ class CassieEnv_noaccel_footdist:
         # self.delta_y_min, self.delta_y_max = self.default_ipos[4] - 0.05, self.default_ipos[4] + 0.05
 
         ### Trims ###
-        self.joint_offsets = np.zeros(14)
+        self.joint_offsets = np.zeros(16)
         self.com_vel_offset = 0
         self.y_offset = 0
 
@@ -209,7 +209,7 @@ class CassieEnv_noaccel_footdist:
     def set_up_state_space(self):
 
         mjstate_size   = 40
-        state_est_size = 44
+        state_est_size = 51#46
 
         speed_size     = 1
 
@@ -227,12 +227,12 @@ class CassieEnv_noaccel_footdist:
         
         if self.state_est:
             base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, -7, 8, -9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, -21, 22,
-                                    -23, 24, -25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 
-                                    38, 39, 36, 37, 42, 43, 40, 41])
+                                    -23, 24, -25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 36, -37, 38, 
+                                    42, 43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47])
             # base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, 7, 8, 9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, 21, 22,
             #                         23, 24, 25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 36, 37, 38, 
             #                         42, 43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47])
-            obs_size = state_est_size#len(base_mir_obs)
+            obs_size = state_est_size
         else:
             base_mir_obs = np.array([0.1, 1, 2, -3, 4, -5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, -21, 22, -23, 24, -25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
             obs_size = mjstate_size
@@ -250,8 +250,8 @@ class CassieEnv_noaccel_footdist:
         # NOTE: mirror loss only set up for clock based with state estimation so far. 
         observation_space = np.zeros(obs_size)
 
-        check_arr = np.arange(obs_size, dtype=np.float64)
-        check_arr[0] = 0.1
+        # check_arr = np.arange(obs_size, dtype=np.float64)
+        # check_arr[0] = 0.1
         # print("mir obs check: ", np.all(np.sort(np.abs(mirrored_obs)) == check_arr))
         # print("mir obs check: ", np.sort(np.abs(mirrored_obs)))
         # print("mir obs check: ", np.sort(np.abs(mirrored_obs)) == check_arr)
@@ -496,7 +496,10 @@ class CassieEnv_noaccel_footdist:
             floor_quat = euler2quat(z=0, y=rand_angle[0], x=rand_angle[1])
             self.sim.set_geom_quat(floor_quat, "floor")
         if self.joint_rand:
-            self.joint_offsets = np.random.uniform(-0.03, 0.03, 14)
+            self.joint_offsets = np.random.uniform(-0.03, 0.03, 16)
+            # Set motor and joint foot to be same offset
+            self.joint_offsets[4] = self.joint_offsets[12]
+            self.joint_offsets[9] = self.joint_offsets[15]
 
         # Reward terms
         self.l_foot_orient = 0
@@ -691,6 +694,7 @@ class CassieEnv_noaccel_footdist:
         # Update orientation
         new_orient = self.cassie_state.pelvis.orientation[:]
         new_translationalVelocity = self.cassie_state.pelvis.translationalVelocity[:]
+        new_translationalAcceleleration = self.cassie_state.pelvis.translationalAcceleration[:]
         # new_translationalVelocity[0:2] += self.com_vel_offset
         if self.time >= self.orient_time:
             quaternion = euler2quat(z=self.orient_add, y=0, x=0)
@@ -699,12 +703,12 @@ class CassieEnv_noaccel_footdist:
             if new_orient[0] < 0:
                 new_orient = -new_orient
             new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
+            new_translationalAcceleleration = rotate_by_quaternion(self.cassie_state.pelvis.translationalAcceleration[:], iquaternion)
         motor_pos = self.cassie_state.motor.position[:]
-        joint_pos = np.concatenate([self.cassie_state.joint.position[0:2], self.cassie_state.joint.position[3:5]])
-        joint_vel = np.concatenate([self.cassie_state.joint.velocity[0:2], self.cassie_state.joint.velocity[0:2]])
+        joint_pos = self.cassie_state.joint.position[:]
         if self.joint_rand:
             motor_pos += self.joint_offsets[0:10]
-            joint_pos += self.joint_offsets[10:14]
+            joint_pos += self.joint_offsets[10:16]
 
         # Use state estimator
         robot_state = np.concatenate([
@@ -716,9 +720,11 @@ class CassieEnv_noaccel_footdist:
             new_translationalVelocity,                       # pelvis translational velocity
             self.cassie_state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
             self.cassie_state.motor.velocity[:],                                     # actuated joint velocities
+
+            new_translationalAcceleleration,                   # pelvis translational acceleration
             
             joint_pos,                                     # unactuated joint positions
-            joint_vel                                      # unactuated joint velocities
+            self.cassie_state.joint.velocity[:]                                      # unactuated joint velocities
         ])
 
         #TODO: Set up foot position for non state est

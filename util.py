@@ -44,8 +44,8 @@ def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=Tr
     #   raise NotImplementedError
 
     # Custom Cassie Environment
-    if path in ['Cassie-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieNoaccelFootDist']:
-        from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_noaccel_footdist
+    if path in ['Cassie-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieFootDist', 'CassieNoaccelFootDist']:
+        from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
 
         if path == 'Cassie-v0':
             env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
@@ -55,8 +55,11 @@ def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=Tr
             env_fn = partial(CassieStandingEnv, simrate=simrate, state_est=state_est)
         elif path == 'CassieNoaccelFootDistOmniscient':
             env_fn = partial(CassieEnv_noaccel_footdist_omniscient, simrate=simrate, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=True, no_delta=no_delta, reward=reward, history=history)
+        elif path == 'CassieFootDist':
+            env_fn = partial(CassieEnv_footdist, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieNoaccelFootDist':
             env_fn = partial(CassieEnv_noaccel_footdist, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+
 
         # TODO for Yesh: make mirrored_obs an attribute of environment, configured based on setup parameters
         if mirror:
@@ -150,7 +153,7 @@ def eval_policy(policy, args, run_args):
     import termios
     import select
     import numpy as np
-    from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_noaccel_footdist
+    from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
 
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
@@ -166,6 +169,8 @@ def eval_policy(policy, args, run_args):
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
     elif run_args.env_name == "CassieNoaccelFootDistOmniscient":
         env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif run_args.env_name == "CassieFootDist":
+        env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     elif run_args.env_name == "CassieNoaccelFootDist":
         env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     else:
