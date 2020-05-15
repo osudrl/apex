@@ -6,7 +6,7 @@ from torch import sqrt
 
 from rl.policies.base import Net
 
-LOG_STD_HI = 2
+LOG_STD_HI = -.5
 LOG_STD_LO = -20
 
 class Actor(Net):
@@ -86,12 +86,10 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
     x = state
     for l in self.actor_layers:
         x = self.nonlinearity(l(x))
-    x = self.means(x)
+    mean = self.means(x)
 
     if self.bounded:
         mean = torch.tanh(x) 
-    else:
-        mean = x
 
     if self.learn_std:
       sd = torch.clamp(self.log_stds(x), LOG_STD_LO, LOG_STD_HI).exp()
