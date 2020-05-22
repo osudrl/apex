@@ -179,7 +179,7 @@ class CassieEnv_noaccel_footdist:
         ### Random commands during training ###
         self.speed_schedule = np.zeros(4)
         self.orient_add = 0
-        self.orient_time = 500
+
 
         # Keep track of actions, torques
         self.prev_action = np.zeros(10)
@@ -469,7 +469,7 @@ class CassieEnv_noaccel_footdist:
         self.phase_add = 1 + random.random()
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
-        self.orient_time = 500#random.randint(50, 200) 
+
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
         if self.dynamics_randomization:
@@ -515,7 +515,6 @@ class CassieEnv_noaccel_footdist:
         self.time = 0
         self.counter = 0
         self.orient_add = 0
-        self.orient_time = 500
         self.y_offset = 0
         self.phase_add = 1
 
@@ -692,13 +691,12 @@ class CassieEnv_noaccel_footdist:
         new_orient = self.cassie_state.pelvis.orientation[:]
         new_translationalVelocity = self.cassie_state.pelvis.translationalVelocity[:]
         # new_translationalVelocity[0:2] += self.com_vel_offset
-        if self.time >= self.orient_time:
-            quaternion = euler2quat(z=self.orient_add, y=0, x=0)
-            iquaternion = inverse_quaternion(quaternion)
-            new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
-            if new_orient[0] < 0:
-                new_orient = -new_orient
-            new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
+        quaternion = euler2quat(z=self.orient_add, y=0, x=0)
+        iquaternion = inverse_quaternion(quaternion)
+        new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
+        if new_orient[0] < 0:
+            new_orient = -new_orient
+        new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
         motor_pos = self.cassie_state.motor.position[:]
         joint_pos = np.concatenate([self.cassie_state.joint.position[0:2], self.cassie_state.joint.position[3:5]])
         joint_vel = np.concatenate([self.cassie_state.joint.velocity[0:2], self.cassie_state.joint.velocity[0:2]])

@@ -228,6 +228,7 @@ def eval_policy(policy, args, run_args):
                     env.sim.apply_force(force_arr)
 
                 env.update_speed(speed)
+                # print(speed)
                 print("speed: ", env.speed)
             
             if hasattr(env, 'simrate'):
@@ -235,31 +236,32 @@ def eval_policy(policy, args, run_args):
 
             if (not env.vis.ispaused()):
                 # Update Orientation
-                quaternion = euler2quat(z=orient_add, y=0, x=0)
-                iquaternion = inverse_quaternion(quaternion)
+                env.orient_add = orient_add
+                # quaternion = euler2quat(z=orient_add, y=0, x=0)
+                # iquaternion = inverse_quaternion(quaternion)
 
-                # TODO: Should probably not assume these indices. Should make them not hard coded
-                if env.state_est:
-                    curr_orient = state[1:5]
-                    curr_transvel = state[15:18]
-                else:
-                    curr_orient = state[2:6]
-                    curr_transvel = state[20:23]
+                # # TODO: Should probably not assume these indices. Should make them not hard coded
+                # if env.state_est:
+                #     curr_orient = state[1:5]
+                #     curr_transvel = state[15:18]
+                # else:
+                #     curr_orient = state[2:6]
+                #     curr_transvel = state[20:23]
                 
-                new_orient = quaternion_product(iquaternion, curr_orient)
+                # new_orient = quaternion_product(iquaternion, curr_orient)
 
-                if new_orient[0] < 0:
-                    new_orient = -new_orient
+                # if new_orient[0] < 0:
+                #     new_orient = -new_orient
 
-                new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+                # new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
                 
-                if env.state_est:
-                    state[1:5] = torch.FloatTensor(new_orient)
-                    state[15:18] = torch.FloatTensor(new_translationalVelocity)
-                    # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
-                else:
-                    state[2:6] = torch.FloatTensor(new_orient)
-                    state[20:23] = torch.FloatTensor(new_translationalVelocity)          
+                # if env.state_est:
+                #     state[1:5] = torch.FloatTensor(new_orient)
+                #     state[15:18] = torch.FloatTensor(new_translationalVelocity)
+                #     # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+                # else:
+                #     state[2:6] = torch.FloatTensor(new_orient)
+                #     state[20:23] = torch.FloatTensor(new_translationalVelocity)          
                     
                 action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
                 state, reward, done, _ = env.step(action)
@@ -271,6 +273,9 @@ def eval_policy(policy, args, run_args):
                 
                 eval_reward += reward
                 timesteps += 1
+                qvel = env.sim.qvel()
+                print("actual speed: ", np.linalg.norm(qvel[0:2]))
+                print("commanded speed: ", env.speed)
 
                 if args.no_viz:
                     yaw = quaternion2euler(new_orient)[2]
