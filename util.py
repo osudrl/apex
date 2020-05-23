@@ -274,8 +274,8 @@ def eval_policy(policy, args, run_args):
                 eval_reward += reward
                 timesteps += 1
                 qvel = env.sim.qvel()
-                print("actual speed: ", np.linalg.norm(qvel[0:2]))
-                print("commanded speed: ", env.speed)
+                # print("actual speed: ", np.linalg.norm(qvel[0:2]))
+                # print("commanded speed: ", env.speed)
 
                 if args.no_viz:
                     yaw = quaternion2euler(new_orient)[2]
