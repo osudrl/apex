@@ -256,13 +256,15 @@ if __name__ == "__main__":
         parser.add_argument("--mission", default="default", type=str) # only used by playground environment
         parser.add_argument("--debug", default=False, action='store_true')
         parser.add_argument("--no_viz", default=False, action='store_true')
+        parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")
 
         args = parser.parse_args()
 
         run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 
         policy = torch.load(args.path + "actor.pt")
-        # policy.eval()  # NOTE: for some reason the saved nodelta_neutral_stateest_symmetry policy needs this but it breaks all new policies...
+        if args.eval:
+            policy.eval()  # NOTE: for some reason the saved nodelta_neutral_stateest_symmetry policy needs this but it breaks all new policies...
 
         eval_policy(policy, args, run_args)
         

@@ -68,7 +68,7 @@ parser = argparse.ArgumentParser()
 # General args
 parser.add_argument("--path", type=str, default="./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2", help="path to folder containing policy and run details")
 parser.add_argument("--n_procs", type=int, default=4, help="Number of procs to use for multi-processing")
-parser.add_argument("--full", default=True, action="store_false", help="Whether to run the full test or not")
+parser.add_argument("--lite", dest='full', default=False, action="store_true", help="run the lite test instead of full test")
 parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")
 parser.add_argument("--vis", default=False, action="store_true", help="Whether to visualize test or not")
 
@@ -85,12 +85,13 @@ if args.eval:
 
 model_dir = "./cassie/cassiemujoco"
 mission_dir = "./cassie/missions/"
-default_fric = [1, 5e-3, 1e-4]
+default_fric = np.array([1, 5e-3, 1e-4])
 default_mass = .1498
 if args.full:
     # Run all terrains and missions
     terrains = ["cassie.xml", "cassie_noise_terrain.xml"]
     missions = ["curvy", "straight", "90_left", "90_right"]
+    mission_speeds = [0.5, 0.9, 1.4, 1.9, 2.3, 2.8]
     frictions = np.linspace(.8*default_fric, default_fric, 10)
     frictions = np.append(frictions, np.linspace(default_fric, 1.2*default_fric, 10)[1:])
     masses = np.linspace(.8*default_mass, default_mass, 10)
@@ -99,6 +100,7 @@ else:
     # Only run flat, noisy, and hill terrain with straight and curvy missions
     terrains = ["cassie.xml", "cassie_noise_terrain.xml"]
     missions = ["curvy", "straight"]
+    mission_speeds = [0.5, 0.9, 1.4, 1.9, 2.8]
     frictions = []
     masses = []
 
@@ -111,19 +113,20 @@ mass_data = [0]*num_args
 arg_count = 0
 for terrain in terrains:
     for mission in missions:
-        for friction in frictions:
-            for mass in masses:
-                if args.vis:
-                    vis_5k_test(cassie_env, policy, os.path.join(mission_dir, mission+"/command_trajectory.pkl"), 
-                                    os.path.join(model_dir, terrain), friction, mass)
-                else:
-                    success = sim_5k_test(cassie_env, policy, os.path.join(mission_dir, mission+"/command_trajectory.pkl"), 
-                                    os.path.join(model_dir, terrain), friction, mass)
-                    pass_data[arg_count] = success
-                    terrain_data[arg_count] = terrain
-                    mission_data[arg_count] = mission
-                    friction_data[arg_count] = friction
-                    mass_data[arg_count] = mass
+        for mission_speed in mission_speeds:
+            for friction in frictions:
+                for mass in masses:
+                    if args.vis:
+                        vis_5k_test(cassie_env, policy, os.path.join(mission_dir, mission+"/command_trajectory_{}.pkl".format(mission_speed)), 
+                                        os.path.join(model_dir, terrain), friction, mass)
+                    else:
+                        success = sim_5k_test(cassie_env, policy, os.path.join(mission_dir, mission+"/command_trajectory_{}.pkl".format(mission_speed)), 
+                                        os.path.join(model_dir, terrain), friction, mass)
+                        pass_data[arg_count] = success
+                        terrain_data[arg_count] = terrain
+                        mission_data[arg_count] = mission
+                        friction_data[arg_count] = friction
+                        mass_data[arg_count] = mass
 
 if not args.vis:
     with open(os.path.join(args.path, "5k_test.pkl"), 'wb') as savefile:
