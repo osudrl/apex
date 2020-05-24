@@ -101,16 +101,19 @@ else:
     terrains = ["cassie.xml", "cassie_noise_terrain.xml"]
     missions = ["curvy", "straight"]
     mission_speeds = [0.5, 0.9, 1.4, 1.9, 2.8]
-    frictions = []
-    masses = []
+    frictions = [default_fric]
+    masses = [default_mass]
 
-num_args = len(terrains)*len(missions)*len(frictions)*len(masses)
+num_args = len(terrains)*len(missions)*len(mission_speeds)*len(frictions)*len(masses)
 pass_data = [0]*num_args
 terrain_data = [0]*num_args
 mission_data = [0]*num_args
+mission_speed_data = [0]*num_args
 friction_data = [0]*num_args
 mass_data = [0]*num_args
 arg_count = 0
+sys.stdout.write("Finished {} out of {} tests".format(arg_count, num_args))
+sys.stdout.flush()
 for terrain in terrains:
     for mission in missions:
         for mission_speed in mission_speeds:
@@ -125,8 +128,13 @@ for terrain in terrains:
                         pass_data[arg_count] = success
                         terrain_data[arg_count] = terrain
                         mission_data[arg_count] = mission
+                        mission_speed_data[arg_count] = mission_speed
                         friction_data[arg_count] = friction
                         mass_data[arg_count] = mass
+                    arg_count += 1
+                    sys.stdout.write("\rFinished {} out of {} tests".format(arg_count, num_args))
+                    sys.stdout.flush()
+print()
 
 if not args.vis:
     with open(os.path.join(args.path, "5k_test.pkl"), 'wb') as savefile:
