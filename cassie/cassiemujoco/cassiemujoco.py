@@ -22,6 +22,7 @@ _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # Initialize libcassiesim
 cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_waypoints.xml"))
 # cassie_mujoco_init(str.encode("../model/cassie.xml"))
 
 
@@ -68,6 +69,12 @@ class CassieSim:
         qaccp = cassie_sim_qacc(self.c)
         return qaccp[:32]
 
+    def xpos(self, body_name):
+        # print("in xquat")
+        xposp = cassie_sim_xpos(self.c, body_name.encode())
+        # print("got pointer")
+        return xposp[:3]
+
     def xquat(self, body_name):
         xquatp = cassie_sim_xquat(self.c, body_name.encode())
         return xquatp[:4]
@@ -85,6 +92,12 @@ class CassieSim:
         qvelp = cassie_sim_qvel(self.c)
         for i in range(min(len(qvel), 32)):
             qvelp[i] = qvel[i]
+
+    # def set_cassie_state(self, copy_state):
+    #     cassie_sim_set_cassiestate(self.c, copy_state)
+    
+    def variable_hold(self, level):
+        cassie_sim_variable_hold(self.c, level)
 
     def hold(self):
         cassie_sim_hold(self.c)

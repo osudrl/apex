@@ -7,7 +7,6 @@ from .cassie_footdist_env import CassieEnv_footdist
 from .cassie_noaccel_footdist_env import CassieEnv_noaccel_footdist
 
 
-
 from .cassiemujoco import *
 
 
