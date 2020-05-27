@@ -19,7 +19,7 @@ import torch
 
 class CassiePlayground:
   def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="command", history=0, mission=None):
-      
+      print(mission)
       # Only use mission argument for visualizing the waypoints in a test.
       if mission != None:
           dirname = os.path.dirname(__file__)
@@ -36,6 +36,7 @@ class CassiePlayground:
       self.last_position = [0.0, 0.0, 1.0]
 
       self.sim = CassieSim("./cassie/cassiemujoco/cassie_waypoints.xml")
+    #   self.sim = CassieSim("foo")
       self.vis = None
 
       self.reward_func = reward
