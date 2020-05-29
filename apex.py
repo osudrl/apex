@@ -237,6 +237,8 @@ if __name__ == "__main__":
         parser.add_argument("--eps", type=float, default=1e-5, help="Adam epsilon (for numerical stability)")
         parser.add_argument("--lam", type=float, default=0.95, help="Generalized advantage estimate discount")
         parser.add_argument("--gamma", type=float, default=0.99, help="MDP discount")
+        parser.add_argument("--learn_stddev", default=False, action='store_true', help="learn std_dev or keep it fixed")
+        parser.add_argument("--std_dev", type=int, default=-2, help="exponent of exploration std_dev")
         parser.add_argument("--entropy_coeff", type=float, default=0.0, help="Coefficient for entropy regularization")
         parser.add_argument("--clip", type=float, default=0.2, help="Clipping parameter for PPO surrogate loss")
         parser.add_argument("--minibatch_size", type=int, default=64, help="Batch size for PPO updates")

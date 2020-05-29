@@ -109,13 +109,11 @@ class CassieEnv_v2:
         self.vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
         # CONFIGURE OFFSET for No Delta Policies
-        # if self.aslip_traj:
-        #     ref_pos, ref_vel = self.get_ref_state(self.phase)
-        #     self.offset = ref_pos[self.pos_idx]
-        # else:
-        #     self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
-        self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
-
+        if self.aslip_traj:
+            ref_pos, ref_vel = self.get_ref_state(self.phase)
+            self.offset = ref_pos[self.pos_idx]
+        else:
+            self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
         self.phase_add = 1
 
@@ -274,22 +272,17 @@ class CassieEnv_v2:
 
     def step_simulation(self, action, learned_gains=None):
 
-        if self.aslip_traj and self.phase == self.phaselen - 1:
-            if self.ik_baseline:
-                ref_pos = self.trajectory.ik_pos[self.simsteps]
-            else:
+        if not self.ik_baseline:
+            if self.aslip_traj and self.phase == self.phaselen - 1:
                 ref_pos, ref_vel = self.get_ref_state(0)
-        else:
-            # maybe make ref traj only send relevant idxs?
-            if self.ik_baseline:
-                ref_pos = self.trajectory.ik_pos[self.simsteps]
             else:
                 ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
+        else:
+            ref_pos = self.trajectory.ik_pos[self.simsteps]
 
         if not self.no_delta:
-            target = action + ref_pos[self.pos_idx]
-        else:
-            target = action + self.offset
+            self.offset = ref_pos[self.pos_idx]
+        target = action + self.offset
 
         if self.joint_rand:
             target -= self.joint_offsets[0:10]

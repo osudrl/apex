@@ -471,10 +471,10 @@ def run_experiment(args):
             policy = Gaussian_LSTM_Actor(obs_dim, action_dim, fixed_std=np.exp(-2), env_name=args.env_name)
             critic = LSTM_V(obs_dim)
         else:
-            if args.fixed_stddev:
-                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(args.std_dev), env_name=args.env_name)
-            else:
+            if args.learn_stddev:
                 policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=None, env_name=args.env_name)
+            else:
+                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(args.std_dev), env_name=args.env_name)
             critic = FF_V(obs_dim)
 
         with torch.no_grad():
@@ -513,6 +513,8 @@ def run_experiment(args):
     print(" ├ eps:            {}".format(args.eps))
     print(" ├ lam:            {}".format(args.lam))
     print(" ├ gamma:          {}".format(args.gamma))
+    print(" ├ learn stddev:  {}".format(args.learn_stddev))
+    print(" ├ std_dev:        {}".format(args.std_dev))
     print(" ├ entropy coeff:  {}".format(args.entropy_coeff))
     print(" ├ clip:           {}".format(args.clip))
     print(" ├ minibatch size: {}".format(args.minibatch_size))
