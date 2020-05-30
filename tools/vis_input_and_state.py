@@ -60,7 +60,7 @@ def eval_policy(policy, args, run_args):
     print(cassie_env.speed)
     count, passed, done = 0, 1, False
     while count < traj_len and not done:
-        
+
         if visualize:
             cassie_env.render()
 
@@ -92,7 +92,13 @@ def eval_policy(policy, args, run_args):
 
         count += 1
 
+    robot_state_info = robot_state_info[:-1]
+    actual_state_info = actual_state_info[:-1]
+
     if aslip:
+
+        traj_info = traj_info[:-1]
+        traj_cmd_info = traj_cmd_info[:-1]
 
         traj_info = np.array(traj_info)
         traj_cmd_info = np.array(traj_cmd_info)
@@ -157,7 +163,7 @@ def eval_policy(policy, args, run_args):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--path", type=str, default="../trained_models/ppo/Cassie-v0/IK_traj-aslip_aslip_old_2048_12288_seed-10/", help="path to folder containing policy and run details")
-parser.add_argument("--traj_len", default=400, type=str)
+parser.add_argument("--traj_len", default=30, type=str)
 parser.add_argument("--debug", default=False, action='store_true')
 parser.add_argument("--no_viz", default=False, action='store_true')
 parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")

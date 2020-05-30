@@ -23,7 +23,8 @@ class CassieEnv_v2:
         dirname = os.path.dirname(__file__)
         #xml_path = os.path.join(dirname, "cassiemujoco", "cassie.xml")
         #self.sim = CassieSim(xml_path)
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+        # self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+        self.sim = CassieSim("./cassie/cassiemujoco/cassie_drop_step.xml")
         self.vis = None
 
         # Arguments for the simulation and state space
@@ -122,8 +123,10 @@ class CassieEnv_v2:
         
         # tracking various variables for reward funcs
         self.stepcount = 0
-        self.l_high = False
+        self.l_high = False  # only true if foot is above 0.2m 
         self.r_high = False
+        self.l_swing = False  # these will be true even if foot is barely above ground
+        self.r_swing = False
         self.l_foot_vel = np.zeros(3)
         self.r_foot_vel = np.zeros(3)
         self.l_foot_pos = np.zeros(3)
@@ -133,7 +136,7 @@ class CassieEnv_v2:
 
         # TODO: should this be mujoco tracking var or use state estimator. real command interface will use state est
         # Track pelvis position as baseline for pelvis tracking command inputs
-        self.last_pelvis_pos = self.cassie_state.pelvis.position[:]
+        self.last_pelvis_pos = self.sim.qpos()[0:3]
 
         #### Dynamics Randomization ####
         self.dynamics_randomization = dynamics_randomization
@@ -330,7 +333,15 @@ class CassieEnv_v2:
             self.r_high = False
         elif not self.r_high and foot_pos[5] >= 0.2:
             self.r_high = True
-        
+
+        if self.l_swing and foot_forces[0] > 0:
+            self.l_swing = False
+        elif not self.l_swing and foot_pos[2] >= 0:
+            self.l_swing = True
+        if self.r_swing and foot_forces[0] > 0:
+            self.r_swing = False
+        elif not self.r_swing and foot_pos[5] >= 0:
+            self.r_swing = True
 
     def step(self, action, return_omniscient_state=False):
         
@@ -340,7 +351,6 @@ class CassieEnv_v2:
         self.r_foot_pos = np.zeros(3)
         self.l_foot_orient_cost = 0
         self.r_foot_orient_cost = 0
-        self.last_pelvis_pos = self.sim.qpos()[0:3]
 
         if self.learn_gains:
             action, learned_gains = action[0:10], action[10:]
@@ -373,6 +383,7 @@ class CassieEnv_v2:
         self.phase += self.phase_add
 
         if (self.aslip_traj and self.phase >= self.phaselen) or self.phase > self.phaselen:
+            self.last_pelvis_pos = self.sim.qpos()[0:3]
             self.simsteps = 0
             self.phase = 0
             self.counter += 1
@@ -779,15 +790,16 @@ class CassieEnv_v2:
 
         return robot_state_info, actual_state_info
 
+    # This is assumed to be called after env.step. hence, using self.phase - 1 
     def get_traj_and_state_info(self):
         # traj info used in rewards
-        traj_info = get_ref_aslip_global_state(self, self.phase)
+        traj_info = get_ref_aslip_global_state(self, self.phase-1)
         # traj_info = get_ref_aslip_unaltered_state(self, self.phase)
         traj_info = [traj_info[4], traj_info[2], traj_info[0]]
         
         # traj info going into the policy
         # traj_cmd_info = get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phase, offset=self.vertOffset)
-        traj_cmd_info = get_ref_aslip_unaltered_state(self, self.phase)
+        traj_cmd_info = get_ref_aslip_unaltered_state(self, self.phase-1)
         traj_cmd_info = [traj_cmd_info[4], traj_cmd_info[2], traj_cmd_info[0]]
         
         robot_state_info, actual_state_info = self.get_state_info()

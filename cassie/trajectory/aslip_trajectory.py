@@ -193,3 +193,34 @@ def get_ref_aslip_global_state(self, phase=None, offset=None):
     rpos += cpos
 
     return rpos, rvel, lpos, lvel, cpos, cvel
+
+# only alteration to state is adding cpos. no drift correction
+def get_ref_aslip_global_state_no_drift_correct(self, phase=None, offset=None):
+
+    if phase is None:
+        phase = self.phase
+
+    if phase > self.phaselen:
+        phase = 0
+
+    phase = int(phase)
+
+    rpos = np.copy(self.trajectory.rpos[phase])
+    rvel = np.copy(self.trajectory.rvel[phase])
+    lpos = np.copy(self.trajectory.lpos[phase])
+    lvel = np.copy(self.trajectory.lvel[phase])
+    cpos = np.copy(self.trajectory.cpos[phase])
+    cvel = np.copy(self.trajectory.cvel[phase])
+
+    # Manual z offset to get taller walking
+    if offset is not None:
+        cpos[2] += offset
+        # need to update these because they 
+        lpos[2] -= offset
+        rpos[2] -= offset
+
+    # Put feet into global coordinates. this also adjusts the x
+    lpos += cpos
+    rpos += cpos
+
+    return rpos, rvel, lpos, lvel, cpos, cvel
