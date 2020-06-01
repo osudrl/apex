@@ -164,7 +164,6 @@ def eval_policy(policy, args, run_args):
     max_traj_len = args.traj_len
     visualize = not args.no_viz
     print("env name: ", run_args.env_name)
-<<<<<<< HEAD
     if run_args.env_name is None:
         env_name = args.env_name
     else:
@@ -172,16 +171,6 @@ def eval_policy(policy, args, run_args):
     if env_name == "Cassie-v0":
         env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     elif env_name == "CassiePlayground-v0":
-=======
-    print("dyn rand: ", run_args.dyn_random)
-    # run_args.dyn_random = True
-    if args.env_name == "Cassie-v0":
-        if hasattr(run_args, 'fixed_gains') and hasattr(run_args, 'ik_baseline'):
-            env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        else:
-            env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, fixed_speed=args.fixed_speed)
-    elif args.env_name == "CassiePlayground-v0":
->>>>>>> 709012eb276659feebe0dee3c9525b376041df2a
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
     elif env_name == "CassieNoaccelFootDistOmniscient":
         env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
