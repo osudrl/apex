@@ -68,7 +68,7 @@ parser = argparse.ArgumentParser()
 # General args
 parser.add_argument("--path", type=str, default="./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2", help="path to folder containing policy and run details")
 parser.add_argument("--n_procs", type=int, default=4, help="Number of procs to use for multi-processing")
-parser.add_argument("--lite", dest='full', default=False, action="store_true", help="run the lite test instead of full test")
+parser.add_argument("--lite", dest='full', default=True, action="store_false", help="run the lite test instead of full test")
 parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")
 parser.add_argument("--vis", default=False, action="store_true", help="Whether to visualize test or not")
 
@@ -76,7 +76,11 @@ args = parser.parse_args()
 run_args = pickle.load(open(os.path.join(args.path, "experiment.pkl"), "rb"))
 # Make mirror False so that env_factory returns a regular wrap env function and not a symmetric env function that can be called to return
 # a cassie environment (symmetric env cannot be called to make another env)
-env_fn = env_factory(run_args.env_name, traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
+if hasattr(run_args, 'simrate'):
+    env_fn = env_factory(run_args.env_name, traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
+                    mirror=False, clock_based=run_args.clock_based, reward=run_args.reward, history=run_args.history)
+else:
+    env_fn = env_factory(run_args.env_name, traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
                     mirror=False, clock_based=run_args.clock_based, reward=run_args.reward, history=run_args.history)
 cassie_env = env_fn()
 policy = torch.load(os.path.join(args.path, "actor.pt"))
