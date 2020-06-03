@@ -23,8 +23,8 @@ class CassieEnv_v2:
         dirname = os.path.dirname(__file__)
         #xml_path = os.path.join(dirname, "cassiemujoco", "cassie.xml")
         #self.sim = CassieSim(xml_path)
-        # self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie_drop_step.xml")
+        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+        # self.sim = CassieSim("./cassie/cassiemujoco/cassie_drop_step.xml")
         self.vis = None
 
         # Arguments for the simulation and state space
@@ -423,12 +423,12 @@ class CassieEnv_v2:
             self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
-            self.speed = (random.randint(-3, 40)) / 10
-            # Make sure that if speed is above 2, freq is at least 1.2
-            if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
-                self.phase_add = 1.3 + 0.7*random.random()
-            else:
-                self.phase_add = 1 + random.random()
+            self.speed = (random.randint(0, 20)) / 10
+            # # Make sure that if speed is above 2, freq is at least 1.2
+            # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
+            #     self.phase_add = 1.3 + 0.7*random.random()
+            # else:
+            #     self.phase_add = 1 + random.random()
 
         if self.fixed_speed != None:
             self.speed = self.fixed_speed
@@ -575,11 +575,9 @@ class CassieEnv_v2:
         else:
             self.speed = new_speed
         
-            # Make sure that if speed is above 2, freq is at least 1.2
-            if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
-                self.phase_add = 1.3 + 0.7*random.random()
-            else:
-                self.phase_add = 1 + random.random()
+            # # Make sure that if speed is above 2, freq is at least 1.2
+            # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
+            #     self.phase_add = 1.1 + (self.speed - 1)* 0.2
 
 
     def compute_reward(self, action):

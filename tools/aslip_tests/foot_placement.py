@@ -45,10 +45,10 @@ def set_axes_equal(ax):
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
-def eval_policy(policy, args, run_args, testing_speed):
+def eval_policy(policy, args, run_args, testing_speed, num_steps=10):
 
     max_traj_len = args.traj_len
-    visualize = not args.no_viz
+    visualize = not args.no_vis
     # run_args.dyn_random = True
 
     env = CassieEnv(traj="aslip", state_est=run_args.state_est, no_delta=run_args.no_delta, learn_gains=run_args.learn_gains, ik_baseline=run_args.ik_baseline, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward="aslip_old", history=run_args.history)
@@ -84,7 +84,10 @@ def eval_policy(policy, args, run_args, testing_speed):
     env.update_speed(testing_speed)
     print(env.speed)
 
-    while footstep_count-1 < 15:
+    ## Get the fixed delta for each footstep position change
+    right_delta = get_ref_aslip_global_state_no_drift_correct(env, phase=7)
+
+    while footstep_count-1 < num_steps:
     
         if hasattr(env, 'simrate'):
             start = time.time()
@@ -122,60 +125,53 @@ def eval_policy(policy, args, run_args, testing_speed):
 
         state, reward, done, _ = env.step(action)
 
+        # get the delta for right and left by looking at phases where both feet are in stance
+        right_to_left = get_ref_aslip_global_state_no_drift_correct(env, phase=16)[2][:2] - get_ref_aslip_global_state_no_drift_correct(env, phase=16)[0][:2]
+        left_to_right = get_ref_aslip_global_state_no_drift_correct(env, phase=29)[0][:2] - get_ref_aslip_global_state_no_drift_correct(env, phase=29)[2][:2]
+        delta = right_to_left + left_to_right
+        # print(right_to_left)
+        # print(left_to_right)
+        # print(delta)
+        # print(get_ref_aslip_global_state_no_drift_correct(env, phase=16)[2][:2])
+        # print(get_ref_aslip_global_state_no_drift_correct(env, phase=16)[2][:2] + delta)
+        # exit()
+
         # print("{} : {} : {}".format(env.phase, env.l_foot_pos[2], env.r_foot_pos[2]))
         # allow some ramp up time
-        while timesteps > env.phaselen * 2:
-
+        if timesteps > env.phaselen * 2:
             # fill r_last_ideal_pos and l_last_ideal_pos with values before collecting data
-                        
+
             # check if we are in left swing phase
             # left foot swing, right foot stance
             if env.phase == 7:
                 left_swing = True
                 right_swing = False
-                r_ideal_land_pos = env.r_foot_pos[:2] + get_ref_aslip_global_state_no_drift_correct(env, phase=7)[2][:2]
-                r_foot_poses_ideal.append(r_ideal_land_pos)
+                r_actual_land_pos = env.r_foot_pos[:2]
+                # if we have data from last step, we can calculate error from where right foot landed to where it should have landed, BEFORE updating r_ideal_land_pos
+                if footstep_count >= 1:
+                    r_foot_poses_actual.append(r_actual_land_pos)
+                    footplace_err.append(np.linalg.norm(r_ideal_land_pos - r_actual_land_pos))
+                    # print("right landed at\t\t\t{}".format(r_actual_land_pos))
+                l_ideal_land_pos = r_actual_land_pos + right_to_left
+                l_foot_poses_ideal.append(l_ideal_land_pos)
+                # print("next, left should land at\t{}\t{}\n".format(l_ideal_land_pos, r_actual_land_pos))
                 # print("left-swing : right should land at {}".format(r_ideal_land_pos))
             # left foot stance, right foot swing
             elif env.phase == 23:
                 left_swing = False
                 right_swing = True
-                l_ideal_land_pos = env.l_foot_pos[:2] + get_ref_aslip_global_state_no_drift_correct(env, phase=23)[0][:2]
-                l_foot_poses_ideal.append(l_ideal_land_pos)
-                # print("right-swing : left should land at {}".format(l_ideal_land_pos))
-                footstep_count += 1
-            else:
-                break
-
-            # if left foot is down (right swinging) calculate error between it and ideal position, calculate next ideal position.
-            # if right foot is down (left swinging) "---------------------------------------------------------------------------"
-            if footstep_count >= 1:
-
-                if l_ideal_land_pos is not None and left_swing == False:
-                    l_actual_land_pos = env.l_foot_pos[:2]
-                    l_foot_poses_actual.append(l_ideal_land_pos)
+                l_actual_land_pos = env.l_foot_pos[:2]
+                # if we have data from last step, we can calculate error from where right foot landed to where it should have landed, BEFORE updating r_ideal_land_pos
+                if footstep_count >= 1:
+                    l_foot_poses_actual.append(l_actual_land_pos)
                     footplace_err.append(np.linalg.norm(l_ideal_land_pos - l_actual_land_pos))
-                    # print("left landed at {}".format(l_actual_land_pos))
-                elif r_ideal_land_pos is not None and right_swing == False:
-                    r_actual_land_pos = env.r_foot_pos[:2]
-                    r_foot_poses_actual.append(r_ideal_land_pos)
-                    footplace_err.append(np.linalg.norm(r_ideal_land_pos - r_actual_land_pos))
-                    # print("right landed at {}".format(r_actual_land_pos))
-            
-            break
+                    # print("left landed at\t\t\t{}".format(l_actual_land_pos))
+                r_ideal_land_pos = l_actual_land_pos + left_to_right
+                r_foot_poses_ideal.append(r_ideal_land_pos)
+                # print("next, right should land at\t{}\t{}\n".format(r_ideal_land_pos, l_actual_land_pos))
+                footstep_count += 1
+                # print("right-swing : left should land at {}".format(l_ideal_land_pos))
 
-        # if a[1][2] == 0.0:
-        #     l_footstep.append(np.linalg.norm(a[1] - d[1]))
-        # elif a[2][2] == 0.0:
-        #     r_footstep.append(np.linalg.norm(a[2] - d[2]))
-
-        # if traj_info[]
-
-        # if env.lfoot_vel[2] < -0.6:
-        #     print("left foot z vel over 0.6: ", env.lfoot_vel[2])
-        # if env.rfoot_vel[2] < -0.6:
-        #     print("right foot z vel over 0.6: ", env.rfoot_vel[2])
-        
         eval_reward += reward
         timesteps += 1
         qvel = env.sim.qvel()
@@ -188,9 +184,14 @@ def eval_policy(policy, args, run_args, testing_speed):
         #     # assume 40hz
         #     end = time.time()
         #     delaytime = max(0, 1000 / 40000 - (end-start))
-        #     time.sleep(delaytime)
+        #     time.sleep(delaytime)   
 
-    print("Eval reward: ", eval_reward)
+    print("Avg Foot Placement Error: ", np.mean(footplace_err))
+    print("Num pairs: ", len(footplace_err))
+
+    # trim the ideal footplace poses
+    l_foot_poses_ideal = l_foot_poses_ideal[1:]
+    r_foot_poses_ideal = r_foot_poses_ideal[:-1]
 
     l_foot_poses_ideal = np.array(l_foot_poses_ideal)
     r_foot_poses_ideal = np.array(r_foot_poses_ideal)
@@ -201,11 +202,14 @@ def eval_policy(policy, args, run_args, testing_speed):
     fig = plt.figure(figsize=(10,10))
     ax = fig.add_subplot(111)
 
-    ax.scatter(l_foot_poses_ideal[:, 0], l_foot_poses_ideal[:, 1], c='tab:green')
-    ax.scatter(r_foot_poses_ideal[:, 0], r_foot_poses_ideal[:, 1], c='tab:green')
-    ax.scatter(l_foot_poses_actual[:, 0], l_foot_poses_actual[:, 1], c='tab:red')
-    ax.scatter(r_foot_poses_actual[:, 0], r_foot_poses_actual[:, 1], c='tab:red')
+    ax.scatter(l_foot_poses_ideal[:, 0], l_foot_poses_ideal[:, 1], c='tab:green', label='desired', alpha=0.5)
+    ax.scatter(r_foot_poses_ideal[:, 0], r_foot_poses_ideal[:, 1], c='tab:green', alpha=0.5)
+    ax.scatter(l_foot_poses_actual[:, 0], l_foot_poses_actual[:, 1], c='tab:red', label='actual', alpha=0.5)
+    ax.scatter(r_foot_poses_actual[:, 0], r_foot_poses_actual[:, 1], c='tab:red', alpha=0.5)
     ax.axis('equal')
+    ax.set_ylabel('y (m)')
+    ax.set_xlabel('x (m)')
+    ax.set_title('Desired vs Actual Foot Placements ({} m/s)'.format(testing_speed))
     plt.savefig('./plots/footplace{}.png'.format(testing_speed))
     # plt.show()
 
@@ -215,8 +219,9 @@ def eval_policy(policy, args, run_args, testing_speed):
 parser = argparse.ArgumentParser()
 parser.add_argument("--path", type=str, default="../../trained_models/ppo/Cassie-v0/IK_traj-aslip_aslip_old_2048_12288_seed-10/", help="path to folder containing policy and run details")
 parser.add_argument("--traj_len", default=400, type=str)
+parser.add_argument("--num_steps", default=10, type=str)
 parser.add_argument("--debug", default=False, action='store_true')
-parser.add_argument("--no_viz", default=False, action='store_true')
+parser.add_argument("--no_vis", default=False, action='store_true')
 parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")
 
 args = parser.parse_args()
@@ -232,7 +237,7 @@ data = []
 speeds = [i/10 for i in range(0,21)] # 0.0 to 2.0 m/s
 # speeds = [i/10 for i in range(3, 4)] # 0.0 to 2.0 m/s
 for speed in speeds:
-    data.append(eval_policy(policy, args, run_args, speed))
+    data.append(eval_policy(policy, args, run_args, speed, num_steps=args.num_steps))
 data = np.array(data)
 
 # Foot Placement tracking error
@@ -243,7 +248,7 @@ for i in range(data.shape[0]):
     error = np.mean(data[i])
     ax.bar(i, error, color="tab:blue")
 ax.set_title('Average Foot Placement Error')
-ax.set_ylabel('Avg. Error (cm)')
+ax.set_ylabel('Avg. Error (m)')
 ax.set_xticks(np.arange(len(speeds)))
 ax.set_xticklabels([str(speed) for speed in speeds])
 plt.savefig("./plots/footpos_err.png")
