@@ -278,6 +278,10 @@ if __name__ == "__main__":
 
         run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 
+        if not hasattr(run_args, "simrate"):
+            run_args.simrate = 50
+            print("manually choosing simrate as 50 (40 Hz)")
+
         policy = torch.load(args.path + "actor.pt")
         if args.eval:
             policy.eval()  # NOTE: for some reason the saved nodelta_neutral_stateest_symmetry policy needs this but it breaks all new policies...
