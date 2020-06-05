@@ -451,7 +451,7 @@ def run_experiment(args):
         args.ik_baseline = False
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, simrate=args.simrate, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history)
+    env_fn = env_factory(args.env_name, traj=args.traj, simrate=args.simrate, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history, flipped=args.flipped)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -500,6 +500,7 @@ def run_experiment(args):
     print(" ├ ik baseline:    {}".format(args.ik_baseline))
     print(" ├ learn gains:    {}".format(args.learn_gains))
     print(" ├ reward:         {}".format(args.reward))
+    print(" ├ flipped:        {}".format(args.flipped))
     print(" └ obs_dim:        {}".format(obs_dim))
 
     print()

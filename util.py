@@ -27,7 +27,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, ik_baseline=False, learn_gains=False, reward=None, history=0, fixed_speed=None, **kwargs):
+def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, ik_baseline=False, learn_gains=False, reward=None, history=0, fixed_speed=None, flipped=False, **kwargs):
     from functools import partial
 
     """
@@ -48,7 +48,7 @@ def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=Tr
 
         if path == 'Cassie-v0':
             # env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
-            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed)
+            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed, flipped=False)
         elif path == 'CassiePlayground-v0':
             env_fn = partial(CassiePlayground, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
@@ -158,6 +158,9 @@ def eval_policy(policy, args, run_args):
     import numpy as np
     from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
 
+    if not hasattr(run_args, 'flipped'):
+        setattr(run_args, 'flipped', False)
+
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
 
@@ -169,7 +172,7 @@ def eval_policy(policy, args, run_args):
     else:
         env_name = run_args.env_name
     if env_name == "Cassie-v0":
-        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, flipped=run_args.flipped)
     elif env_name == "CassiePlayground-v0":
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
     elif env_name == "CassieNoaccelFootDistOmniscient":
@@ -192,6 +195,8 @@ def eval_policy(policy, args, run_args):
     old_settings = termios.tcgetattr(sys.stdin)
 
     orient_add = 0
+
+    slowmo = False
 
     if visualize:
         env.render()
@@ -237,6 +242,9 @@ def eval_policy(policy, args, run_args):
                     force_arr = np.zeros(6)
                     force_arr[push_dir] = push
                     env.sim.apply_force(force_arr)
+                elif c == 't':
+                    slowmo = not slowmo
+                    print("Slowmo : ", slowmo)
 
                 env.update_speed(speed)
                 # print(speed)
@@ -299,7 +307,12 @@ def eval_policy(policy, args, run_args):
                 # assume 40hz
                 end = time.time()
                 delaytime = max(0, 1000 / 40000 - (end-start))
-                time.sleep(delaytime)
+                if slowmo:
+                    while(time.time() - end < delaytime*10):
+                        env.render()
+                        time.sleep(delaytime)
+                else:
+                    time.sleep(delaytime)
 
         print("Eval reward: ", eval_reward)
 
