@@ -27,7 +27,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, ik_baseline=False, learn_gains=False, reward=None, history=0, fixed_speed=None, flipped=False, **kwargs):
+def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, ik_baseline=False, learn_gains=False, reward=None, history=0, fixed_speed=None, **kwargs):
     from functools import partial
 
     """
@@ -48,7 +48,7 @@ def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=Tr
 
         if path == 'Cassie-v0':
             # env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
-            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed, flipped=False)
+            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed)
         elif path == 'CassiePlayground-v0':
             env_fn = partial(CassiePlayground, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
@@ -158,9 +158,6 @@ def eval_policy(policy, args, run_args):
     import numpy as np
     from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
 
-    if not hasattr(run_args, 'flipped'):
-        setattr(run_args, 'flipped', False)
-
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
 
@@ -172,7 +169,7 @@ def eval_policy(policy, args, run_args):
     else:
         env_name = run_args.env_name
     if env_name == "Cassie-v0":
-        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, flipped=run_args.flipped)
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     elif env_name == "CassiePlayground-v0":
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
     elif env_name == "CassieNoaccelFootDistOmniscient":

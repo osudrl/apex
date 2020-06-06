@@ -13,17 +13,18 @@ def aslip_clock_reward(self, action):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())
 
-    frc_upper_lim = 400
+    desired_max_foot_frc = 300
+    desired_max_foot_vel = 2.0
 
     # state info
     com_vel = self.cassie_state.pelvis.translationalVelocity
     lfoot_pos = self.cassie_state.leftFoot.position[:3]  # only care about xy relative to pelvis
     rfoot_pos = self.cassie_state.rightFoot.position[:3]  # only care about xy relative to pelvis
-    foot_frc = self.sim.get_foot_forces()
-    left_frc = np.linalg.norm(foot_frc[0:3]) / frc_upper_lim
-    right_frc = np.linalg.norm(foot_frc[6:9]) / frc_upper_lim
-    left_vel = np.linalg.norm(self.cassie_state.leftFoot.footTranslationalVelocity)
-    right_vel = np.linalg.norm(self.cassie_state.rightFoot.footTranslationalVelocity)
+    foot_forces = self.sim.get_foot_forces()
+    normed_left_frc = max((foot_forces[0], 0)) / desired_max_foot_frc
+    normed_right_frc = max((foot_forces[1], 0)) / desired_max_foot_frc
+    normed_left_vel = np.linalg.norm(self.cassie_state.leftFoot.footTranslationalVelocity) / desired_max_foot_vel
+    normed_right_vel = np.linalg.norm(self.cassie_state.rightFoot.footTranslationalVelocity) / desired_max_foot_vel
 
     footpos_error     = 0
     com_vel_error     = 0
@@ -51,112 +52,42 @@ def aslip_clock_reward(self, action):
 
     # force/vel clock errors
 
-    left_frc_clock = np.clip(-self.left_clock(self.phase), 0, 1)
-    right_frc_clock = np.clip(-self.right_clock(self.phase), 0, 1)
-    left_vel_clock = np.clip(self.left_clock(self.phase), 0, 1)
-    right_vel_clock = np.clip(self.right_clock(self.phase), 0, 1)
+    # These values represent if we want to allow foot foot forces / vels (0 -> don't penalize), or penalize them (1 -> don't allow)
+    left_frc_clock = self.left_clock(self.phase)
+    right_frc_clock = self.right_clock(self.phase)
+    left_vel_clock = -self.left_clock(self.phase)
+    right_vel_clock = -self.right_clock(self.phase)
     
-    left_frc_penalty = np.abs(left_frc_clock * left_frc)
-    left_vel_penalty = np.abs(left_vel_clock * left_vel)
-    right_frc_penalty = np.abs(right_frc_clock * right_frc)
-    right_vel_penalty = np.abs(right_vel_clock * right_vel)
+    left_frc_penalty = np.tanh(left_frc_clock * normed_left_frc)
+    left_vel_penalty = np.tanh(left_vel_clock * normed_left_vel)
+    right_frc_penalty = np.tanh(right_frc_clock * normed_right_frc)
+    right_vel_penalty = np.tanh(right_vel_clock * normed_right_vel)
 
     foot_frc_penalty = left_frc_penalty + right_frc_penalty
     foot_vel_penalty = left_vel_penalty + right_vel_penalty
 
     reward = 0.3 * np.exp(-footpos_error) +    \
                 0.2 * np.exp(-com_vel_error) +    \
-                0.2 * np.exp(-foot_frc_penalty) +     \
-                0.2 * np.exp(-foot_vel_penalty) +     \
-                0.1 * np.exp(-straight_diff)
+                0.1 * np.exp(-straight_diff) +      \
+                0.2 * foot_frc_penalty +     \
+                0.2 * foot_vel_penalty
+
 
     if self.debug:
-        print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_vel:\t{2:.2f}, % = {3:.2f}\nfoot_frc_penalty:\t{4:.2f}, % = {5:.2f}\nfoot_vel_penalty:\t{6:.2f}, % = {7:.2f}\nstraight_diff:\t{8:.2f}, % = {9:.2f}\n\n".format(
+        print("l_frc phase : {:.2f}\t l_frc applied : {:.2f}\t l_penalty: {:.2f}\t t_penalty: {:.2f}".format(left_frc_clock, normed_left_frc, left_frc_penalty, foot_frc_penalty))
+        print("l_vel phase : {:.2f}\t l_vel applied : {:.2f}\t l_penalty: {:.2f}\t t_penalty: {:.2f}".format(left_vel_clock, normed_left_vel, left_vel_penalty, foot_vel_penalty))
+        # print("r_frc phase : {:.2f}\t r_frc applied : {:.2f}\t r_penalty: {:.2f}\t t_penalty: {:.2f}".format(right_frc_clock, normed_right_frc, right_frc_penalty, foot_frc_penalty))
+        # print("r_vel phase : {:.2f}\t r_vel applied : {:.2f}\t r_penalty: {:.2f}\t t_penalty: {:.2f}".format(right_vel_clock, normed_right_vel, right_vel_penalty, foot_vel_penalty))
+        print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_vel:\t{2:.2f}, % = {3:.2f}\nfoot_frc_penalty:\t{4:.2f}, % = {5:.2f}\nfoot_vel_penalty:\t{6:.2f}, % = {7:.2f}\nstraight_diff:\t{8:.2f}, % = {9:.2f}".format(
         0.3 * np.exp(-footpos_error),          0.3 * np.exp(-footpos_error) / reward * 100,
         0.2 * np.exp(-com_vel_error),          0.2 * np.exp(-com_vel_error) / reward * 100,
-        0.2 * np.exp(-foot_frc_penalty),       0.2 * np.exp(-foot_frc_penalty) / reward * 100,
-        0.2 * np.exp(-foot_vel_penalty),       0.2 * np.exp(-foot_vel_penalty) / reward * 100,
-        0.1  * np.exp(-straight_diff),         0.1  * np.exp(-straight_diff) / reward * 100,
+        0.2 * foot_frc_penalty,                0.2 * foot_frc_penalty / reward * 100,
+        0.2 * foot_vel_penalty,                0.2 * foot_vel_penalty / reward * 100,
+        0.1  * np.exp(-straight_diff),         0.1 * np.exp(-straight_diff) / reward * 100,
         reward
         )
         )
-        print("actual speed: {}\tdesired_speed: {}\tcommanded speed: {}".format(np.linalg.norm(qvel[0:3]), np.linalg.norm(ref_cvel), self.speed))
-    return reward
-
-# Exact same as above, but with left and right foot flipped
-def aslip_clock_reward_flipped(self, action):
-
-    qpos = np.copy(self.sim.qpos())
-    qvel = np.copy(self.sim.qvel())
-
-    frc_upper_lim = 400
-
-    # state info
-    com_vel = self.cassie_state.pelvis.translationalVelocity
-    lfoot_pos = self.cassie_state.leftFoot.position[:3]  # only care about xy relative to pelvis
-    rfoot_pos = self.cassie_state.rightFoot.position[:3]  # only care about xy relative to pelvis
-    foot_frc = self.sim.get_foot_forces()
-    left_frc = np.linalg.norm(foot_frc[0:3]) / frc_upper_lim
-    right_frc = np.linalg.norm(foot_frc[6:9]) / frc_upper_lim
-    left_vel = np.linalg.norm(self.cassie_state.leftFoot.footTranslationalVelocity)
-    right_vel = np.linalg.norm(self.cassie_state.rightFoot.footTranslationalVelocity)
-
-    footpos_error     = 0
-    com_vel_error     = 0
-    straight_diff     = 0
-    foot_vel_error    = 0
-    foot_frc_error    = 0
-
-    phase_to_match = self.phase
-
-    # ref state info
-    ref_rfoot, ref_rvel, ref_lfoot, ref_lvel, ref_cpos, ref_cvel = get_ref_aslip_unaltered_state(self, phase_to_match)
-
-    # xy foot pos error
-    for j in [0, 1]:
-        footpos_error += np.linalg.norm(lfoot_pos[j] - ref_lfoot[j]) +  np.linalg.norm(rfoot_pos[j] - ref_rfoot[j])
-
-    # com vel error
-    for j in [0, 1, 2]:
-        com_vel_error += np.linalg.norm(com_vel[j] - ref_cvel[j])
-    
-    # straight difference penalty
-    straight_diff = np.abs(qpos[1])
-    if straight_diff < 0.05:
-        straight_diff = 0
-
-    # force/vel clock errors
-
-    left_frc_clock = np.clip(-self.right_clock(self.phase), 0, 1)
-    right_frc_clock = np.clip(-self.left_clock(self.phase), 0, 1)
-    left_vel_clock = np.clip(self.right_clock(self.phase), 0, 1)
-    right_vel_clock = np.clip(self.left_clock(self.phase), 0, 1)
-    
-    left_frc_penalty = np.abs(left_frc_clock * left_frc)
-    left_vel_penalty = np.abs(left_vel_clock * left_vel)
-    right_frc_penalty = np.abs(right_frc_clock * right_frc)
-    right_vel_penalty = np.abs(right_vel_clock * right_vel)
-
-    foot_frc_penalty = left_frc_penalty + right_frc_penalty
-    foot_vel_penalty = left_vel_penalty + right_vel_penalty
-
-    reward = 0.3 * np.exp(-footpos_error) +    \
-                0.2 * np.exp(-com_vel_error) +    \
-                0.2 * np.exp(-foot_frc_penalty) +     \
-                0.2 * np.exp(-foot_vel_penalty) +     \
-                0.1 * np.exp(-straight_diff)
-
-    if self.debug:
-        print("reward: {10}\nfoot:\t{0:.2f}, % = {1:.2f}\ncom_vel:\t{2:.2f}, % = {3:.2f}\nfoot_frc_penalty:\t{4:.2f}, % = {5:.2f}\nfoot_vel_penalty:\t{6:.2f}, % = {7:.2f}\nstraight_diff:\t{8:.2f}, % = {9:.2f}\n\n".format(
-        0.3 * np.exp(-footpos_error),          0.3 * np.exp(-footpos_error) / reward * 100,
-        0.2 * np.exp(-com_vel_error),          0.2 * np.exp(-com_vel_error) / reward * 100,
-        0.2 * np.exp(-foot_frc_penalty),       0.2 * np.exp(-foot_frc_penalty) / reward * 100,
-        0.2 * np.exp(-foot_vel_penalty),       0.2 * np.exp(-foot_vel_penalty) / reward * 100,
-        0.1  * np.exp(-straight_diff),         0.1  * np.exp(-straight_diff) / reward * 100,
-        reward
-        )
-        )
-        print("actual speed: {}\tdesired_speed: {}\tcommanded speed: {}".format(np.linalg.norm(qvel[0:3]), np.linalg.norm(ref_cvel), self.speed))
+        print("actual speed: {}\tdesired_speed: {}\tcommanded speed: {}\n\n".format(np.linalg.norm(qvel[0:3]), np.linalg.norm(ref_cvel), self.speed))
     return reward
 
 

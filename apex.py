@@ -20,7 +20,6 @@ if __name__ == "__main__":
     parser.add_argument("--learn_gains", default=False, action='store_true', dest='learn_gains')             # learn PD gains or not
     parser.add_argument("--ik_baseline", default=False, action='store_true', dest='ik_baseline')             # use ik as baseline for aslip + delta policies?
     parser.add_argument("--reward", default="iros_paper", type=str)
-    parser.add_argument("--flipped", default=False, action='store_true', dest='flipped')             # Switch left and right foot in clock rewards
     # parser.add_argument("--gainsDivide", default=1.0, type=float)
 
     """

@@ -73,8 +73,6 @@ class CassieEnv_v2:
             self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
             self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
             self.reward_func = "aslip_clock"
-            self.flipped_reward = False
-
 
         self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
 
@@ -615,10 +613,8 @@ class CassieEnv_v2:
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         if self.reward_func == "aslip_clock":
-            if not self.flipped_reward:
-                return aslip_clock_reward(self, action)
-            else:
-                return aslip_clock_reward_flipped(self, action)
+            self.early_term_cutoff = 0.2
+            return aslip_clock_reward(self, action)
         elif self.reward_func == "aslip_old":
             self.early_term_cutoff = 0.0
             return aslip_old_reward(self, action)      
