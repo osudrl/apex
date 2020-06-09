@@ -23,15 +23,13 @@ _dir_path = os.path.dirname(os.path.realpath(__file__))
 # Initialize libcassiesim
 # cassie_mujoco_init(str.encode(_dir_path+"/cassie_noise_terrain.xml"))
 cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
-
 # cassie_mujoco_init(str.encode("../model/cassie.xml"))
 
 
 # Interface classes
 class CassieSim:
-    def __init__(self, modelfile):
-        #cassie_mujoco_init(str.encode(_dir_path+modelfile.encode('utf-8')))
-        self.c = cassie_sim_init(modelfile.encode('utf-8'))
+    def __init__(self, modelfile, reinit=False):
+        self.c = cassie_sim_init(modelfile.encode('utf-8'), reinit)
         self.nv = 32
         self.nbody = 26
         self.nq = 35
@@ -71,10 +69,14 @@ class CassieSim:
         qaccp = cassie_sim_qacc(self.c)
         return qaccp[:32]
 
-    def xquat(self, body_name):
+    def xpos(self, body_name):
         # print("in xquat")
-        xquatp = cassie_sim_xquat(self.c, body_name.encode())
+        xposp = cassie_sim_xpos(self.c, body_name.encode())
         # print("got pointer")
+        return xposp[:3]
+
+    def xquat(self, body_name):
+        xquatp = cassie_sim_xquat(self.c, body_name.encode())
         return xquatp[:4]
 
     def set_time(self, time):
@@ -93,6 +95,9 @@ class CassieSim:
 
     # def set_cassie_state(self, copy_state):
     #     cassie_sim_set_cassiestate(self.c, copy_state)
+    
+    def variable_hold(self, level):
+        cassie_sim_variable_hold(self.c, level)
 
     def hold(self):
         cassie_sim_hold(self.c)
@@ -111,13 +116,18 @@ class CassieSim:
         cassie_sim_foot_forces(self.c, frc_array)
         for i in range(12):
             force[i] = frc_array[i]
-        #print(force)
 
     def foot_pos(self, pos):
         pos_array = (ctypes.c_double * 6)()
         cassie_sim_foot_positions(self.c, pos_array)
         for i in range(6):
             pos[i] = pos_array[i]
+
+    def foot_vel(self, vel):
+        vel_array = (ctypes.c_double * 12)()
+        cassie_sim_foot_velocities(self.c, vel_array)
+        for i in range(12):
+            vel[i] = vel_array[i]
 
     def clear_forces(self):
         cassie_sim_clear_forces(self.c)
@@ -210,14 +220,13 @@ class CassieSim:
 
     def set_geom_friction(self, data, name=None):
         if name is None:
-            ngeom = 3*self.ngeom
-            c_arr = (ctypes.c_double * ngeom)()
+            c_arr = (ctypes.c_double * (self.ngeom*3))()
 
-            if len(data) != ngeom:
+            if len(data) != self.ngeom*3:
                 print("SIZE MISMATCH SET_GEOM_FRICTION()")
                 exit(1)
 
-            for i in range(ngeom):
+            for i in range(self.ngeom*3):
                 c_arr[i] = data[i]
 
             cassie_sim_set_geom_friction(self.c, c_arr)
@@ -251,8 +260,6 @@ class CassieSim:
                 exit(1)
 
             c_arr = (ctypes.c_double * ngeom)()
-            #print("SETTING:")
-            #print(c_arr, data)
 
             for i in range(ngeom):
                 c_arr[i] = data[i]
@@ -280,7 +287,6 @@ class CassieVis:
 
     def draw(self, c):
         state = cassie_vis_draw(self.v, c.c)
-        # print("vis draw state:", state)
         return state
 
     def valid(self):

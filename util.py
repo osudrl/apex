@@ -27,7 +27,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, reward=None, history=0, **kwargs):
+def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, ik_baseline=False, learn_gains=False, reward=None, history=0, fixed_speed=None, **kwargs):
     from functools import partial
 
     """
@@ -40,15 +40,15 @@ def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=Tr
 
     Note: env.unwrapped.spec is never set, if that matters for some reason.
     """
-    # if history > 0:
-    #   raise NotImplementedError
+
 
     # Custom Cassie Environment
     if path in ['Cassie-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieFootDist', 'CassieNoaccelFootDist']:
         from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
 
         if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+            # env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed)
         elif path == 'CassiePlayground-v0':
             env_fn = partial(CassiePlayground, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
@@ -118,7 +118,10 @@ def create_logger(args):
     else:
         # see if we are resuming a previous run, if we are mark as continued
         if args.previous is not None:
-            output_dir = args.previous[0:-1] + '-cont'
+            if args.exchange_reward is not None:
+                output_dir = args.previous[0:-1] + "_NEW-" + args.reward
+            else:
+                output_dir = args.previous[0:-1] + '-cont'
         else:
             # get a unique hash for the hyperparameter settings, truncated at 10 chars
             arg_hash   = hashlib.md5(str(arg_dict).encode('ascii')).hexdigest()[0:6] + '-seed' + seed
@@ -161,17 +164,19 @@ def eval_policy(policy, args, run_args):
     max_traj_len = args.traj_len
     visualize = not args.no_viz
     print("env name: ", run_args.env_name)
-    print("dyn rand: ", run_args.dyn_random)
-    # run_args.dyn_random = True
-    if run_args.env_name == "Cassie-v0":
+    if run_args.env_name is None:
+        env_name = args.env_name
+    else:
+        env_name = run_args.env_name
+    if env_name == "Cassie-v0":
         env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif run_args.env_name == "CassiePlayground-v0":
+    elif env_name == "CassiePlayground-v0":
         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
-    elif run_args.env_name == "CassieNoaccelFootDistOmniscient":
+    elif env_name == "CassieNoaccelFootDistOmniscient":
         env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif run_args.env_name == "CassieFootDist":
+    elif env_name == "CassieFootDist":
         env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif run_args.env_name == "CassieNoaccelFootDist":
+    elif env_name == "CassieNoaccelFootDist":
         env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
     else:
         env = CassieStandingEnv(state_est=run_args.state_est)
@@ -188,6 +193,8 @@ def eval_policy(policy, args, run_args):
 
     orient_add = 0
 
+    slowmo = False
+
     if visualize:
         env.render()
     render_state = True
@@ -198,7 +205,9 @@ def eval_policy(policy, args, run_args):
         done = False
         timesteps = 0
         eval_reward = 0
-        speed = 0.0
+        speed = 1.0
+
+        env.update_speed(speed)
 
         while render_state:
         
@@ -220,14 +229,22 @@ def eval_policy(policy, args, run_args):
                 elif c == 'k':
                     orient_add -= .1
                     print("Decreasing orient_add to: ", orient_add)
+                elif c == 'r':
+                    state = env.reset()
+                    speed = env.speed
+                    print("Resetting environment via env.reset()")
                 elif c == 'p':
                     push = 100
                     push_dir = 2
                     force_arr = np.zeros(6)
                     force_arr[push_dir] = push
                     env.sim.apply_force(force_arr)
+                elif c == 't':
+                    slowmo = not slowmo
+                    print("Slowmo : ", slowmo)
 
                 env.update_speed(speed)
+                # print(speed)
                 print("speed: ", env.speed)
             
             if hasattr(env, 'simrate'):
@@ -235,33 +252,35 @@ def eval_policy(policy, args, run_args):
 
             if (not env.vis.ispaused()):
                 # Update Orientation
-                quaternion = euler2quat(z=orient_add, y=0, x=0)
-                iquaternion = inverse_quaternion(quaternion)
+                env.orient_add = orient_add
+                # quaternion = euler2quat(z=orient_add, y=0, x=0)
+                # iquaternion = inverse_quaternion(quaternion)
 
-                # TODO: Should probably not assume these indices. Should make them not hard coded
-                if env.state_est:
-                    curr_orient = state[1:5]
-                    curr_transvel = state[15:18]
-                else:
-                    curr_orient = state[2:6]
-                    curr_transvel = state[20:23]
+                # # TODO: Should probably not assume these indices. Should make them not hard coded
+                # if env.state_est:
+                #     curr_orient = state[1:5]
+                #     curr_transvel = state[15:18]
+                # else:
+                #     curr_orient = state[2:6]
+                #     curr_transvel = state[20:23]
                 
-                new_orient = quaternion_product(iquaternion, curr_orient)
+                # new_orient = quaternion_product(iquaternion, curr_orient)
 
-                if new_orient[0] < 0:
-                    new_orient = -new_orient
+                # if new_orient[0] < 0:
+                #     new_orient = -new_orient
 
-                new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+                # new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
                 
-                if env.state_est:
-                    state[1:5] = torch.FloatTensor(new_orient)
-                    state[15:18] = torch.FloatTensor(new_translationalVelocity)
-                    # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
-                else:
-                    state[2:6] = torch.FloatTensor(new_orient)
-                    state[20:23] = torch.FloatTensor(new_translationalVelocity)          
+                # if env.state_est:
+                #     state[1:5] = torch.FloatTensor(new_orient)
+                #     state[15:18] = torch.FloatTensor(new_translationalVelocity)
+                #     # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+                # else:
+                #     state[2:6] = torch.FloatTensor(new_orient)
+                #     state[20:23] = torch.FloatTensor(new_translationalVelocity)          
                     
                 action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+
                 state, reward, done, _ = env.step(action)
 
                 # if env.lfoot_vel[2] < -0.6:
@@ -271,6 +290,9 @@ def eval_policy(policy, args, run_args):
                 
                 eval_reward += reward
                 timesteps += 1
+                qvel = env.sim.qvel()
+                # print("actual speed: ", np.linalg.norm(qvel[0:2]))
+                # print("commanded speed: ", env.speed)
 
                 if args.no_viz:
                     yaw = quaternion2euler(new_orient)[2]
@@ -279,10 +301,15 @@ def eval_policy(policy, args, run_args):
             if visualize:
                 render_state = env.render()
             if hasattr(env, 'simrate'):
-                # assume 30hz (hack)
+                # assume 40hz
                 end = time.time()
-                delaytime = max(0, 1000 / 30000 - (end-start))
-                time.sleep(delaytime)
+                delaytime = max(0, 1000 / 40000 - (end-start))
+                if slowmo:
+                    while(time.time() - end < delaytime*10):
+                        env.render()
+                        time.sleep(delaytime)
+                else:
+                    time.sleep(delaytime)
 
         print("Eval reward: ", eval_reward)
 
@@ -300,8 +327,12 @@ def parse_previous(args):
         args.no_delta = run_args.no_delta
         args.mirror = run_args.mirror
         args.recurrent = run_args.recurrent
+        args.learn_gains = run_args.learn_gains
+        args.ik_baseline = run_args.ik_baseline,
         if args.env_name == "CassiePlayground-v0":
             args.reward = "command"
             args.run_name = run_args.run_name + "-playground"
-    
+        if args.exchange_reward != None:
+            args.reward = args.exchange_reward
+            args.run_name = run_args.run_name + "_NEW-" + args.reward
     return args

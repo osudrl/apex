@@ -179,7 +179,7 @@ class CassieEnv_noaccel_footdist:
         ### Random commands during training ###
         self.speed_schedule = np.zeros(4)
         self.orient_add = 0
-        self.orient_time = 500
+
 
         # Keep track of actions, torques
         self.prev_action = np.zeros(10)
@@ -492,7 +492,7 @@ class CassieEnv_noaccel_footdist:
         self.phase_add = 1 #+ random.random()
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
-        self.orient_time = 500#random.randint(50, 200) 
+
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
         if self.dynamics_randomization:
@@ -541,7 +541,6 @@ class CassieEnv_noaccel_footdist:
         self.time = 0
         self.counter = 0
         self.orient_add = 0
-        self.orient_time = 500
         self.y_offset = 0
         self.phase_add = 1
 

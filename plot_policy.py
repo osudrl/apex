@@ -1,70 +1,55 @@
-import sys
-sys.path.append("..") # Adds higher directory to python modules path.
-
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from torch.autograd import Variable
-import time
+import time, os, sys
 
-from cassie import CassieEnv
+from util import env_factory
+from rl.policies.actor import GaussianMLP_Actor
 
 import argparse
 import pickle
 
+# Get policy to plot from args, load policy and env
 parser = argparse.ArgumentParser()
+# General args
 parser.add_argument("--path", type=str, default=None, help="path to folder containing policy and run details")
+parser.add_argument("--eval", default=False, action="store_true", help="Whether to call policy.eval() or not")
+parser.add_argument("--pre_steps", type=int, default=300, help="Number of \"presteps\" to take for the policy to stabilize before data is recorded")
+parser.add_argument("--num_steps", type=int, default=100, help="Number of steps to record")
+parser.add_argument("--pre_speed", type=float, default=0.5, help="Commanded action during the presteps")
+parser.add_argument("--plot_speed", type=float, default=0.5, help="Commanded action during the actual recorded steps")
 args = parser.parse_args()
+
 run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 
-RUN_NAME = run_args.run_name if run_args.run_name != None else "plot"
+# RUN_NAME = run_args.run_name if run_args.run_name != None else "plot"
 
 # RUN_NAME = "7b7e24-seed0"
 # POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
 
 # Load environment and policy
-# env_fn = partial(CassieEnv_speed_no_delta_neutral_foot, "walking", clock_based=True, state_est=True)
-cassie_env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, history=run_args.history)
-policy = torch.load(args.path + "actor.pt")
+env_fn = env_factory(run_args.env_name, traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
+                    mirror=False, clock_based=run_args.clock_based, reward="iros_paper", history=run_args.history)
+cassie_env = env_fn()
+policy = torch.load(os.path.join(args.path, "actor.pt"))
+if args.eval:
+    policy.eval()
 
 if hasattr(policy, 'init_hidden_state'):
     policy.init_hidden_state()
 
-def avg_pols(policies, state):
-    total_act = np.zeros(10)
-    for policy in policies:
-        action = policy.forward(torch.Tensor(state), True).detach().numpy()
-        total_act += action
-    return total_act / len(policies)
-
 obs_dim = cassie_env.observation_space.shape[0] # TODO: could make obs and ac space static properties
 action_dim = cassie_env.action_space.shape[0]
 
-do_multi = False
 no_delta = cassie_env.no_delta
 limittargs = False
 lininterp = False
 offset = cassie_env.offset
 
-policies = []
-if do_multi:
-    # for i in range(5, 12):
-    #     policy = torch.load("./trained_models/regular_spring"+str(i)+".pt")
-    #     policy.eval()
-    #     policies.append(policy)
-    # policy = torch.load("./trained_models/Normal.pt")
-    # policy.eval()
-    # policies.append(policy)
-    # policy = torch.load("./trained_models/stiff_StateEst_step.pt")
-    # policy.eval()
-    # policies.append(policy)
-    for i in [1, 2, 3, 5]:
-        policy = torch.load("./trained_models/stiff_spring/stiff_StateEst_speed{}.pt".format(i))
-        policies.append(policy)
-
-num_steps = 100
-pre_steps = 300
-simrate = 60
+num_steps = args.num_steps
+pre_steps = args.pre_steps
+simrate = cassie_env.simrate
 torques = np.zeros((num_steps*simrate, 10))
 GRFs = np.zeros((num_steps*simrate, 2))
 targets = np.zeros((num_steps*simrate, 10))
@@ -85,23 +70,15 @@ vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 # Execute policy and save torques
 with torch.no_grad():
     state = cassie_env.reset_for_test()
-    cassie_env.speed = 0
+    cassie_env.speed = args.pre_speed
     # cassie_env.side_speed = .2
     for i in range(pre_steps):
-        if not do_multi:
-            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
-            state, reward, done, _ = cassie_env.step(action)
-        else:
-            action = avg_pols(policies, state)
-            state, reward, done, _ = cassie_env.step(action)
+        action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+        state, reward, done, _ = cassie_env.step(action)
         state = torch.Tensor(state)
+    cassie_env.speed = args.plot_speed
     for i in range(num_steps):
-        if not do_multi:
-            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
-        else:
-            action = avg_pols(policies, state)
-            # state, reward, done, _ = cassie_env.step(action)
-        # targets[i, :] = action
+        action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
         lin_steps = int(60 * 3/4)  # Number of steps to interpolate over. Should be between 0 and self.simrate
         alpha = 1 / lin_steps
         for j in range(simrate):
@@ -180,7 +157,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig(args.path+RUN_NAME+"_torques.png")
+plt.savefig(os.path.join(args.path, "torques.png"))
 
 # Graph GRF data
 fig, ax = plt.subplots(2, figsize=(10, 5))
@@ -195,7 +172,7 @@ ax[1].set_title("Right Foot")
 ax[1].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig(args.path+RUN_NAME+"_GRFs.png")
+plt.savefig(os.path.join(args.path, "GRFs.png"))
 
 # Graph PD target data
 fig, ax = plt.subplots(2, 5, figsize=(15, 5))
@@ -211,7 +188,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig(args.path+RUN_NAME+"_targets.png")
+plt.savefig(os.path.join(args.path, "targets.png"))
 
 # Graph action data
 fig, ax = plt.subplots(2, 5, figsize=(15, 5))
@@ -227,7 +204,7 @@ for i in range(5):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig(args.path+RUN_NAME+"_actions.png")
+plt.savefig(os.path.join(args.path, "actions.png"))
 
 # Graph state data
 fig, ax = plt.subplots(2, 2, figsize=(10, 5))
@@ -245,7 +222,7 @@ for i in range(2):
     ax[1][i].set_xlabel("Timesteps (0.03 sec)")
 
 plt.tight_layout()
-plt.savefig(args.path+RUN_NAME+"_state.png")
+plt.savefig(os.path.join(args.path, "state.png"))
 
 # Graph feet qpos data
 fig, ax = plt.subplots(5, 2, figsize=(12, 6), sharex=True, sharey='row')
@@ -268,7 +245,7 @@ for i in range(2):
         ax[j+2][i].set_ylabel("Velocity (m/s)")    
 
 plt.tight_layout()
-plt.savefig(args.path+RUN_NAME+"_feet.png")
+plt.savefig(os.path.join(args.path, "feet.png"))
 
 # Graph phase portrait for actuated joints
 fig, ax = plt.subplots(1, 5, figsize=(15, 4))
@@ -284,7 +261,7 @@ for i in range(5):
     ax[i].set_xlabel("Angle")
 
 plt.tight_layout()
-plt.savefig(args.path+RUN_NAME+"_phaseportrait.png")
+plt.savefig(os.path.join(args.path, "phaseportrait.png"))
 
 # Misc Plotting
 fig, ax = plt.subplots()
@@ -295,4 +272,4 @@ t = np.linspace(0, num_steps-1, num_steps*simrate)
 ax.set_ylabel("Height (m)")
 ax.set_title("Pelvis Height")
 ax.plot(t, pelheight)
-plt.savefig(args.path+RUN_NAME+"_misc.png")
+plt.savefig(os.path.join(args.path, "misc.png"))
