@@ -129,6 +129,173 @@ def speedmatch_footheightvelflag_even_reward(self):
 
     return reward
 
+def speedmatch_footheightsmooth_footorient_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+    orient_targ = np.array([1, 0, 0, 0])
+    speed_targ = np.array([self.speed, 0, 0])
+    forward_diff = np.abs(qvel[0] - speed_targ[0])
+    orient_diff = 1 - np.inner(orient_targ, qpos[3:7]) ** 2
+    # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    y_vel = np.abs(qvel[1] - speed_targ[1])
+    if forward_diff < 0.05:
+        forward_diff = 0
+    if y_vel < 0.05:
+        y_vel = 0
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+        straight_diff = 0
+    if orient_diff < 5e-3:
+        orient_diff = 0
+    else:
+        orient_diff *= 30
+
+    reward = .2*np.exp(-forward_diff) + .1*np.exp(-orient_diff) \
+                + .1*np.exp(-straight_diff) + .1*np.exp(-y_vel) \
+                + .15*np.exp(-self.l_foot_cost_smooth) + .15*np.exp(-self.r_foot_cost_smooth) \
+                + .1*np.exp(-self.l_foot_orient) + .1*np.exp(-self.r_foot_orient)
+
+    return reward
+
+def speedmatch_footheightvelflag_even_footorient_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+    orient_targ = np.array([1, 0, 0, 0])
+    speed_targ = np.array([self.speed, 0, 0])
+    forward_diff = np.abs(qvel[0] - speed_targ[0])
+    orient_diff = 1 - np.inner(orient_targ, qpos[3:7]) ** 2
+    # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    y_vel = np.abs(qvel[1] - speed_targ[1])
+    if forward_diff < 0.05:
+        forward_diff = 0
+    if y_vel < 0.05:
+        y_vel = 0
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+        straight_diff = 0
+    if orient_diff < 5e-3:
+        orient_diff = 0
+    else:
+        orient_diff *= 30
+
+    reward = .2*np.exp(-forward_diff) + .1*np.exp(-orient_diff) \
+                + .1*np.exp(-straight_diff) + .1*np.exp(-y_vel) \
+                + .15*np.exp(-self.l_foot_cost_even) + .15*np.exp(-self.r_foot_cost_even) \
+                + .1*np.exp(-self.l_foot_orient) + .1*np.exp(-self.r_foot_orient) 
+
+    return reward
+
+def speedmatch_footheightvelflag_even_footorient_footdist_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+    orient_targ = np.array([1, 0, 0, 0])
+    speed_targ = np.array([self.speed, 0, 0])
+    forward_diff = np.abs(qvel[0] - speed_targ[0])
+    orient_diff = 1 - np.inner(orient_targ, qpos[3:7]) ** 2
+    # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    y_vel = np.abs(qvel[1] - speed_targ[1])
+    if forward_diff < 0.05:
+        forward_diff = 0
+    if y_vel < 0.05:
+        y_vel = 0
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+        straight_diff = 0
+    if orient_diff < 5e-3:
+        orient_diff = 0
+    else:
+        orient_diff *= 30
+
+    ######## Foot position penalty ########
+    foot_pos = np.zeros(6)
+    self.sim.foot_pos(foot_pos)
+    foot_dist = np.linalg.norm(foot_pos[0:2]-foot_pos[3:5])
+    foot_penalty = 0
+    if foot_dist < 0.2:
+       foot_penalty = -0.2
+
+    reward = .2*np.exp(-forward_diff) + .1*np.exp(-orient_diff) \
+                + .1*np.exp(-straight_diff) + .1*np.exp(-y_vel) \
+                + .15*np.exp(-self.l_foot_cost_even) + .15*np.exp(-self.r_foot_cost_even) \
+                + .1*np.exp(-self.l_foot_orient) + .1*np.exp(-self.r_foot_orient) \
+                + foot_penalty
+
+    return reward
+
+def speedmatch_footheightvelflag_even_footorient_footdist_torquecost_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+    orient_targ = np.array([1, 0, 0, 0])
+    speed_targ = np.array([self.speed, 0, 0])
+    forward_diff = np.abs(qvel[0] - speed_targ[0])
+    orient_diff = 1 - np.inner(orient_targ, qpos[3:7]) ** 2
+    # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    y_vel = np.abs(qvel[1] - speed_targ[1])
+    if forward_diff < 0.05:
+        forward_diff = 0
+    if y_vel < 0.05:
+        y_vel = 0
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+        straight_diff = 0
+    if orient_diff < 5e-3:
+        orient_diff = 0
+    else:
+        orient_diff *= 30
+
+    ######## Foot position penalty ########
+    foot_pos = np.zeros(6)
+    self.sim.foot_pos(foot_pos)
+    foot_dist = np.linalg.norm(foot_pos[0:2]-foot_pos[3:5])
+    foot_penalty = 0
+    if foot_dist < 0.15:
+       foot_penalty = -0.2
+
+    reward = .2*np.exp(-forward_diff) + .1*np.exp(-orient_diff) \
+                + .075*np.exp(-straight_diff) + .075*np.exp(-y_vel) \
+                + .15*np.exp(-self.l_foot_cost_even) + .15*np.exp(-self.r_foot_cost_even) \
+                + .075*np.exp(-self.l_foot_orient) + .075*np.exp(-self.r_foot_orient) \
+                + .1*np.exp(-self.torque_cost) + foot_penalty
+
+    return reward
+
+def speedmatch_footheightvelflag_even_footorient_footdist_torquecost_smooth_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+    orient_targ = np.array([1, 0, 0, 0])
+    speed_targ = np.array([self.speed, 0, 0])
+    forward_diff = np.abs(qvel[0] - speed_targ[0])
+    orient_diff = 1 - np.inner(orient_targ, qpos[3:7]) ** 2
+    # orient_diff = np.linalg.norm(qpos[3:7] - np.array([1, 0, 0, 0]))
+    y_vel = np.abs(qvel[1] - speed_targ[1])
+    if forward_diff < 0.05:
+        forward_diff = 0
+    if y_vel < 0.05:
+        y_vel = 0
+    straight_diff = np.abs(qpos[1])
+    if straight_diff < 0.05:
+        straight_diff = 0
+    if orient_diff < 5e-3:
+        orient_diff = 0
+    else:
+        orient_diff *= 30
+
+    ######## Foot position penalty ########
+    foot_pos = np.zeros(6)
+    self.sim.foot_pos(foot_pos)
+    foot_dist = np.linalg.norm(foot_pos[0:2]-foot_pos[3:5])
+    foot_penalty = 0
+    if foot_dist < 0.15:
+       foot_penalty = -0.2
+
+    reward = .2*np.exp(-forward_diff) + .05*np.exp(-orient_diff) \
+                + .05*np.exp(-straight_diff) + .05*np.exp(-y_vel) \
+                + .15*np.exp(-self.l_foot_cost_even) + .15*np.exp(-self.r_foot_cost_even) \
+                + .075*np.exp(-self.l_foot_orient) + .075*np.exp(-self.r_foot_orient) \
+                + .1*np.exp(-self.torque_cost) + .1*np.exp(-self.smooth_cost) + foot_penalty
+
+    return reward
+
 def speedmatch_footheightvelflag_even_footorient_smooth_reward(self):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())

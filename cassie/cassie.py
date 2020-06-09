@@ -568,14 +568,13 @@ class CassieEnv_v2:
         new_translationalVelocity = self.cassie_state.pelvis.translationalVelocity[:]
         new_translationalAcceleleration = self.cassie_state.pelvis.translationalAcceleration[:]
         # new_translationalVelocity[0:2] += self.com_vel_offset
-        if self.time >= self.orient_time:
-            quaternion = euler2quat(z=self.orient_add, y=0, x=0)
-            iquaternion = inverse_quaternion(quaternion)
-            new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
-            if new_orient[0] < 0:
-                new_orient = -new_orient
-            new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
-            new_translationalAcceleleration = rotate_by_quaternion(self.cassie_state.pelvis.translationalAcceleration[:], iquaternion)
+        quaternion = euler2quat(z=self.orient_add, y=0, x=0)
+        iquaternion = inverse_quaternion(quaternion)
+        new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
+        if new_orient[0] < 0:
+            new_orient = -new_orient
+        new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
+        new_translationalAcceleleration = rotate_by_quaternion(self.cassie_state.pelvis.translationalAcceleration[:], iquaternion)
         motor_pos = self.cassie_state.motor.position[:]
         joint_pos = self.cassie_state.joint.position[:]
         if self.joint_rand:
