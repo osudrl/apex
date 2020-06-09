@@ -193,6 +193,8 @@ def eval_policy(policy, args, run_args):
 
     orient_add = 0
 
+    slowmo = False
+
     if visualize:
         env.render()
     render_state = True
@@ -237,6 +239,9 @@ def eval_policy(policy, args, run_args):
                     force_arr = np.zeros(6)
                     force_arr[push_dir] = push
                     env.sim.apply_force(force_arr)
+                elif c == 't':
+                    slowmo = not slowmo
+                    print("Slowmo : ", slowmo)
 
                 env.update_speed(speed)
                 # print(speed)
@@ -299,7 +304,12 @@ def eval_policy(policy, args, run_args):
                 # assume 40hz
                 end = time.time()
                 delaytime = max(0, 1000 / 40000 - (end-start))
-                time.sleep(delaytime)
+                if slowmo:
+                    while(time.time() - end < delaytime*10):
+                        env.render()
+                        time.sleep(delaytime)
+                else:
+                    time.sleep(delaytime)
 
         print("Eval reward: ", eval_reward)
 

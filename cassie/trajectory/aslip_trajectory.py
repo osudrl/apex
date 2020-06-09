@@ -60,19 +60,19 @@ def getAllTrajectories(speeds):
     # print("Got all trajectories")
     return trajectories
 
-# return list of 1-d interp curves parameterized by each trajectory's length
-def aslip_interp(trajectories, simrate):
-    from scipy.interpolate import interp1d
+# # return list of 1-d interp curves parameterized by each trajectory's length
+# def aslip_interp(trajectories, simrate):
+#     from scipy.interpolate import interp1d
 
-    trajectory_curves = []
-    for trajectory in trajectories:
-        # time_points = np.linspace(0, simrate, num=trajectory.length)
-        # time_points = trajectory.time
-        # task_trajectory = np.hstack([trajectory.rpos, trajectory.lpos, trajectory.cpos]).T
-        # pos_f_interp = interp1d(time_points, task_trajectory, 'linear')
-        pos_f_interp = trajectory.pos_f_interp
-        trajectory_curves.append(pos_f_interp)
-    return trajectory_curves
+#     trajectory_curves = []
+#     for trajectory in trajectories:
+#         time_points = np.linspace(0, simrate, num=trajectory.length)
+#         time_points = trajectory.time
+#         task_trajectory = np.hstack([trajectory.rpos, trajectory.lpos, trajectory.cpos]).T
+#         pos_f_interp = interp1d(time_points, task_trajectory, 'linear')
+#         pos_f_interp = trajectory.pos_f_interp
+#         trajectory_curves.append(pos_f_interp)
+#     return trajectory_curves
 
 
 

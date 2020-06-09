@@ -49,8 +49,9 @@ class CassieEnv_v2:
             self.speeds = np.array([x / 10 for x in range(0, 21)])
             self.trajectories = getAllTrajectories(self.speeds)
             self.num_speeds = len(self.trajectories)
-            self.speed = self.speeds[0]
-            self.trajectory = self.trajectories[0]
+            self.traj_idx = 0
+            self.speed = self.speeds[self.traj_idx]
+            self.trajectory = self.trajectories[self.traj_idx]
             self.aslip_traj = True
             self.clock_based = False
         else:
@@ -61,6 +62,17 @@ class CassieEnv_v2:
                 traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
             self.trajectory = CassieTrajectory(traj_path)
             self.speed = 0
+
+
+        # If Loading Clock-based Reward Func, do that
+        if self.reward_func in ["aslip_clock_smooth", "aslip_clock_smooth_aerial",
+                                "aslip_clock_strict0.1", "aslip_clock_strict0.1_aerial",
+                                "aslip_clock_strict0.4", "aslip_clock_strict0.4_aerial"]:
+            clock_funcs_path = os.path.join(dirname, "rewards", "aslip_reward_clock_funcs", self.reward_func + ".pkl")
+            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
+            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
+            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+            self.reward_func = "aslip_clock"
 
         self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
 
@@ -417,10 +429,10 @@ class CassieEnv_v2:
     def reset(self):
 
         if self.aslip_traj:
-            random_speed_idx = random.randint(0, self.num_speeds-1)
-            self.speed = self.speeds[random_speed_idx]
+            self.traj_idx = random.randint(0, self.num_speeds-1)
+            self.speed = self.speeds[self.traj_idx]
             # print("current speed: {}\tcurrent traj: {}".format(self.speed, random_speed_idx))
-            self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
+            self.trajectory = self.trajectories[self.traj_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
             self.speed = (random.randint(0, 20)) / 10
@@ -431,7 +443,12 @@ class CassieEnv_v2:
             #     self.phase_add = 1 + random.random()
 
         if self.fixed_speed != None:
+            self.traj_idx = (np.abs(self.speeds - self.speed)).argmin()
             self.speed = self.fixed_speed
+
+        if self.reward_func == "aslip_clock":
+            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
+            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
 
         self.simsteps = 0
 
@@ -511,12 +528,17 @@ class CassieEnv_v2:
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
         if self.aslip_traj:
+            self.traj_idx = 0
             self.speed = 0
             # print("current speed: {}".format(self.speed))
-            self.trajectory = self.trajectories[0] # switch the current trajectory
+            self.trajectory = self.trajectories[self.traj_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
             self.speed = 0
+
+        if self.reward_func == "aslip_clock":
+            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
+            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
 
         if not full_reset:
             qpos, qvel = self.get_ref_state(self.phase)
@@ -560,11 +582,13 @@ class CassieEnv_v2:
         self.cassie_state.joint.velocity[:] = np.zeros(6)
 
     # Helper function for updating the speed, used in visualization tests
+    # not needed in training cause we don't change speeds in middle of rollout, and 
+    # we randomize the starting phase of each rollout
     def update_speed(self, new_speed):
         if self.aslip_traj:
-            idx = (np.abs(self.speeds - new_speed)).argmin()
-            self.speed = idx / 10
-            self.trajectory = self.trajectories[idx]
+            self.traj_idx = (np.abs(self.speeds - new_speed)).argmin()
+            self.speed = self.traj_idx / 10
+            self.trajectory = self.trajectories[self.traj_idx]
             old_phaselen = self.phaselen
             self.phaselen = self.trajectory.length - 1
             # update phase
@@ -578,52 +602,22 @@ class CassieEnv_v2:
             # # Make sure that if speed is above 2, freq is at least 1.2
             # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
             #     self.phase_add = 1.1 + (self.speed - 1)* 0.2
-
+        
+        if self.reward_func == "aslip_clock":
+            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
+            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
 
     def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        
-        if self.reward_func == "aslip_joint":
-            self.early_term_cutoff = 0.0
-            return aslip_joint_reward(self, action)        
+        if self.reward_func == "aslip_clock":
+            self.early_term_cutoff = 0.2
+            return aslip_clock_reward(self, action)
         elif self.reward_func == "aslip_old":
             self.early_term_cutoff = 0.0
             return aslip_old_reward(self, action)      
-        elif self.reward_func == "aslip_oldMujoco":
-            self.early_term_cutoff = 0.0
-            return aslip_oldMujoco_reward(self, action)
-        elif self.reward_func == "aslip_comorientheight":
-            self.early_term_cutoff = -0.3
-            return aslip_comorientheight_reward(self, action)
-
-        # elif self.reward_func == "aslip_heightpenalty":
-        #     self.early_term_cutoff = -0.3
-        #     return aslip_heightpenalty_reward(self, action)
-        # elif self.reward_func == "aslip_comorient":
-        #     self.early_term_cutoff = 0.2
-        #     return aslip_comorient_reward(self, action)
-        # elif self.reward_func == "aslip_comorient_heightpenalty":
-        #     self.early_term_cutoff = 0.2
-        #     return aslip_comorient_heightpenalty_reward(self, action)
-        # elif self.reward_func == "aslip_strict":
-        #     self.early_term_cutoff = 0.1
-        #     return aslip_strict_reward(self, action)
-        elif self.reward_func == "aslip_TaskSpaceMujoco":
-            self.early_term_cutoff = 0.0
-            return aslip_TaskSpaceMujoco_reward(self, action)
-        # elif self.reward_func == "aslip_TaskSpaceStateEst":
-        #     self.early_term_cutoff = 0.0
-        #     return aslip_TaskSpaceStateEst_reward(self, action)
-        # elif self.reward_func == "aslip_DirectMatchStateEst":
-        #     self.early_term_cutoff = 0.0
-        #     return aslip_DirectMatchStateEst_reward(self, action)
-        # elif self.reward_func == "aslip_DirectMatchMujoco":
-        #     self.early_term_cutoff = 0.0
-        #     return aslip_DirectMatchMujoco_reward(self, action)
-
         elif self.reward_func == "iros_paper":
             return iros_paper_reward(self)
         elif self.reward_func == "5k_speed_reward":
