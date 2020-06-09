@@ -138,7 +138,7 @@ class PPO:
 
     @ray.remote
     @torch.no_grad()
-    def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False):
+    def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
         """
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
@@ -168,7 +168,7 @@ class PPO:
                 critic.init_hidden_state()
 
             while not done and traj_len < max_traj_len:
-                action = policy(state, deterministic=False)
+                action = policy(state, deterministic=False, anneal=anneal)
                 value = critic(state)
 
                 next_state, reward, done, _ = env.step(action.numpy())
@@ -185,9 +185,9 @@ class PPO:
 
         return memory
 
-    def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False):
+    def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
         worker = self.sample
-        args = (self, env_fn, policy, critic, min_steps, max_traj_len, deterministic)
+        args = (self, env_fn, policy, critic, min_steps, max_traj_len, deterministic, anneal)
 
         # Don't don't bother launching another process for single thread
         if self.n_proc > 1:
@@ -195,7 +195,7 @@ class PPO:
             if self.limit_cores:
                 real_proc = 48 - 16*int(np.log2(60 / env_fn().simrate))
                 print("limit cores active, using {} cores".format(real_proc))
-                args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
+                args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic, anneal)
             result_ids = [worker.remote(*args) for _ in range(real_proc)]
             result = ray.get(result_ids)
         else:
@@ -303,7 +303,7 @@ class PPO:
               policy,
               critic,
               n_itr,
-              logger=None):
+              logger=None, anneal_rate=1.0):
 
         self.old_policy = deepcopy(policy)
         self.policy = policy
@@ -325,11 +325,14 @@ class PPO:
         if hasattr(env, 'mirror_action'):
             act_mirr = env.mirror_action
 
+        curr_anneal = 1.0
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
-            batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len)
+            if self.highest_reward > self.max_traj_len and curr_anneal > 0.5:
+                curr_anneal *= anneal_rate
+            batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len, anneal=curr_anneal)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
             samp_time = time.time() - sample_start
@@ -516,4 +519,4 @@ def run_experiment(args):
     print(" └ max traj len:   {}".format(args.max_traj_len))
     print()
 
-    algo.train(env_fn, policy, critic, args.n_itr, logger=logger)
+    algo.train(env_fn, policy, critic, args.n_itr, logger=logger, anneal_rate=args.anneal)

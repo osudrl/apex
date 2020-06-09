@@ -6,7 +6,7 @@ from torch import sqrt
 
 from rl.policies.base import Net
 
-LOG_STD_HI = -.5
+LOG_STD_HI = -1.5
 LOG_STD_LO = -20
 
 class Actor(Net):
@@ -92,14 +92,16 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
         mean = torch.tanh(x) 
 
     if self.learn_std:
-      sd = torch.clamp(self.log_stds(x), LOG_STD_LO, LOG_STD_HI).exp()
+      # sd = torch.clamp(self.log_stds(x), LOG_STD_LO, LOG_STD_HI).exp()
+      sd = (-2+0.5*torch.tanh(self.log_stds(x))).exp()
     else:
       sd = self.fixed_std
 
     return mean, sd
 
-  def forward(self, state, deterministic=True):
+  def forward(self, state, deterministic=True, anneal=1.0):
     mu, sd = self._get_dist_params(state)
+    sd *= anneal
 
     if not deterministic:
       self.action = torch.distributions.Normal(mu, sd).sample()
