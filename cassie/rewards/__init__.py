@@ -1,5 +1,6 @@
 # We use this directory for keeping track of reward functions. Each reward function operates on an object of CassieEnv_v2, passed as 'self'
 
+from .clock_rewards import *
 from .aslip_rewards import *
 from .rnn_dyn_random_reward import *
 from .iros_paper_reward import *
