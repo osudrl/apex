@@ -472,7 +472,7 @@ class CassieEnv_v2:
             self.trajectory = self.trajectories[self.traj_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
-            self.speed = (random.randint(0, 20)) / 10
+            self.speed = (random.randint(0, 40)) / 10
             # # Make sure that if speed is above 2, freq is at least 1.2
             # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
             #     self.phase_add = 1.3 + 0.7*random.random()
@@ -660,13 +660,13 @@ class CassieEnv_v2:
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         if self.reward_func == "clock":
-            self.early_term_cutoff = 0.2
+            self.early_term_cutoff = 0.0
             return clock_reward(self, action)
         elif self.reward_func == "max_vel_clock":
-            self.early_term_cutoff = 0.2
+            self.early_term_cutoff = 0.0
             return max_vel_clock_reward(self, action)
         elif self.reward_func == "aslip_clock":
-            self.early_term_cutoff = 0.2
+            self.early_term_cutoff = 0.0
             return aslip_clock_reward(self, action)
         elif self.reward_func == "aslip_old":
             self.early_term_cutoff = 0.0

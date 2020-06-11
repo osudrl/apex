@@ -15,10 +15,11 @@ def clock_reward(self, action):
 
     # state info
     com_vel = qvel[0] # only care about x velocity
-    normed_left_frc = self.l_foot_frc / desired_max_foot_frc
-    normed_right_frc = self.r_foot_frc / desired_max_foot_frc
-    normed_left_vel = np.linalg.norm(self.l_foot_vel) / desired_max_foot_vel
-    normed_right_vel = np.linalg.norm(self.r_foot_vel) / desired_max_foot_vel
+    # put a cap on the frc and vel so as to prevent the policy from learning to maximize them during phase.
+    normed_left_frc = min(self.l_foot_frc, desired_max_foot_frc) / desired_max_foot_frc
+    normed_right_frc = min(self.r_foot_frc, desired_max_foot_frc) / desired_max_foot_frc
+    normed_left_vel = min(np.linalg.norm(self.l_foot_vel), desired_max_foot_vel) / desired_max_foot_vel
+    normed_right_vel = min(np.linalg.norm(self.r_foot_vel), desired_max_foot_vel) / desired_max_foot_vel
 
     com_orient_error  = 0
     foot_orient_error  = 0
@@ -28,10 +29,10 @@ def clock_reward(self, action):
     foot_frc_error    = 0
 
     # com orient error
-    com_orient_error += 1 - np.inner(orient_targ, qpos[3:7]) ** 2
+    com_orient_error += 10 * (1 - np.inner(orient_targ, qpos[3:7]) ** 2)
 
     # foot orient error
-    foot_orient_error += self.l_foot_orient_cost + self.r_foot_orient_cost
+    foot_orient_error += 10 * (self.l_foot_orient_cost + self.r_foot_orient_cost)
 
     # com vel error
     com_vel_error += np.linalg.norm(com_vel - self.speed)
@@ -87,8 +88,6 @@ def clock_reward(self, action):
         print("actual speed: {}\tcommanded speed: {}\n\n".format(np.linalg.norm(qvel[0:3]), self.speed))
     return reward
 
-
-
 def aslip_clock_reward(self, action):
 
     qpos = np.copy(self.sim.qpos())
@@ -96,17 +95,18 @@ def aslip_clock_reward(self, action):
 
     # These used for normalizing the foot forces and velocities
     desired_max_foot_frc = 400
-    desired_max_foot_vel = 2.0
+    desired_max_foot_vel = 3.0
     orient_targ = np.array([1, 0, 0, 0])
 
     # state info
     com_vel = qvel[0:3]
     lfoot_pos = self.l_foot_pos  # only care about xy relative to pelvis
     rfoot_pos = self.r_foot_pos  # only care about xy relative to pelvis
-    normed_left_frc = self.l_foot_frc / desired_max_foot_frc
-    normed_right_frc = self.r_foot_frc / desired_max_foot_frc
-    normed_left_vel = np.linalg.norm(self.l_foot_vel) / desired_max_foot_vel
-    normed_right_vel = np.linalg.norm(self.r_foot_vel) / desired_max_foot_vel
+    # put a cap on the frc and vel so as to prevent the policy from learning to maximize them during phase.
+    normed_left_frc = min(self.l_foot_frc, desired_max_foot_frc) / desired_max_foot_frc
+    normed_right_frc = min(self.r_foot_frc, desired_max_foot_frc) / desired_max_foot_frc
+    normed_left_vel = min(np.linalg.norm(self.l_foot_vel), desired_max_foot_vel) / desired_max_foot_vel
+    normed_right_vel = min(np.linalg.norm(self.r_foot_vel), desired_max_foot_vel) / desired_max_foot_vel
 
     com_orient_error  = 0
     foot_orient_error  = 0
@@ -195,15 +195,16 @@ def max_vel_clock_reward(self, action):
 
     # These used for normalizing the foot forces and velocities
     desired_max_foot_frc = 400
-    desired_max_foot_vel = 2.0
+    desired_max_foot_vel = 3.0
     orient_targ = np.array([1, 0, 0, 0])
 
     # state info
     com_vel = qvel[0] # only care about x velocity
-    normed_left_frc = self.l_foot_frc / desired_max_foot_frc
-    normed_right_frc = self.r_foot_frc / desired_max_foot_frc
-    normed_left_vel = np.linalg.norm(self.l_foot_vel) / desired_max_foot_vel
-    normed_right_vel = np.linalg.norm(self.r_foot_vel) / desired_max_foot_vel
+    # put a cap on the frc and vel so as to prevent the policy from learning to maximize them during phase.
+    normed_left_frc = min(self.l_foot_frc, desired_max_foot_frc) / desired_max_foot_frc
+    normed_right_frc = min(self.r_foot_frc, desired_max_foot_frc) / desired_max_foot_frc
+    normed_left_vel = min(np.linalg.norm(self.l_foot_vel), desired_max_foot_vel) / desired_max_foot_vel
+    normed_right_vel = min(np.linalg.norm(self.r_foot_vel), desired_max_foot_vel) / desired_max_foot_vel
 
     com_orient_error  = 0
     foot_orient_error  = 0
@@ -216,7 +217,7 @@ def max_vel_clock_reward(self, action):
     com_orient_error += 15 * (1 - np.inner(orient_targ, qpos[3:7]) ** 2)
 
     # foot orient error
-    foot_orient_error += self.l_foot_orient_cost + self.r_foot_orient_cost
+    foot_orient_error += 10 * (self.l_foot_orient_cost + self.r_foot_orient_cost)
     
     # com vel bonus
     com_vel_bonus += com_vel / 3.0
