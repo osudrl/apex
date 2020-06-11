@@ -25,12 +25,15 @@ def load_reward_clock_funcs(path):
 
 
 class CassieEnv_v2:
-    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, learn_gains=False, ik_baseline=False, reward="iros_paper", history=0, **kwargs):
+    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True,
+                 no_delta=True, learn_gains=False, ik_baseline=False, reward="iros_paper",
+                 config="./cassie/cassiemujoco/cassie.xml", history=0, **kwargs):
 
         dirname = os.path.dirname(__file__)
         #xml_path = os.path.join(dirname, "cassiemujoco", "cassie.xml")
         #self.sim = CassieSim(xml_path)
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+        self.config = config
+        self.sim = CassieSim(self.config)
         # self.sim = CassieSim("./cassie/cassiemujoco/cassie_drop_step.xml")
         self.vis = None
 
@@ -809,7 +812,7 @@ class CassieEnv_v2:
 
     def render(self):
         if self.vis is None:
-            self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/cassie.xml")
+            self.vis = CassieVis(self.sim, self.config)
 
         return self.vis.draw(self.sim)
     
