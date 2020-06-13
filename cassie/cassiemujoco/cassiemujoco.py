@@ -21,7 +21,7 @@ import numpy as np
 _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # Initialize libcassiesim
-# cassie_mujoco_init(str.encode(_dir_path+"/cassie_noise_terrain.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/terrain_noise.xml"))
 cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 # cassie_mujoco_init(str.encode("../model/cassie.xml"))
 
@@ -96,8 +96,8 @@ class CassieSim:
     # def set_cassie_state(self, copy_state):
     #     cassie_sim_set_cassiestate(self.c, copy_state)
     
-    def variable_hold(self, level):
-        cassie_sim_variable_hold(self.c, level)
+    # def variable_hold(self, level):
+    #     cassie_sim_variable_hold(self.c, level)
 
     def hold(self):
         cassie_sim_hold(self.c)
@@ -193,17 +193,24 @@ class CassieSim:
 
         cassie_sim_set_dof_damping(self.c, c_arr)
 
-    def set_body_mass(self, data):
-        c_arr = (ctypes.c_double * self.nbody)()
+    def set_body_mass(self, data, name=None):
+        # If no name is provided, set ALL body masses and assume "data" is array
+        # containing masses for every body
+        if name is None:
+            c_arr = (ctypes.c_double * self.nbody)()
 
-        if len(data) != self.nbody:
-          print("SIZE MISMATCH SET_BODY_MASS()")
-          exit(1)
-        
-        for i in range(self.nbody):
-          c_arr[i] = data[i]
+            if len(data) != self.nbody:
+                print("SIZE MISMATCH SET_BODY_MASS()")
+                exit(1)
+            
+            for i in range(self.nbody):
+                c_arr[i] = data[i]
 
-        cassie_sim_set_body_mass(self.c, c_arr)
+            cassie_sim_set_body_mass(self.c, c_arr)
+        # If name is provided, only set mass for specified body and assume
+        # "data" is a single double
+        else:
+            cassie_sim_set_body_name_mass(self.c, name.encode(), ctypes.c_double(data))
 
     def set_body_ipos(self, data):
         nbody = self.nbody * 3
