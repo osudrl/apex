@@ -355,6 +355,51 @@ class CassieEnv_v2:
         elif not self.r_swing and foot_pos[5] >= 0:
             self.r_swing = True
 
+    # Basic version of step_simulation, that only simulates forward in time, does not do any other
+    # computation for reward, etc. Is faster and should be used for evaluation purposes
+    def step_sim_basic(self, action, learned_gains=None):
+        if not self.ik_baseline:
+            if self.aslip_traj and self.phase == self.phaselen - 1:
+                ref_pos, ref_vel = self.get_ref_state(0)
+            else:
+                ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
+        else:
+            ref_pos = self.trajectory.ik_pos[self.simsteps]
+
+        if not self.no_delta:
+            self.offset = ref_pos[self.pos_idx]
+        target = action + self.offset
+
+        if self.joint_rand:
+            target -= self.joint_offsets[0:10]
+
+        self.u = pd_in_t()
+        for i in range(5):
+
+            # TODO: move setting gains out of the loop?
+            # maybe write a wrapper for pd_in_t ?
+            if self.learn_gains == False:                
+                self.u.leftLeg.motorPd.pGain[i]  = self.P[i]
+                self.u.rightLeg.motorPd.pGain[i] = self.P[i]
+                self.u.leftLeg.motorPd.dGain[i]  = self.D[i]
+                self.u.rightLeg.motorPd.dGain[i] = self.D[i]
+            else:
+                self.u.leftLeg.motorPd.pGain[i]  = self.P[i] + learned_gains[i]
+                self.u.rightLeg.motorPd.pGain[i] = self.P[i] + learned_gains[5+i]
+                self.u.leftLeg.motorPd.dGain[i]  = self.D[i] + learned_gains[10+i]
+                self.u.rightLeg.motorPd.dGain[i] = self.D[i] + learned_gains[15+i]
+
+            self.u.leftLeg.motorPd.torque[i]  = 0 # Feedforward torque
+            self.u.rightLeg.motorPd.torque[i] = 0 
+
+            self.u.leftLeg.motorPd.pTarget[i]  = target[i]
+            self.u.rightLeg.motorPd.pTarget[i] = target[i + 5]
+
+            self.u.leftLeg.motorPd.dTarget[i]  = 0
+            self.u.rightLeg.motorPd.dTarget[i] = 0
+
+        self.cassie_state = self.sim.step_pd(self.u)
+
     def step(self, action, return_omniscient_state=False):
         
         # reset mujoco tracking variables
@@ -425,6 +470,33 @@ class CassieEnv_v2:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
         else:
             return self.get_full_state(), reward, done, {}
+
+    # More basic, faster version of step
+    def step_basic(self, action, return_omniscient_state=False):
+        
+        if self.learn_gains:
+            action, learned_gains = action[0:10], action[10:]
+
+        for i in range(self.simrate):
+            if self.learn_gains:
+                self.step_sim_basic(action, learned_gains)
+            else:
+                self.step_sim_basic(action)
+            self.simsteps += 1
+
+        self.time  += 1
+        self.phase += self.phase_add
+
+        if (self.aslip_traj and self.phase >= self.phaselen) or self.phase > self.phaselen:
+            self.last_pelvis_pos = self.sim.qpos()[0:3]
+            self.simsteps = 0
+            self.phase = 0
+            self.counter += 1
+
+        if return_omniscient_state:
+            return self.get_full_state(), self.get_omniscient_state()
+        else:
+            return self.get_full_state()
 
     def reset(self):
 
