@@ -142,6 +142,8 @@ cassie_env = env_fn()
 policy = torch.load(os.path.join(args.path, "actor.pt"))
 if args.eval:
     policy.eval()
+if hasattr(policy, 'init_hidden_state'):
+    policy.init_hidden_state()
 num_procs = args.n_procs
 print("num cpus:", psutil.cpu_count())
 torch.set_num_threads(1)

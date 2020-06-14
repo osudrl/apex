@@ -53,6 +53,9 @@ cassie_env = env_fn()
 policy = torch.load(os.path.join(args.path, "actor.pt"))
 if args.eval:
     policy.eval()
+if hasattr(policy, 'init_hidden_state'):
+    policy.init_hidden_state()
+
 
 #TODO: make returning/save data in file inside function consist for all testing functions
 def test_commands(cassie_env, policy, args):
