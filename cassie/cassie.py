@@ -17,13 +17,23 @@ import pickle
 
 import torch
 
+# Load clock based reward functions from file
+def load_reward_clock_funcs(path):
+    with open(path, "rb") as f:
+        clock_funcs = pickle.load(f)
+    return clock_funcs
+
+
 class CassieEnv_v2:
-    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, learn_gains=False, ik_baseline=False, reward="iros_paper", history=0, **kwargs):
+    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True,
+                 no_delta=True, learn_gains=False, ik_baseline=False, reward="iros_paper",
+                 config="./cassie/cassiemujoco/cassie.xml", history=0, **kwargs):
 
         dirname = os.path.dirname(__file__)
         #xml_path = os.path.join(dirname, "cassiemujoco", "cassie.xml")
         #self.sim = CassieSim(xml_path)
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+        self.config = config
+        self.sim = CassieSim(self.config)
         # self.sim = CassieSim("./cassie/cassiemujoco/cassie_drop_step.xml")
         self.vis = None
 
@@ -63,16 +73,36 @@ class CassieEnv_v2:
             self.trajectory = CassieTrajectory(traj_path)
             self.speed = 0
 
+        # Names of Clock-Based reward functions
+        clock_rewards        =  ["clock_smooth", "clock_strict0.1", "clock_strict0.4",
+                                 "clock_smooth_aerial", "clock_strict0.1_aerial", "clock_strict0.4_aerial"]
+        aslip_clock_rewards   = ["aslip_clock_smooth", "aslip_clock_smooth_aerial",
+                                 "aslip_clock_strict0.1", "aslip_clock_strict0.1_aerial",
+                                 "aslip_clock_strict0.4", "aslip_clock_strict0.4_aerial"]
+        max_vel_clock_rewards = ["max_vel_clock_smooth", "max_vel_clock_strict0.1", "max_vel_clock_strict0.4",
+                                 "max_vel_clock_smooth_aerial", "max_vel_clock_strict0.1_aerial", "max_vel_clock_strict0.4_aerial"]
 
         # If Loading Clock-based Reward Func, do that
-        if self.reward_func in ["aslip_clock_smooth", "aslip_clock_smooth_aerial",
-                                "aslip_clock_strict0.1", "aslip_clock_strict0.1_aerial",
-                                "aslip_clock_strict0.4", "aslip_clock_strict0.4_aerial"]:
-            clock_funcs_path = os.path.join(dirname, "rewards", "aslip_reward_clock_funcs", self.reward_func + ".pkl")
+        if self.reward_func in clock_rewards:
+            # TODO: Get dedicated reward funcs for clock reward
+            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", "aslip_" + self.reward_func + ".pkl")
+            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
+            self.left_clock = self.reward_clock_funcs["left"][-1]
+            self.right_clock = self.reward_clock_funcs["right"][-1]
+            self.reward_func = "clock"
+        elif self.reward_func in aslip_clock_rewards:
+            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl")
             self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
             self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
             self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
             self.reward_func = "aslip_clock"
+        elif self.reward_func in max_vel_clock_rewards:
+            # TODO: Get dedicated reward funcs for clock reward
+            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", "aslip_" + self.reward_func[8:] + ".pkl")
+            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
+            self.left_clock = self.reward_clock_funcs["left"][-1]
+            self.right_clock = self.reward_clock_funcs["right"][-1]
+            self.reward_func = "max_vel_clock"
 
         self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
 
@@ -139,6 +169,8 @@ class CassieEnv_v2:
         self.r_high = False
         self.l_swing = False  # these will be true even if foot is barely above ground
         self.r_swing = False
+        self.l_foot_frc = 0
+        self.r_foot_frc = 0
         self.l_foot_vel = np.zeros(3)
         self.r_foot_vel = np.zeros(3)
         self.l_foot_pos = np.zeros(3)
@@ -403,6 +435,8 @@ class CassieEnv_v2:
     def step(self, action, return_omniscient_state=False):
         
         # reset mujoco tracking variables
+        self.l_foot_frc = 0
+        self.r_foot_frc = 0
         foot_pos = np.zeros(6)
         self.l_foot_pos = np.zeros(3)
         self.r_foot_pos = np.zeros(3)
@@ -420,6 +454,10 @@ class CassieEnv_v2:
             self.simsteps += 1
             qpos = np.copy(self.sim.qpos())
             qvel = np.copy(self.sim.qvel())
+            # Foot Force Tracking
+            foot_forces = self.sim.get_foot_forces()
+            self.l_foot_frc += foot_forces[0]
+            self.r_foot_frc += foot_forces[1]
             # Relative Foot Position tracking
             self.sim.foot_pos(foot_pos)
             self.l_foot_pos += foot_pos[0:3]
@@ -428,6 +466,8 @@ class CassieEnv_v2:
             self.l_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
             self.r_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
         
+        self.l_foot_frc              /= self.simrate
+        self.r_foot_frc              /= self.simrate        
         self.l_foot_pos              /= self.simrate
         self.r_foot_pos              /= self.simrate
         self.l_foot_orient_cost      /= self.simrate
@@ -507,7 +547,7 @@ class CassieEnv_v2:
             self.trajectory = self.trajectories[self.traj_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
-            self.speed = (random.randint(0, 20)) / 10
+            self.speed = (random.randint(0, 40)) / 10
             # # Make sure that if speed is above 2, freq is at least 1.2
             # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
             #     self.phase_add = 1.3 + 0.7*random.random()
@@ -517,10 +557,16 @@ class CassieEnv_v2:
         if self.fixed_speed != None:
             self.traj_idx = (np.abs(self.speeds - self.speed)).argmin()
             self.speed = self.fixed_speed
-
-        if self.reward_func == "aslip_clock":
+        
+        if self.reward_func == "clock":
+            self.left_clock = self.reward_clock_funcs["left"][-1]
+            self.right_clock = self.reward_clock_funcs["right"][-1]
+        elif self.reward_func == "aslip_clock":
             self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
             self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+        elif self.reward_func == "max_vel_clock":
+            self.left_clock = self.reward_clock_funcs["left"][-1]
+            self.right_clock = self.reward_clock_funcs["right"][-1]
 
         self.simsteps = 0
 
@@ -553,6 +599,8 @@ class CassieEnv_v2:
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
         # reset mujoco tracking variables
+        self.l_foot_frc = 0
+        self.r_foot_frc = 0
         self.l_foot_orient_cost = 0
         self.r_foot_orient_cost = 0
 
@@ -618,7 +666,9 @@ class CassieEnv_v2:
             self.sim.set_qvel(qvel)
 
             # reset mujoco tracking variables
-            self.last_pelvis_pos = self.sim.qpos()[0:3] 
+            self.last_pelvis_pos = self.sim.qpos()[0:3]
+            self.l_foot_frc = 0
+            self.r_foot_frc = 0
             self.l_foot_orient = 0
             self.r_foot_orient = 0
 
@@ -684,8 +734,14 @@ class CassieEnv_v2:
         qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        if self.reward_func == "aslip_clock":
-            self.early_term_cutoff = 0.2
+        if self.reward_func == "clock":
+            self.early_term_cutoff = 0.0
+            return clock_reward(self, action)
+        elif self.reward_func == "max_vel_clock":
+            self.early_term_cutoff = 0.0
+            return max_vel_clock_reward(self, action)
+        elif self.reward_func == "aslip_clock":
+            self.early_term_cutoff = 0.0
             return aslip_clock_reward(self, action)
         elif self.reward_func == "aslip_old":
             self.early_term_cutoff = 0.0
@@ -828,7 +884,7 @@ class CassieEnv_v2:
 
     def render(self):
         if self.vis is None:
-            self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/cassie.xml")
+            self.vis = CassieVis(self.sim, self.config)
 
         return self.vis.draw(self.sim)
     

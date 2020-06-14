@@ -205,7 +205,7 @@ def eval_policy(policy, args, run_args):
         done = False
         timesteps = 0
         eval_reward = 0
-        speed = 1.0
+        speed = 0.0
 
         env.update_speed(speed)
 

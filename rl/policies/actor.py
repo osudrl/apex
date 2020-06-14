@@ -288,9 +288,10 @@ class Gaussian_LSTM_Actor(Actor):
     self.hidden = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
     self.cells  = [torch.zeros(batch_size, l.hidden_size) for l in self.actor_layers]
 
-  def forward(self, state, deterministic=True):
+  def forward(self, state, deterministic=True, anneal=1.0):
     mu, sd = self._get_dist_params(state)
-
+    sd *= anneal
+    
     if not deterministic:
       self.action = torch.distributions.Normal(mu, sd).sample()
     else:
