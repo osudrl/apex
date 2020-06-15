@@ -486,13 +486,13 @@ class CassieEnv_v2:
             self.counter += 1
 
         # no more knee walking
-        if self.sim.xpos("left-tarsus")[2] < 0.1 or self.sim.xpos("right-tarsus")[2] < 0.1:
-            done = True
+        # if self.sim.xpos("left-tarsus")[2] < 0.1 or self.sim.xpos("right-tarsus")[2] < 0.1:
+        #     done = True
             # print("left tarsus: {:.2f}\tleft foot: {:.2f}".format(self.sim.xpos("left-tarsus")[2], self.sim.xpos("left-foot")[2]))
             # print("right tarsus: {:.2f}\tright foot: {:.2f}".format(self.sim.xpos("right-tarsus")[2], self.sim.xpos("right-foot")[2]))
             # while(1):
             #     self.vis.draw(self.sim)
-        elif height < 0.4 or height > 3.0:
+        if height < 0.4 or height > 3.0:
             done = True
         else:
             done = False
