@@ -14,6 +14,8 @@ import os, sys, argparse
 import numpy as np
 import copy, time, psutil
 import ray
+import fpdf
+
 
 @ray.remote
 class test_worker(object):
@@ -110,12 +112,139 @@ def sim_5k_test(cassie_env, policy, mission, mission_speed, terrain, friction, f
     print("eval time: ", time.time()-start_t)
     return True
 
+def calc_stats(pass_data, terrain_data, mission_data, mission_speed_data, friction_data, mass_data):
+    test_len = len(pass_data)
+    pass_data = np.array(pass_data)
+    friction_data = np.array(friction_data)
+    avg_pass = np.sum(pass_data)/test_len
+
+    # Terrain breakdown
+    terrain_names = set(terrain_data)
+    terrain_dict = {}
+    for terrain in terrain_names:
+        terr_inds = [i for i, x in enumerate(terrain_data) if x == terrain]
+        rel_pass = np.sum(pass_data[terr_inds]) / len(terr_inds)
+        terrain_dict[os.path.basename(terrain)] = rel_pass
+
+    # Mission breakdown
+    # Compose mission with each speed, i.e. treat mission with a single speed as a single separate mission
+    # NOTE: Assumes that EVERY mission is tested at EVERY speed. This is method is also probably pretty
+    # inefficient, but fine for now
+    mission_names = set(mission_data)
+    speeds = set(mission_speed_data)
+    # Compute ind list for every speed
+    speed_inds = {}
+    for speed in speeds:
+        curr_inds = [i for i, x in enumerate(mission_speed_data) if x == speed]
+        speed_inds[speed] = curr_inds
+    mission_dict = {}
+    for mission in mission_names:
+        mission_inds = [i for i, x in enumerate(mission_data) if x == mission]
+        miss_ind_set = set(mission_inds)
+        for speed in speeds:
+            speed_ind_set = set(speed_inds[speed])
+            inter_inds = miss_ind_set.intersection(speed_ind_set)
+            rel_pass = np.sum(pass_data[list(inter_inds)]) / len(inter_inds)
+            mission_name = "{} {}".format(mission, speed)
+            mission_dict[mission_name] = rel_pass
+    
+    # Friction breakdown
+    frictions = np.unique(friction_data, axis=0)
+    fric_dict = {}
+    for fric in frictions:
+        fric_inds = [i for i, x in enumerate(friction_data) if np.all(x == fric)]
+        rel_pass = np.sum(pass_data[fric_inds]) / len(fric_inds)
+        fric_dict[np.array2string(fric)] = rel_pass
+
+    # Terrain breakdown
+    masses = set(mass_data)
+    mass_dict = {}
+    for mass in masses:
+        mass_inds = [i for i, x in enumerate(mass_data) if x == mass]
+        rel_pass = np.sum(pass_data[mass_inds]) / len(mass_inds)
+        mass_dict[str(round(mass, 6))] = rel_pass
+
+    return avg_pass, terrain_dict, mission_dict, fric_dict, mass_dict
+
 def report_stats(path):
     filepath = os.path.join(path, "5k_test.pkl")
     with open(filepath, "rb") as datafile:
+        # pass_data, terrain_data, mission_data, friction_data, mass_data = pickle.load(datafile)
         data = pickle.load(datafile)
-
     
+    # print(data)
+    avg_pass, terrain_dict, mission_dict, fric_dict, mass_dict = calc_stats(*data)
+
+     # Initial PDF setup
+    pdf = fpdf.FPDF(format='letter', unit='in')
+    pdf.add_page()
+    pdf.set_font('Times', '', 12.0)
+    
+    # Effective page width, or just epw
+    epw = pdf.w - 2*pdf.l_margin
+    th = pdf.font_size
+    # Set title
+    pdf.set_font('Times', '', 18.0) 
+    polname = os.path.basename(path)
+    pdf.cell(epw, 2*th, "5K Test Report".format(polname), 0, 1, "C")
+    pdf.ln(2*th)
+
+    pdf.set_font('Times', '', 12.0)
+    pdf.cell(epw, 2*th, "Policy: {}".format(polname), 0, 1)
+    pdf.ln(2*th)
+
+    pdf.cell(epw, 2*th, "Total Pass Rate: {}".format(avg_pass), 0, 1)
+    pdf.ln(2*th)
+
+    # Terrain breakdown
+    pdf.cell(epw, 2*th, "Terrain Breakdown", 0, 1)
+    pdf.ln(th)
+    print_table(pdf, terrain_dict, "Terrain")
+    pdf.ln(2*th)
+
+    # Mission breakdown
+    pdf.cell(epw, 2*th, "Mission Breakdown", 0, 1)
+    pdf.ln(th)
+    print_table(pdf, mission_dict, "Mission")
+    pdf.ln(2*th)
+
+    # Friction breakdown
+    pdf.cell(epw, 2*th, "Friction Breakdown", 0, 1)
+    pdf.ln(th)
+    print_table(pdf, fric_dict, "Friction")
+    pdf.ln(2*th)
+
+    # Mission breakdown
+    pdf.cell(epw, 2*th, "Foot Mass Breakdown", 0, 1)
+    pdf.ln(th)
+    print_table(pdf, mass_dict, "Foot Mass")
+    pdf.ln(2*th)
+
+    pdf.output(os.path.join(path, "5k_test.pdf"))
+
+# Print table for the inputted data dictionary. Gives the neccessary width for the strings in the
+# dict's keys, and gives rest of width the to values (rel pass rates)
+def print_table(pdf, data_dict, title):
+    epw = pdf.w - 2*pdf.l_margin
+    th = pdf.font_size
+    # print(data_dict.keys())
+    # print(max(data_dict.keys(), key=len))
+    name_width = map(pdf.get_string_width, data_dict.keys())
+    col1_width = max(name_width) + .2
+    col2_width = epw - col1_width
+    start_x = pdf.get_x()
+    start_y = pdf.get_y()
+
+    pdf.cell(col1_width, 2*th, title, border=1, align="C")
+    pdf.cell(col2_width, 2*th, "Relative Pass Rate", border=1, align="C")
+    pdf.ln(2*th)
+
+    for key in data_dict.keys():
+        pdf.cell(col1_width, 2*th, key, border=1, align="C")
+        pdf.cell(col2_width, 2*th, str(data_dict[key]), border=1, align="C")
+        pdf.ln(2*th)
+
+
 
 # Get policy to test from args, load policy and env
 parser = argparse.ArgumentParser()
@@ -179,6 +308,8 @@ for mission in missions:
 # Make list of test args
 test_args = [(mission, mission_speed, os.path.join(model_dir, terrain), friction, mass) \
             for terrain in terrains for mission in missions for mission_speed in mission_speeds for friction in frictions for mass in masses]
+test_args = test_args[0:4]
+
 
 # If visualizing, only use 1 process, don't start any workers
 if args.vis:
@@ -235,9 +366,12 @@ else:
 if not args.vis:
     ray.shutdown()
     with open(os.path.join(args.path, "5k_test.pkl"), 'wb') as savefile:
-        pickle.dump(pass_data, savefile)
-        pickle.dump(terrain_data, savefile)
-        pickle.dump(mission_data, savefile)
-        pickle.dump(friction_data, savefile)
-        pickle.dump(mass_data, savefile)
+        pickle.dump([pass_data, terrain_data, mission_data, mission_speed_data, friction_data, mass_data], savefile)
+        # pickle.dump(terrain_data, savefile)
+        # pickle.dump(mission_data, savefile)
+        # pickle.dump(friction_data, savefile)
+        # pickle.dump(mass_data, savefile)
+
+    report_stats(args.path)
+
 
