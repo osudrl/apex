@@ -81,27 +81,30 @@ class CassieEnv_v2:
                                  "aslip_clock_strict0.4", "aslip_clock_strict0.4_aerial"]
         max_vel_clock_rewards = ["max_vel_clock_smooth", "max_vel_clock_strict0.1", "max_vel_clock_strict0.4",
                                  "max_vel_clock_smooth_aerial", "max_vel_clock_strict0.1_aerial", "max_vel_clock_strict0.4_aerial"]
+        switch_clock_rewards = ["switch_clock_smooth", "switch_clock_strict0.1", "switch_clock_strict0.4"]
 
         # If Loading Clock-based Reward Func, do that
         if self.reward_func in clock_rewards:
-            # TODO: Get dedicated reward funcs for clock reward
-            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", "aslip_" + self.reward_func + ".pkl")
-            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
-            self.left_clock = self.reward_clock_funcs["left"][-1]
-            self.right_clock = self.reward_clock_funcs["right"][-1]
+            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
             self.reward_func = "clock"
+        elif self.reward_func in switch_clock_rewards:
+            self.switch_speed = 2.0
+            self.walk_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + ".pkl"))
+            self.run_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + "_aerial" + ".pkl"))
+            self.left_clock = self.walk_clock_func_path["left"]
+            self.right_clock = self.walk_clock_func_path["right"]
+            self.reward_func = "switch_clock"
         elif self.reward_func in aslip_clock_rewards:
-            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl")
-            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
+            self.reward_clock_funcs = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
             self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
             self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
             self.reward_func = "aslip_clock"
         elif self.reward_func in max_vel_clock_rewards:
-            # TODO: Get dedicated reward funcs for clock reward
-            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", "aslip_" + self.reward_func[8:] + ".pkl")
-            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
-            self.left_clock = self.reward_clock_funcs["left"][-1]
-            self.right_clock = self.reward_clock_funcs["right"][-1]
+            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[8:] + ".pkl"))
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
             self.reward_func = "max_vel_clock"
 
         self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
@@ -559,14 +562,21 @@ class CassieEnv_v2:
             self.speed = self.fixed_speed
         
         if self.reward_func == "clock":
-            self.left_clock = self.reward_clock_funcs["left"][-1]
-            self.right_clock = self.reward_clock_funcs["right"][-1]
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
+        elif self.reward_func == "switch_clock":
+            if self.speed < self.switch_speed:
+                self.left_clock = self.walk_clock_func_path["left"]
+                self.right_clock = self.walk_clock_func_path["right"]
+            else:
+                self.left_clock = self.run_clock_func_path["left"]
+                self.right_clock = self.run_clock_func_path["right"]
         elif self.reward_func == "aslip_clock":
             self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
             self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
         elif self.reward_func == "max_vel_clock":
-            self.left_clock = self.reward_clock_funcs["left"][-1]
-            self.right_clock = self.reward_clock_funcs["right"][-1]
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
 
         self.simsteps = 0
 
@@ -659,6 +669,9 @@ class CassieEnv_v2:
         if self.reward_func == "aslip_clock":
             self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
             self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+        elif self.reward_func == "switch_clock":
+            self.left_clock = self.walk_clock_func_path["left"]
+            self.right_clock = self.walk_clock_func_path["right"]
 
         if not full_reset:
             qpos, qvel = self.get_ref_state(self.phase)
@@ -728,13 +741,20 @@ class CassieEnv_v2:
         if self.reward_func == "aslip_clock":
             self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
             self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+        elif self.reward_func == "switch_clock":
+            if self.speed < self.switch_speed:
+                self.left_clock = self.walk_clock_func_path["left"]
+                self.right_clock = self.walk_clock_func_path["right"]
+            else:
+                self.left_clock = self.run_clock_func_path["left"]
+                self.right_clock = self.run_clock_func_path["right"]
 
     def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        if self.reward_func == "clock":
+        if self.reward_func == "clock" or self.reward_func == "switch_clock":
             self.early_term_cutoff = 0.0
             return clock_reward(self, action)
         elif self.reward_func == "max_vel_clock":

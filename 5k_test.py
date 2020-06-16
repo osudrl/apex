@@ -310,7 +310,7 @@ for mission in missions:
 # Make list of test args
 test_args = [(mission, mission_speed, os.path.join(model_dir, terrain), friction, mass) \
             for terrain in terrains for mission in missions for mission_speed in mission_speeds for friction in frictions for mass in masses]
-test_args = test_args[0:4]
+# test_args = test_args[0:4] # For debugging. Makes n_procs > 4 fail obbiously
 
 
 # If visualizing, only use 1 process, don't start any workers
