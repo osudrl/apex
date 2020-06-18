@@ -310,10 +310,8 @@ class CassieSim:
         if len(data) != nhfielddata:
             print("SIZE MISMATCH SET_HFIELD_DATA")
             exit(1)
-        ptr = cassie_sim_hfielddata(self.c)
         data_arr = (ctypes.c_float * nhfielddata)(*data)
-        for i in range(nhfielddata):
-            ptr[i] = data_arr[i]
+        cassie_sim_set_hfielddata(self.c, ctypes.cast(data_arr, ctypes.POINTER(ctypes.c_float)))
     
     def get_hfield_data(self):
         nhfielddata = self.get_nhfielddata()
