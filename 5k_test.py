@@ -27,11 +27,27 @@ class test_worker(object):
         torch.set_num_threads(1)
 
     def test_5k(self, mission, mission_speed, terrain, friction, foot_mass):
-        # start_t = time.time()
-        # Reload CassieSim object for new terrain
-        # TODO: Don't reinit cassiesim if don't need to? If know what the current terrain is before reload, and is the 
-        # same as the input terrain, don't need to reinit
-        self.cassie_env.sim = CassieSim(terrain, reinit=True)
+        if ".npy" in terrain:
+            self.cassie_env.sim = CassieSim("cassie_hfield.xml", reinit=True)
+            hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", terrain))
+            self.cassie_env.sim.set_hfield_data(hfield_data.flatten())
+        else:
+            self.cassie_env.sim = CassieSim("cassie.xml", reinit=True)
+            if not (".xml" in terrain):     # If not xml file, assume specify direction and angle for tilt
+                direct, angle = terrain.split("_")
+                if direct == "left":
+                    floor_quat = euler2quat(z=0, x=np.deg2rad(angle), y=0)
+                elif direct == "right":
+                    floor_quat = euler2quat(z=0, x=np.deg2rad(-angle), y=0)
+                elif direct == "up":
+                    floor_quat = euler2quat(z=0, x=0, y=np.deg2rad(-angle))
+                elif direct == "right":
+                    floor_quat = euler2quat(z=0, x=0, y=np.deg2rad(angle))
+                else:
+                    print("Error: Terrain type not understood")
+                    return 1
+                self.cassie_env.sim.set_geom_quat(floor_quat, name="floor")
+        
         self.cassie_env.sim.set_geom_friction(friction, "floor")
         self.cassie_env.sim.set_body_mass(foot_mass, "right-foot")
         self.cassie_env.sim.set_body_mass(foot_mass, "left-foot")
@@ -284,7 +300,8 @@ default_mass = .1498
 if args.full:
     print("Running full test")
     # Run all terrains and missions
-    terrains = ["cassie.xml", "cassie_noise_terrain.xml"]
+    terrains = ["cassie.xml", "noise1.npy", "noise2.npy", "noise3.npy", "rand_hill1.npy", "rand_hill2.npy", "rand_hill3.npy"
+                "left_3", "right_3", "up_3", "down_3"]
     missions = ["curvy", "straight", "90_left", "90_right"]
     mission_speeds = [0.5, 0.9, 1.4, 1.9, 2.3, 2.8]
     frictions = np.linspace(.8*default_fric, default_fric, 10)
@@ -294,7 +311,7 @@ if args.full:
 else:
     print("Running lite test")
     # Only run flat, noisy, and hill terrain with straight and curvy missions
-    terrains = ["cassie.xml", "cassie_noise_terrain.xml"]
+    terrains = ["cassie.xml", "noise1.npy", "rand_hill1.npy"]
     missions = ["curvy", "straight"]
     mission_speeds = [0.5, 0.9, 1.4, 1.9, 2.8]
     frictions = [default_fric]
