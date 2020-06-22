@@ -73,39 +73,9 @@ class CassieEnv_v2:
             self.trajectory = CassieTrajectory(traj_path)
             self.speed = 0
 
-        # Names of Clock-Based reward functions
-        clock_rewards        =  ["clock_smooth", "clock_strict0.1", "clock_strict0.4",
-                                 "clock_smooth_aerial", "clock_strict0.1_aerial", "clock_strict0.4_aerial"]
-        aslip_clock_rewards   = ["aslip_clock_smooth", "aslip_clock_smooth_aerial",
-                                 "aslip_clock_strict0.1", "aslip_clock_strict0.1_aerial",
-                                 "aslip_clock_strict0.4", "aslip_clock_strict0.4_aerial"]
-        max_vel_clock_rewards = ["max_vel_clock_smooth", "max_vel_clock_strict0.1", "max_vel_clock_strict0.4",
-                                 "max_vel_clock_smooth_aerial", "max_vel_clock_strict0.1_aerial", "max_vel_clock_strict0.4_aerial"]
-        switch_clock_rewards = ["switch_clock_smooth", "switch_clock_strict0.1", "switch_clock_strict0.4"]
-
-        # If Loading Clock-based Reward Func, do that
-        if self.reward_func in clock_rewards:
-            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
-            self.left_clock = self.reward_clock_func["left"]
-            self.right_clock = self.reward_clock_func["right"]
-            self.reward_func = "clock"
-        elif self.reward_func in switch_clock_rewards:
-            self.switch_speed = 2.0
-            self.walk_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + ".pkl"))
-            self.run_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + "_aerial" + ".pkl"))
-            self.left_clock = self.walk_clock_func_path["left"]
-            self.right_clock = self.walk_clock_func_path["right"]
-            self.reward_func = "switch_clock"
-        elif self.reward_func in aslip_clock_rewards:
-            self.reward_clock_funcs = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
-            self.reward_func = "aslip_clock"
-        elif self.reward_func in max_vel_clock_rewards:
-            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[8:] + ".pkl"))
-            self.left_clock = self.reward_clock_func["left"]
-            self.right_clock = self.reward_clock_func["right"]
-            self.reward_func = "max_vel_clock"
+        # TODO: maybe make this an actual argument instead of finding a substring
+        if "clock" in self.reward_func:
+            self.set_up_clock_reward(dirname)
 
         self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
 
@@ -274,6 +244,34 @@ class CassieEnv_v2:
         self.critic_state = None
 
         self.debug = False
+
+    # Set up clock reward
+    def set_up_clock_reward(self, dirname):
+
+        # Clock based rewards are organized as follows: "<approach>_<pkl-file-path>" where <approach> is either "" or "max_vel" or "switch"
+
+        # extract <approach> from reward string
+        if "max_vel" in self.reward_func:
+            # maximize velocity, where running path is specified
+            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[8:] + ".pkl"))
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
+            self.reward_func = "max_vel_clock"
+        elif "switch" in self.reward_func:
+            # switch from walking to running, where walking path is specified
+            self.switch_speed = 2.0
+            self.walk_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + ".pkl"))
+            self.run_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + "_aerial" + ".pkl"))
+            self.left_clock = self.walk_clock_func_path["left"]
+            self.right_clock = self.walk_clock_func_path["right"]
+            self.reward_func = "switch_clock"
+        else:
+            # match commanded speed input. maybe constrained to walking or running or figuring out based on specified path
+            # approach = ""
+            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
+            self.reward_func = "clock"
 
     def set_up_state_space(self):
 
