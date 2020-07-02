@@ -484,6 +484,9 @@ def run_experiment(args):
             policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
         critic.obs_mean = policy.obs_mean
         critic.obs_std = policy.obs_std
+    
+    policy.train()
+    critic.train()
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
 

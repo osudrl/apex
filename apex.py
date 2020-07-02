@@ -270,10 +270,10 @@ if __name__ == "__main__":
         parser.add_argument("--env_name", default="Cassie-v0", type=str)
         parser.add_argument("--traj_len", default=400, type=str)
         parser.add_argument("--history", default=0, type=int)                                    # number of previous states to use as input
-        parser.add_argument("--mission", default="default", type=str) # only used by playground environment
+        parser.add_argument("--mission", default="default", type=str)                            # only used by playground environment
+        parser.add_argument("--terrain", default=None, type=str)                                 # hfield file name (terrain to use)
         parser.add_argument("--debug", default=False, action='store_true')
         parser.add_argument("--no_viz", default=False, action='store_true')
-        parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")
 
         args = parser.parse_args()
 
@@ -284,8 +284,7 @@ if __name__ == "__main__":
             print("manually choosing simrate as 50 (40 Hz)")
 
         policy = torch.load(args.path + "actor.pt")
-        if args.eval:
-            policy.eval()  # NOTE: for some reason the saved nodelta_neutral_stateest_symmetry policy needs this but it breaks all new policies...
+        policy.eval()
 
         eval_policy(policy, args, run_args)
         

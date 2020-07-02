@@ -157,6 +157,7 @@ def eval_policy(policy, args, run_args):
     import select
     import numpy as np
     from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
+    from cassie.cassiemujoco import CassieSim
 
     def isData():
         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
@@ -183,6 +184,11 @@ def eval_policy(policy, args, run_args):
     
     if args.debug:
         env.debug = True
+
+    if args.terrain is not None and ".npy" in args.terrain:
+        env.sim = CassieSim("cassie_hfield.xml")
+        hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
+        env.sim.set_hfield_data(hfield_data.flatten())
 
     print(env.reward_func)
 
