@@ -4,6 +4,17 @@ from collections import OrderedDict
 import sys, time
 from cassie.quaternion_function import *
 
+from tkinter import *
+import multiprocessing as mp
+from cassie.phase_function import LivePlot
+
+import tty
+import termios
+import select
+import numpy as np
+from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
+from cassie.cassiemujoco import CassieSim
+
 class color:
     BOLD   = '\033[1m\033[48m'
     END    = '\033[0m'
@@ -27,7 +38,7 @@ def print_logo(subtitle="", option=2):
     print(subtitle)
     print("\n")
 
-def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, ik_baseline=False, learn_gains=False, reward=None, history=0, fixed_speed=None, **kwargs):
+def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based=True, state_est=True, dynamics_randomization=True, mirror=False, no_delta=False, ik_baseline=False, learn_gains=False, reward=None, history=0, fixed_speed=None, **kwargs):
     from functools import partial
 
     """
@@ -48,7 +59,7 @@ def env_factory(path, traj="walking", simrate=50, clock_based=True, state_est=Tr
 
         if path == 'Cassie-v0':
             # env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
-            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed)
+            env_fn = partial(CassieEnv, traj=traj, simrate=simrate, phase_based=phase_based, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed)
         elif path == 'CassiePlayground-v0':
             env_fn = partial(CassiePlayground, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
@@ -149,178 +160,408 @@ def create_logger(args):
     logger.dir = output_dir
     return logger
 
-#TODO: Add pausing, and window quiting along with other render functionality
-def eval_policy(policy, args, run_args):
+# #TODO: Add pausing, and window quiting along with other render functionality
+# def eval_policy(policy, args, run_args):
 
-    import tty
-    import termios
-    import select
-    import numpy as np
-    from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
-    from cassie.cassiemujoco import CassieSim
+#     import tty
+#     import termios
+#     import select
+#     import numpy as np
+#     from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
+#     from cassie.cassiemujoco import CassieSim
 
-    def isData():
-        return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
+#     def isData():
+#         return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
 
-    max_traj_len = args.traj_len
-    visualize = not args.no_viz
-    print("env name: ", run_args.env_name)
-    if run_args.env_name is None:
-        env_name = args.env_name
-    else:
-        env_name = run_args.env_name
-    if env_name == "Cassie-v0":
-        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif env_name == "CassiePlayground-v0":
-        env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
-    elif env_name == "CassieNoaccelFootDistOmniscient":
-        env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif env_name == "CassieFootDist":
-        env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    elif env_name == "CassieNoaccelFootDist":
-        env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-    else:
-        env = CassieStandingEnv(state_est=run_args.state_est)
+#     max_traj_len = args.traj_len
+#     visualize = not args.no_viz
+#     print("env name: ", run_args.env_name)
+#     if run_args.env_name is None:
+#         env_name = args.env_name
+#     else:
+#         env_name = run_args.env_name
+#     if env_name == "Cassie-v0":
+#         env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+#     elif env_name == "CassiePlayground-v0":
+#         env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
+#     elif env_name == "CassieNoaccelFootDistOmniscient":
+#         env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+#     elif env_name == "CassieFootDist":
+#         env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+#     elif env_name == "CassieNoaccelFootDist":
+#         env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+#     else:
+#         env = CassieStandingEnv(state_est=run_args.state_est)
     
-    if args.debug:
-        env.debug = True
+#     if args.debug:
+#         env.debug = True
 
-    if args.terrain is not None and ".npy" in args.terrain:
-        env.sim = CassieSim("cassie_hfield.xml")
-        hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
-        env.sim.set_hfield_data(hfield_data.flatten())
+#     if args.terrain is not None and ".npy" in args.terrain:
+#         env.sim = CassieSim("cassie_hfield.xml")
+#         hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
+#         env.sim.set_hfield_data(hfield_data.flatten())
 
-    print(env.reward_func)
+#     print(env.reward_func)
 
-    if hasattr(policy, 'init_hidden_state'):
-        policy.init_hidden_state()
+#     if hasattr(policy, 'init_hidden_state'):
+#         policy.init_hidden_state()
 
-    old_settings = termios.tcgetattr(sys.stdin)
+#     old_settings = termios.tcgetattr(sys.stdin)
 
-    orient_add = 0
+#     orient_add = 0
 
-    slowmo = False
+#     slowmo = False
 
-    if visualize:
-        env.render()
-    render_state = True
-    try:
-        tty.setcbreak(sys.stdin.fileno())
+#     if visualize:
+#         env.render()
+#     render_state = True
+#     try:
+#         tty.setcbreak(sys.stdin.fileno())
 
-        state = env.reset_for_test()
-        done = False
-        timesteps = 0
-        eval_reward = 0
-        speed = 0.0
+#         state = env.reset_for_test()
+#         done = False
+#         timesteps = 0
+#         eval_reward = 0
+#         speed = 0.0
 
-        env.update_speed(speed)
+#         env.update_speed(speed)
 
-        while render_state:
+#         while render_state:
         
-            if isData():
-                c = sys.stdin.read(1)
-                if c == 'w':
-                    speed += 0.1
-                elif c == 's':
-                    speed -= 0.1
-                elif c == 'j':
-                    env.phase_add += .1
-                    print("Increasing frequency to: {:.1f}".format(env.phase_add))
-                elif c == 'h':
-                    env.phase_add -= .1
-                    print("Decreasing frequency to: {:.1f}".format(env.phase_add))
-                elif c == 'l':
-                    orient_add += .1
-                    print("Increasing orient_add to: ", orient_add)
-                elif c == 'k':
-                    orient_add -= .1
-                    print("Decreasing orient_add to: ", orient_add)
-                elif c == 'r':
-                    state = env.reset()
-                    speed = env.speed
-                    print("Resetting environment via env.reset()")
-                elif c == 'p':
-                    push = 100
-                    push_dir = 2
-                    force_arr = np.zeros(6)
-                    force_arr[push_dir] = push
-                    env.sim.apply_force(force_arr)
-                elif c == 't':
-                    slowmo = not slowmo
-                    print("Slowmo : ", slowmo)
+#             if isData():
+#                 c = sys.stdin.read(1)
+#                 if c == 'w':
+#                     speed += 0.1
+#                 elif c == 's':
+#                     speed -= 0.1
+#                 elif c == 'j':
+#                     env.phase_add += .1
+#                     print("Increasing frequency to: {:.1f}".format(env.phase_add))
+#                 elif c == 'h':
+#                     env.phase_add -= .1
+#                     print("Decreasing frequency to: {:.1f}".format(env.phase_add))
+#                 elif c == 'l':
+#                     orient_add += .1
+#                     print("Increasing orient_add to: ", orient_add)
+#                 elif c == 'k':
+#                     orient_add -= .1
+#                     print("Decreasing orient_add to: ", orient_add)
+                
+#                 elif c == 'x':
+#                     env.swing_duration += .01
+#                     print("Increasing swing duration to: ", env.swing_duration)
+#                 elif c == 'z':
+#                     env.swing_duration -= .01
+#                     print("Decreasing swing duration  to: ", env.swing_duration)
+#                 elif c == 'v':
+#                     env.stance_duration += .01
+#                     print("Increasing stance duration to: ", env.stance_duration)
+#                 elif c == 'c':
+#                     env.stance_duration -= .01
+#                     print("Decreasing stance duration  to: ", env.stance_duration)
 
-                env.update_speed(speed)
-                # print(speed)
-                print("speed: ", env.speed)
+#                 elif c == '1':
+#                     env.stance_mode = "zero"
+#                     print("Stance mode: ", env.stance_mode)
+#                 elif c == '2':
+#                     env.stance_mode = "grounded"
+#                     print("Stance mode: ", env.stance_mode)
+#                 elif c == '3':
+#                     env.stance_mode = "aerial"
+#                     print("Stance mode: ", env.stance_mode)
+#                 elif c == 'r':
+#                     state = env.reset()
+#                     speed = env.speed
+#                     print("Resetting environment via env.reset()")
+#                 elif c == 'p':
+#                     push = 100
+#                     push_dir = 2
+#                     force_arr = np.zeros(6)
+#                     force_arr[push_dir] = push
+#                     env.sim.apply_force(force_arr)
+#                 elif c == 't':
+#                     slowmo = not slowmo
+#                     print("Slowmo : ", slowmo)
+
+#                 env.update_speed(speed)
+#                 # print(speed)
+#                 print("speed: ", env.speed)
             
-            if hasattr(env, 'simrate'):
-                start = time.time()
+#             if hasattr(env, 'simrate'):
+#                 start = time.time()
 
-            if (not env.vis.ispaused()):
-                # Update Orientation
-                env.orient_add = orient_add
-                # quaternion = euler2quat(z=orient_add, y=0, x=0)
-                # iquaternion = inverse_quaternion(quaternion)
+#             if (not env.vis.ispaused()):
+#                 # Update Orientation
+#                 env.orient_add = orient_add
+#                 # quaternion = euler2quat(z=orient_add, y=0, x=0)
+#                 # iquaternion = inverse_quaternion(quaternion)
 
-                # # TODO: Should probably not assume these indices. Should make them not hard coded
-                # if env.state_est:
-                #     curr_orient = state[1:5]
-                #     curr_transvel = state[15:18]
-                # else:
-                #     curr_orient = state[2:6]
-                #     curr_transvel = state[20:23]
+#                 # # TODO: Should probably not assume these indices. Should make them not hard coded
+#                 # if env.state_est:
+#                 #     curr_orient = state[1:5]
+#                 #     curr_transvel = state[15:18]
+#                 # else:
+#                 #     curr_orient = state[2:6]
+#                 #     curr_transvel = state[20:23]
                 
-                # new_orient = quaternion_product(iquaternion, curr_orient)
+#                 # new_orient = quaternion_product(iquaternion, curr_orient)
 
-                # if new_orient[0] < 0:
-                #     new_orient = -new_orient
+#                 # if new_orient[0] < 0:
+#                 #     new_orient = -new_orient
 
-                # new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+#                 # new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
                 
-                # if env.state_est:
-                #     state[1:5] = torch.FloatTensor(new_orient)
-                #     state[15:18] = torch.FloatTensor(new_translationalVelocity)
-                #     # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
-                # else:
-                #     state[2:6] = torch.FloatTensor(new_orient)
-                #     state[20:23] = torch.FloatTensor(new_translationalVelocity)          
+#                 # if env.state_est:
+#                 #     state[1:5] = torch.FloatTensor(new_orient)
+#                 #     state[15:18] = torch.FloatTensor(new_translationalVelocity)
+#                 #     # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+#                 # else:
+#                 #     state[2:6] = torch.FloatTensor(new_orient)
+#                 #     state[20:23] = torch.FloatTensor(new_translationalVelocity)          
                     
-                action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+#                 action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
 
-                state, reward, done, _ = env.step(action)
+#                 state, reward, done, _ = env.step(action)
 
-                # if env.lfoot_vel[2] < -0.6:
-                #     print("left foot z vel over 0.6: ", env.lfoot_vel[2])
-                # if env.rfoot_vel[2] < -0.6:
-                #     print("right foot z vel over 0.6: ", env.rfoot_vel[2])
+#                 # if env.lfoot_vel[2] < -0.6:
+#                 #     print("left foot z vel over 0.6: ", env.lfoot_vel[2])
+#                 # if env.rfoot_vel[2] < -0.6:
+#                 #     print("right foot z vel over 0.6: ", env.rfoot_vel[2])
                 
-                eval_reward += reward
-                timesteps += 1
-                qvel = env.sim.qvel()
-                # print("actual speed: ", np.linalg.norm(qvel[0:2]))
-                # print("commanded speed: ", env.speed)
+#                 eval_reward += reward
+#                 timesteps += 1
+#                 qvel = env.sim.qvel()
+#                 # print("actual speed: ", np.linalg.norm(qvel[0:2]))
+#                 # print("commanded speed: ", env.speed)
 
-                if args.no_viz:
-                    yaw = quaternion2euler(new_orient)[2]
-                    print("stp = {}  yaw = {:.2f}  spd = {}  ep_r = {:.2f}  stp_r = {:.2f}".format(timesteps, yaw, speed, eval_reward, reward))
+#                 if args.no_viz:
+#                     yaw = quaternion2euler(new_orient)[2]
+#                     print("stp = {}  yaw = {:.2f}  spd = {}  ep_r = {:.2f}  stp_r = {:.2f}".format(timesteps, yaw, speed, eval_reward, reward))
 
-            if visualize:
-                render_state = env.render()
-            if hasattr(env, 'simrate'):
-                # assume 40hz
-                end = time.time()
-                delaytime = max(0, 1000 / 40000 - (end-start))
-                if slowmo:
-                    while(time.time() - end < delaytime*10):
-                        env.render()
+#             if visualize:
+#                 render_state = env.render()
+#             if hasattr(env, 'simrate'):
+#                 # assume 40hz
+#                 end = time.time()
+#                 delaytime = max(0, 1000 / 40000 - (end-start))
+#                 if slowmo:
+#                     while(time.time() - end < delaytime*10):
+#                         env.render()
+#                         time.sleep(delaytime)
+#                 else:
+#                     time.sleep(delaytime)
+
+#         print("Eval reward: ", eval_reward)
+
+#     finally:
+#         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+class EvalProcessClass():
+    def __init__(self, args, run_args):
+
+        if run_args.phase_based and not args.no_viz:
+
+            self.plot_pipe, plotter_pipe = mp.Pipe()
+            self.plotter = LivePlot()
+            self.plot_process = mp.Process(target=self.plotter, args=(plotter_pipe,), daemon=True)
+            self.plot_process.start()
+
+    #TODO: Add pausing, and window quiting along with other render functionality
+    def eval_policy(self, policy, args, run_args):
+        
+        if run_args.phase_based and not args.no_viz:
+            send = self.plot_pipe.send
+
+        def isData():
+            return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
+
+        max_traj_len = args.traj_len
+        visualize = not args.no_viz
+        print("env name: ", run_args.env_name)
+        if run_args.env_name is None:
+            env_name = args.env_name
+        else:
+            env_name = run_args.env_name
+        if env_name == "Cassie-v0":
+            env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        elif env_name == "CassiePlayground-v0":
+            env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
+        elif env_name == "CassieNoaccelFootDistOmniscient":
+            env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        elif env_name == "CassieFootDist":
+            env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        elif env_name == "CassieNoaccelFootDist":
+            env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        else:
+            env = CassieStandingEnv(state_est=run_args.state_est)
+        
+        if args.debug:
+            env.debug = True
+
+        if args.terrain is not None and ".npy" in args.terrain:
+            env.sim = CassieSim("cassie_hfield.xml")
+            hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
+            env.sim.set_hfield_data(hfield_data.flatten())
+
+        print(env.reward_func)
+
+        if hasattr(policy, 'init_hidden_state'):
+            policy.init_hidden_state()
+
+        old_settings = termios.tcgetattr(sys.stdin)
+
+        orient_add = 0
+
+        slowmo = False
+
+        if visualize:
+            env.render()
+        render_state = True
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+
+            state = env.reset_for_test()
+            done = False
+            timesteps = 0
+            eval_reward = 0
+            speed = 0.0
+
+            env.update_speed(speed)
+
+            while render_state:
+            
+                if isData():
+                    c = sys.stdin.read(1)
+                    if c == 'w':
+                        speed += 0.1
+                    elif c == 's':
+                        speed -= 0.1
+                    elif c == 'j':
+                        env.phase_add += .1
+                        print("Increasing frequency to: {:.1f}".format(env.phase_add))
+                    elif c == 'h':
+                        env.phase_add -= .1
+                        print("Decreasing frequency to: {:.1f}".format(env.phase_add))
+                    elif c == 'l':
+                        orient_add += .1
+                        print("Increasing orient_add to: ", orient_add)
+                    elif c == 'k':
+                        orient_add -= .1
+                        print("Decreasing orient_add to: ", orient_add)
+                    
+                    elif c == 'x':
+                        env.swing_duration += .01
+                        print("Increasing swing duration to: ", env.swing_duration)
+                    elif c == 'z':
+                        env.swing_duration -= .01
+                        print("Decreasing swing duration  to: ", env.swing_duration)
+                    elif c == 'v':
+                        env.stance_duration += .01
+                        print("Increasing stance duration to: ", env.stance_duration)
+                    elif c == 'c':
+                        env.stance_duration -= .01
+                        print("Decreasing stance duration  to: ", env.stance_duration)
+
+                    elif c == '1':
+                        env.stance_mode = "zero"
+                        print("Stance mode: ", env.stance_mode)
+                    elif c == '2':
+                        env.stance_mode = "grounded"
+                        print("Stance mode: ", env.stance_mode)
+                    elif c == '3':
+                        env.stance_mode = "aerial"
+                        print("Stance mode: ", env.stance_mode)
+                    elif c == 'r':
+                        state = env.reset()
+                        speed = env.speed
+                        print("Resetting environment via env.reset()")
+                    elif c == 'p':
+                        push = 100
+                        push_dir = 2
+                        force_arr = np.zeros(6)
+                        force_arr[push_dir] = push
+                        env.sim.apply_force(force_arr)
+                    elif c == 't':
+                        slowmo = not slowmo
+                        print("Slowmo : ", slowmo)
+
+                    env.update_speed(speed)
+                    # print(speed)
+                    print("speed: ", env.speed)
+
+                    if env.phase_based and visualize:
+                        send((env.swing_duration, env.stance_duration, env.strict_relaxer, env.stance_mode, env.have_incentive))
+                
+                if hasattr(env, 'simrate'):
+                    start = time.time()
+
+                if (not env.vis.ispaused()):
+                    # Update Orientation
+                    env.orient_add = orient_add
+                    # quaternion = euler2quat(z=orient_add, y=0, x=0)
+                    # iquaternion = inverse_quaternion(quaternion)
+
+                    # # TODO: Should probably not assume these indices. Should make them not hard coded
+                    # if env.state_est:
+                    #     curr_orient = state[1:5]
+                    #     curr_transvel = state[15:18]
+                    # else:
+                    #     curr_orient = state[2:6]
+                    #     curr_transvel = state[20:23]
+                    
+                    # new_orient = quaternion_product(iquaternion, curr_orient)
+
+                    # if new_orient[0] < 0:
+                    #     new_orient = -new_orient
+
+                    # new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+                    
+                    # if env.state_est:
+                    #     state[1:5] = torch.FloatTensor(new_orient)
+                    #     state[15:18] = torch.FloatTensor(new_translationalVelocity)
+                    #     # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
+                    # else:
+                    #     state[2:6] = torch.FloatTensor(new_orient)
+                    #     state[20:23] = torch.FloatTensor(new_translationalVelocity)          
+                        
+                    action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+
+                    state, reward, done, _ = env.step(action)
+
+                    # if env.lfoot_vel[2] < -0.6:
+                    #     print("left foot z vel over 0.6: ", env.lfoot_vel[2])
+                    # if env.rfoot_vel[2] < -0.6:
+                    #     print("right foot z vel over 0.6: ", env.rfoot_vel[2])
+                    
+                    eval_reward += reward
+                    timesteps += 1
+                    qvel = env.sim.qvel()
+                    # print("actual speed: ", np.linalg.norm(qvel[0:2]))
+                    # print("commanded speed: ", env.speed)
+
+                    if args.no_viz:
+                        yaw = quaternion2euler(new_orient)[2]
+                        print("stp = {}  yaw = {:.2f}  spd = {}  ep_r = {:.2f}  stp_r = {:.2f}".format(timesteps, yaw, speed, eval_reward, reward))
+
+                if visualize:
+                    render_state = env.render()
+                if hasattr(env, 'simrate'):
+                    # assume 40hz
+                    end = time.time()
+                    delaytime = max(0, 1000 / 40000 - (end-start))
+                    if slowmo:
+                        while(time.time() - end < delaytime*10):
+                            env.render()
+                            time.sleep(delaytime)
+                    else:
                         time.sleep(delaytime)
-                else:
-                    time.sleep(delaytime)
 
-        print("Eval reward: ", eval_reward)
+            print("Eval reward: ", eval_reward)
 
-    finally:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            
+
 
 # deal with loading hyperparameters of previous run continuation
 def parse_previous(args):

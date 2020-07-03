@@ -1,6 +1,6 @@
 import torch
 import sys, pickle, argparse
-from util import color, print_logo, env_factory, create_logger, eval_policy, parse_previous
+from util import color, print_logo, env_factory, create_logger, EvalProcessClass, parse_previous
 
 if __name__ == "__main__":
 
@@ -12,6 +12,7 @@ if __name__ == "__main__":
     """
     parser.add_argument("--simrate", default=50, type=int, help="simrate of environment")
     parser.add_argument("--traj", default="walking", type=str, help="reference trajectory to use. options are 'aslip', 'walking', 'stepping'")
+    parser.add_argument("--phase_based", default=False, action='store_true', dest='phase_based')
     parser.add_argument("--not_clock_based", default=True, action='store_false', dest='clock_based')
     parser.add_argument("--not_state_est", default=True, action='store_false', dest='state_est')
     parser.add_argument("--not_dyn_random", default=True, action='store_false', dest='dyn_random')
@@ -282,9 +283,14 @@ if __name__ == "__main__":
         if not hasattr(run_args, "simrate"):
             run_args.simrate = 50
             print("manually choosing simrate as 50 (40 Hz)")
+        if not hasattr(run_args, "phase_based"):
+            run_args.phase_based = False
 
         policy = torch.load(args.path + "actor.pt")
         policy.eval()
 
-        eval_policy(policy, args, run_args)
+        # eval_policy(policy, args, run_args)
+        # eval_policy_input_viz(policy, args, run_args)
+        ev = EvalProcessClass(args, run_args)
+        ev.eval_policy(policy, args, run_args)
         

@@ -452,9 +452,13 @@ def run_experiment(args):
 
     if args.ik_baseline and args.no_delta:
         args.ik_baseline = False
+    
+    # TODO: remove this at some point once phase_based is stable
+    if args.phase_based:
+        args.clock_based = False
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, simrate=args.simrate, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history)
+    env_fn = env_factory(args.env_name, traj=args.traj, simrate=args.simrate, phase_based=args.phase_based, clock_based=args.clock_based, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, reward=args.reward, history=args.history)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
