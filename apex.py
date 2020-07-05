@@ -258,7 +258,6 @@ if __name__ == "__main__":
         if (args.ik_baseline and not args.traj == "aslip") or (args.learn_gains and args.mirror):
             raise Exception("Incompatible environment config settings")
 
-        args.num_steps = args.num_steps // args.num_procs
         args = parse_previous(args)
 
         run_experiment(args)

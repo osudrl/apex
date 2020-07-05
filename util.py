@@ -563,11 +563,13 @@ class EvalProcessClass():
             
 
 
+# Rule for curriculum learning is that env observation space should be the same (so attributes like env.clock_based or env.state_est shouldn't be different and are forced to be same here)
 # deal with loading hyperparameters of previous run continuation
 def parse_previous(args):
     if args.previous is not None:
         run_args = pickle.load(open(args.previous + "experiment.pkl", "rb"))
         args.traj = run_args.traj
+        args.phase_based = run_args.phase_based
         args.clock_based = run_args.clock_based
         args.state_est = run_args.state_est
         args.dyn_random = run_args.dyn_random

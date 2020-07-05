@@ -135,9 +135,9 @@ class CassieEnv_v2:
         
         # Set up phase based / load in clock based reward func
         if self.phase_based:
-            # variable inputs
-            self.swing_duration = 0.25
-            self.stance_duration = 0.15
+            # variable inputs initialized to defaults
+            self.swing_duration = 0.26
+            self.stance_duration = 0.6 * self.swing_duration
             self.stance_mode = "zero"  # One-hot encoding of stance_mode : 100 = grounded, 010 = aerial, 001 = zero
             # constants
             self.strict_relaxer = 0.1
@@ -255,9 +255,20 @@ class CassieEnv_v2:
 
         self.debug = False
 
+    # Set up phase reward for dynamic phase functions
     def set_up_phase_reward(self):
 
         self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+
+        if "static" in self.reward_func:
+            self.phase_input_mode = "static"
+        elif "mode":
+            self.phase_input_mode = "mode"
+        elif "ratio":
+            self.phase_input_mode = "ratio"
+        else:
+            self.phase_input_mode = None  # Vary all parts of input
+
         if "low_speed" in self.reward_func:
             self.reward_func = "low_speed_clock"
         elif "no_speed" in self.reward_func:
@@ -265,7 +276,7 @@ class CassieEnv_v2:
         else:
             self.reward_func = "clock"
 
-    # Set up clock reward
+    # Set up clock reward for loaded in phase functions
     def set_up_clock_reward(self, dirname):
 
         # Clock based rewards are organized as follows: "<approach>_<pkl-file-path>" where <approach> is either "" or "max_vel" or "switch"
@@ -586,16 +597,29 @@ class CassieEnv_v2:
             self.traj_idx = (np.abs(self.speeds - self.speed)).argmin()
             self.speed = self.fixed_speed
 
-        # Set up phase based / load in clock based reward func
+        # Set up phase based
         if self.phase_based:
-            # variable inputs
-            self.swing_duration = random.randint(1, 50) / 100
-            self.stance_duration = random.randint(1, 30) / 100
-            self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            if self.phase_input_mode == "static":
+                # static inputs -  don't change anything
+                pass
+            elif self.phase_input_mode == "mode":
+                # only change stance mode
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            elif self.phase_input_mode == "ratio":
+                # change stance mode and durations, but vary by scale of 60%
+                self.swing_duration = random.randint(15, 40) / 100
+                self.stance_duration = 0.6 * self.swing_duration
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            else:
+                # variable inputs
+                self.swing_duration = random.randint(1, 50) / 100
+                self.stance_duration = random.randint(1, 30) / 100
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
             # constants
             self.strict_relaxer = 0.1
             self.have_incentive = True
-            self.set_up_phase_reward()
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+        # ELSE load in clock based reward func
         else:
             if self.reward_func == "clock":
                 self.left_clock = self.reward_clock_func["left"]
@@ -705,8 +729,8 @@ class CassieEnv_v2:
         # Set up phase based / load in clock based reward func
         if self.phase_based:
             # variable inputs
-            self.swing_duration = 0.25
-            self.stance_duration = 0.15
+            self.swing_duration = 0.26
+            self.stance_duration = 0.6 * self.swing_duration
             self.stance_mode = "zero"
             # constants
             self.strict_relaxer = 0.1
