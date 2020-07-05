@@ -572,9 +572,7 @@ def parse_previous(args):
         args.phase_based = run_args.phase_based
         args.clock_based = run_args.clock_based
         args.state_est = run_args.state_est
-        args.dyn_random = run_args.dyn_random
         args.no_delta = run_args.no_delta
-        args.mirror = run_args.mirror
         args.recurrent = run_args.recurrent
         args.learn_gains = run_args.learn_gains
         args.ik_baseline = run_args.ik_baseline,
