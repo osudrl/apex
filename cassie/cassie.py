@@ -135,10 +135,10 @@ class CassieEnv_v2:
         
         # Set up phase based / load in clock based reward func
         if self.phase_based:
-            # variable inputs initialized to defaults
-            self.swing_duration = 0.26
-            self.stance_duration = 0.6 * self.swing_duration
-            self.stance_mode = "zero"  # One-hot encoding of stance_mode : 100 = grounded, 010 = aerial, 001 = zero
+            # variable inputs
+            self.swing_duration = 0.31
+            self.stance_duration = 0.08
+            self.stance_mode = "zero"
             # constants
             self.strict_relaxer = 0.1
             self.have_incentive = True
@@ -603,7 +603,14 @@ class CassieEnv_v2:
                 # static inputs -  don't change anything
                 pass
             elif self.phase_input_mode == "mode":
-                # only change stance mode
+                # change between "extreme" swing/stance duration combos
+                if np.random.choice([True, False]):
+                    self.swing_duration = 0.31
+                    self.stance_duration = 0.08
+                else:
+                    self.swing_duration = 0.08
+                    self.stance_duration = 0.31
+                # also change stance mode
                 self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
             elif self.phase_input_mode == "ratio":
                 # change stance mode and durations, but vary by scale of 60%
@@ -611,7 +618,7 @@ class CassieEnv_v2:
                 self.stance_duration = 0.6 * self.swing_duration
                 self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
             else:
-                # variable inputs
+                # random everything
                 self.swing_duration = random.randint(1, 50) / 100
                 self.stance_duration = random.randint(1, 30) / 100
                 self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
@@ -729,8 +736,8 @@ class CassieEnv_v2:
         # Set up phase based / load in clock based reward func
         if self.phase_based:
             # variable inputs
-            self.swing_duration = 0.26
-            self.stance_duration = 0.6 * self.swing_duration
+            self.swing_duration = 0.31
+            self.stance_duration = 0.08
             self.stance_mode = "zero"
             # constants
             self.strict_relaxer = 0.1
@@ -836,7 +843,7 @@ class CassieEnv_v2:
             return low_speed_clock_reward(self, action)
         elif self.reward_func == "no_speed_clock":
             self.early_term_cutoff = -99.
-            return low_speed_clock_reward(self, action)
+            return no_speed_clock_reward(self, action)
         elif self.reward_func == "max_vel_clock":
             self.early_term_cutoff = -99.
             return max_vel_clock_reward(self, action)

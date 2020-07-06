@@ -12,6 +12,12 @@ def create_phase_reward(swing_duration, stance_duration, strict_relaxer, stance_
     left_swing = np.array([swing_duration + stance_duration, 2 * swing_duration + stance_duration]) * FREQ
     second_dblstance = np.array([2 * swing_duration + stance_duration, total_duration]) * FREQ
 
+    # print(right_swing[1] - right_swing[0])
+    # print(first_dblstance[1] - first_dblstance[0])
+    # print(left_swing[1] - left_swing[0])
+    # print(second_dblstance[1] - second_dblstance[0])
+    # exit()
+
     l_phase_points = np.zeros((2, 8))
     r_phase_points = np.zeros((2, 8))
     
