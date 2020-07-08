@@ -260,8 +260,8 @@ class CassieEnv_v2:
 
         self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
 
-        if "static" in self.reward_func:
-            self.phase_input_mode = "static"
+        if "library" in self.reward_func:
+            self.phase_input_mode = "library"
         elif "mode":
             self.phase_input_mode = "mode"
         elif "ratio":
@@ -269,9 +269,7 @@ class CassieEnv_v2:
         else:
             self.phase_input_mode = None  # Vary all parts of input
 
-        if "low_speed" in self.reward_func:
-            self.reward_func = "low_speed_clock"
-        elif "no_speed" in self.reward_func:
+        if "no_speed" in self.reward_func:
             self.reward_func = "no_speed_clock"
         else:
             self.reward_func = "clock"
@@ -599,9 +597,16 @@ class CassieEnv_v2:
 
         # Set up phase based
         if self.phase_based:
-            if self.phase_input_mode == "static":
-                # static inputs -  don't change anything
-                pass
+
+            if self.phase_input_mode == "library":
+                # library input -- pick total duration and swing/stance phase based on that. also randomize grounded vs aerial vs zero
+                self.speed = (random.randint(0, 20)) / 10 # constrain speed again
+                total_duration = random.randint(3, 6) / 10 # this if for one swing and stance, so 2 * total_duration = walk cycle time
+                ratio = random.randint(3, 7) / 10
+                self.swing_duration = total_duration * ratio
+                self.stance_duration = total_duration - self.swing_duration
+                # also change stance mode
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
             elif self.phase_input_mode == "mode":
                 # change between "extreme" swing/stance duration combos
                 if np.random.choice([True, False]):
@@ -622,10 +627,13 @@ class CassieEnv_v2:
                 self.swing_duration = random.randint(1, 50) / 100
                 self.stance_duration = random.randint(1, 30) / 100
                 self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            
             # constants
             self.strict_relaxer = 0.1
             self.have_incentive = True
+
             self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+        
         # ELSE load in clock based reward func
         else:
             if self.reward_func == "clock":
@@ -871,7 +879,7 @@ class CassieEnv_v2:
         # TODO: make this not so hackish
         if self.phase_based:
             if phase > floor(len(self.trajectory) / self.simrate) - 1:
-                phase = 0
+                phase = floor((phase / self.phaselen) * len(self.trajectory) / self.simrate)
 
         desired_ind = phase * self.simrate if not self.aslip_traj else phase
         # phase_diff = desired_ind - math.floor(desired_ind)
