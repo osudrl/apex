@@ -300,7 +300,7 @@ class CassieEnv_v2:
             self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
             self.left_clock = self.reward_clock_func["left"]
             self.right_clock = self.reward_clock_func["right"]
-            self.reward_func = "clock"
+            self.reward_func = "load_clock"
 
     def set_up_state_space(self):
 
@@ -843,9 +843,12 @@ class CassieEnv_v2:
         qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        if self.reward_func == "clock" or self.reward_func == "switch_clock":
+        if self.reward_func == "clock":
             self.early_term_cutoff = -99.
-            return clock_reward(self, action)
+            return clock_reward(self, action)            
+        elif self.reward_func == "load_clock" or self.reward_func == "switch_clock":
+            self.early_term_cutoff = -99.
+            return load_clock_reward(self, action)
         elif self.reward_func == "low_speed_clock":
             self.early_term_cutoff = -99.
             return low_speed_clock_reward(self, action)
