@@ -582,4 +582,7 @@ def parse_previous(args):
         if args.exchange_reward != None:
             args.reward = args.exchange_reward
             args.run_name = run_args.run_name + "_NEW-" + args.reward
+        else:
+            args.reward = run_args.reward
+            args.run_name = run_args.run_name + "--cont"
     return args
