@@ -407,7 +407,7 @@ class PPO:
 
             if logger is not None:
                 evaluate_start = time.time()
-                test = self.sample_parallel(env_fn, self.policy, self.critic, 800, self.max_traj_len, deterministic=True)
+                test = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps // 2, self.max_traj_len, deterministic=True)
                 eval_time = time.time() - evaluate_start
                 print("evaluate time elapsed: {:.2f} s".format(eval_time))
 

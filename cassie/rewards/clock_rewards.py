@@ -143,10 +143,10 @@ def load_clock_reward(self, action):
     # right_frc_clock = self.right_clock(self.phase)
     # left_vel_clock = -self.left_clock(self.phase)
     # right_vel_clock = -self.right_clock(self.phase)
-    left_frc_clock = self.left_clock(self.phase)
-    right_frc_clock = self.right_clock(self.phase)
-    left_vel_clock = self.left_clock(self.phase)
-    right_vel_clock = self.right_clock(self.phase)
+    left_frc_clock = self.left_clock[0](self.phase)
+    right_frc_clock = self.right_clock[0](self.phase)
+    left_vel_clock = self.left_clock[1](self.phase)
+    right_vel_clock = self.right_clock[1](self.phase)
 
     left_frc_score = np.tanh(left_frc_clock * normed_left_frc)
     left_vel_score = np.tanh(left_vel_clock * normed_left_vel)
@@ -404,10 +404,10 @@ def aslip_clock_reward(self, action):
     # force/vel clock errors
 
     # These values represent if we want to allow foot foot forces / vels (0 -> don't penalize), or penalize them (1 -> don't allow)
-    left_frc_clock = self.left_clock(self.phase)
-    right_frc_clock = self.right_clock(self.phase)
-    left_vel_clock = -self.left_clock(self.phase)
-    right_vel_clock = -self.right_clock(self.phase)
+    left_frc_clock = self.left_clock[0](self.phase)
+    right_frc_clock = self.right_clock[0](self.phase)
+    left_vel_clock = self.left_clock[1](self.phase)
+    right_vel_clock = self.right_clock[1](self.phase)
     
     left_frc_penalty = np.tanh(left_frc_clock * normed_left_frc)
     left_vel_penalty = np.tanh(left_vel_clock * normed_left_vel)
@@ -491,10 +491,10 @@ def max_vel_clock_reward(self, action):
     # force/vel clock errors
 
     # These values represent if we want to allow foot foot forces / vels (0 -> don't penalize), or penalize them (1 -> don't allow)
-    left_frc_clock = self.left_clock(self.phase)
-    right_frc_clock = self.right_clock(self.phase)
-    left_vel_clock = -self.left_clock(self.phase)
-    right_vel_clock = -self.right_clock(self.phase)
+    left_frc_clock = self.left_clock[0](self.phase)
+    right_frc_clock = self.right_clock[0](self.phase)
+    left_vel_clock = self.left_clock[1](self.phase)
+    right_vel_clock = self.right_clock[1](self.phase)
     
     left_frc_penalty = np.tanh(left_frc_clock * normed_left_frc)
     left_vel_penalty = np.tanh(left_vel_clock * normed_left_vel)
