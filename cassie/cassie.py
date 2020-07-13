@@ -4,6 +4,7 @@ from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
 from .trajectory import *
 from cassie.quaternion_function import *
+from cassie.phase_function import *
 from .rewards import *
 
 from math import floor
@@ -25,7 +26,7 @@ def load_reward_clock_funcs(path):
 
 
 class CassieEnv_v2:
-    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True,
+    def __init__(self, traj='walking', simrate=50, phase_based=False, clock_based=True, state_est=True, dynamics_randomization=True,
                  no_delta=True, learn_gains=False, ik_baseline=False, reward="iros_paper",
                  config="./cassie/cassiemujoco/cassie.xml", history=0, **kwargs):
 
@@ -38,6 +39,7 @@ class CassieEnv_v2:
         self.vis = None
 
         # Arguments for the simulation and state space
+        self.phase_based = phase_based
         self.clock_based = clock_based
         self.state_est = state_est
         self.no_delta = no_delta
@@ -52,7 +54,6 @@ class CassieEnv_v2:
         }
         for (arg, default) in curriculum_defaults.items():
             setattr(self, arg, kwargs.get(arg, default))
-
 
         # CONFIGURE REF TRAJECTORY to use
         if traj == "aslip":
@@ -73,40 +74,6 @@ class CassieEnv_v2:
             self.trajectory = CassieTrajectory(traj_path)
             self.speed = 0
 
-        # Names of Clock-Based reward functions
-        clock_rewards        =  ["clock_smooth", "clock_strict0.1", "clock_strict0.4",
-                                 "clock_smooth_aerial", "clock_strict0.1_aerial", "clock_strict0.4_aerial"]
-        aslip_clock_rewards   = ["aslip_clock_smooth", "aslip_clock_smooth_aerial",
-                                 "aslip_clock_strict0.1", "aslip_clock_strict0.1_aerial",
-                                 "aslip_clock_strict0.4", "aslip_clock_strict0.4_aerial"]
-        max_vel_clock_rewards = ["max_vel_clock_smooth", "max_vel_clock_strict0.1", "max_vel_clock_strict0.4",
-                                 "max_vel_clock_smooth_aerial", "max_vel_clock_strict0.1_aerial", "max_vel_clock_strict0.4_aerial"]
-        switch_clock_rewards = ["switch_clock_smooth", "switch_clock_strict0.1", "switch_clock_strict0.4"]
-
-        # If Loading Clock-based Reward Func, do that
-        if self.reward_func in clock_rewards:
-            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
-            self.left_clock = self.reward_clock_func["left"]
-            self.right_clock = self.reward_clock_func["right"]
-            self.reward_func = "clock"
-        elif self.reward_func in switch_clock_rewards:
-            self.switch_speed = 2.0
-            self.walk_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + ".pkl"))
-            self.run_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + "_aerial" + ".pkl"))
-            self.left_clock = self.walk_clock_func_path["left"]
-            self.right_clock = self.walk_clock_func_path["right"]
-            self.reward_func = "switch_clock"
-        elif self.reward_func in aslip_clock_rewards:
-            self.reward_clock_funcs = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
-            self.reward_func = "aslip_clock"
-        elif self.reward_func in max_vel_clock_rewards:
-            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[8:] + ".pkl"))
-            self.left_clock = self.reward_clock_func["left"]
-            self.right_clock = self.reward_clock_func["right"]
-            self.reward_func = "max_vel_clock"
-
         self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
 
         # Adds option for state history for FF nets
@@ -125,7 +92,6 @@ class CassieEnv_v2:
         else:
             self.action_space = np.zeros(10)
 
-
         self.u = pd_in_t()
 
         # TODO: should probably initialize this to current state
@@ -142,10 +108,11 @@ class CassieEnv_v2:
 
         # NOTE: a reference trajectory represents ONE phase cycle
 
-        # should be floor(len(traj) / simrate) - 1
-        # should be VERY cautious here because wrapping around trajectory
-        # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(len(self.trajectory) / self.simrate) - 1 if not self.aslip_traj else self.trajectory.length - 1
+        if not self.phase_based:
+            # should be floor(len(traj) / simrate) - 1
+            # should be VERY cautious here because wrapping around trajectory
+            # badly can cause assymetrical/bad gaits
+            self.phaselen = floor(len(self.trajectory) / self.simrate) - 1 if not self.aslip_traj else self.trajectory.length - 1
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
@@ -166,6 +133,19 @@ class CassieEnv_v2:
         # global flat foot orientation, can be useful part of reward function:
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
         
+        # Set up phase based / load in clock based reward func
+        if self.phase_based:
+            # variable inputs
+            self.swing_duration = 0.31
+            self.stance_duration = 0.08
+            self.stance_mode = "zero"
+            # constants
+            self.strict_relaxer = 0.1
+            self.have_incentive = True
+            self.set_up_phase_reward()
+        elif "clock" in self.reward_func:  # TODO: maybe make this an actual argument instead of finding a substring
+            self.set_up_clock_reward(dirname)
+
         # tracking various variables for reward funcs
         self.stepcount = 0
         self.l_high = False  # only true if foot is above 0.2m 
@@ -275,6 +255,53 @@ class CassieEnv_v2:
 
         self.debug = False
 
+    # Set up phase reward for dynamic phase functions
+    def set_up_phase_reward(self):
+
+        self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+
+        if "library" in self.reward_func:
+            self.phase_input_mode = "library"
+        elif "mode":
+            self.phase_input_mode = "mode"
+        elif "ratio":
+            self.phase_input_mode = "ratio"
+        else:
+            self.phase_input_mode = None  # Vary all parts of input
+
+        if "no_speed" in self.reward_func:
+            self.reward_func = "no_speed_clock"
+        else:
+            self.reward_func = "clock"
+
+    # Set up clock reward for loaded in phase functions
+    def set_up_clock_reward(self, dirname):
+
+        # Clock based rewards are organized as follows: "<approach>_<pkl-file-path>" where <approach> is either "" or "max_vel" or "switch"
+
+        # extract <approach> from reward string
+        if "max_vel" in self.reward_func:
+            # maximize velocity, where running path is specified
+            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[8:] + ".pkl"))
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
+            self.reward_func = "max_vel_clock"
+        elif "switch" in self.reward_func:
+            # switch from walking to running, where walking path is specified
+            self.switch_speed = 2.0
+            self.walk_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + ".pkl"))
+            self.run_clock_func_path = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func[7:] + "_aerial" + ".pkl"))
+            self.left_clock = self.walk_clock_func_path["left"]
+            self.right_clock = self.walk_clock_func_path["right"]
+            self.reward_func = "switch_clock"
+        else:
+            # match commanded speed input. maybe constrained to walking or running or figuring out based on specified path
+            # approach = ""
+            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
+            self.reward_func = "load_clock"
+
     def set_up_state_space(self):
 
         mjstate_size   = 40
@@ -282,7 +309,9 @@ class CassieEnv_v2:
 
         speed_size     = 1
 
-        clock_size    = 2
+        clock_size     = 2
+        # NOTE: phase_based includes clock also
+        phase_size     = 5      # swing duration, stance duration, one-hot encoding of stance mode
         
         # Find the mirrored trajectory
         if self.aslip_traj:
@@ -304,6 +333,11 @@ class CassieEnv_v2:
             mirrored_obs = np.concatenate([base_mir_obs, append_obs])
             clock_inds = append_obs[0:clock_size].tolist()
             obs_size += clock_size + speed_size
+        elif self.phase_based:
+            append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+phase_size+speed_size)])
+            mirrored_obs = np.concatenate([base_mir_obs, append_obs])
+            clock_inds = append_obs[0:clock_size].tolist()
+            obs_size += clock_size + phase_size + speed_size
         else:
             mirrored_traj_sign = np.multiply(np.sign(mirrored_traj), obs_size+np.floor(np.abs(mirrored_traj)))
             mirrored_obs = np.concatenate([base_mir_obs, mirrored_traj_sign])
@@ -560,27 +594,68 @@ class CassieEnv_v2:
         if self.fixed_speed != None:
             self.traj_idx = (np.abs(self.speeds - self.speed)).argmin()
             self.speed = self.fixed_speed
-        
-        if self.reward_func == "clock":
-            self.left_clock = self.reward_clock_func["left"]
-            self.right_clock = self.reward_clock_func["right"]
-        elif self.reward_func == "switch_clock":
-            if self.speed < self.switch_speed:
-                self.left_clock = self.walk_clock_func_path["left"]
-                self.right_clock = self.walk_clock_func_path["right"]
+
+        # Set up phase based
+        if self.phase_based:
+
+            if self.phase_input_mode == "library":
+                # library input -- pick total duration and swing/stance phase based on that. also randomize grounded vs aerial vs zero
+                self.speed = (random.randint(0, 20)) / 10 # constrain speed again
+                total_duration = random.randint(3, 6) / 10 # this if for one swing and stance, so 2 * total_duration = walk cycle time
+                ratio = random.randint(3, 7) / 10
+                self.swing_duration = total_duration * ratio
+                self.stance_duration = total_duration - self.swing_duration
+                # also change stance mode
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            elif self.phase_input_mode == "mode":
+                # change between "extreme" swing/stance duration combos
+                if np.random.choice([True, False]):
+                    self.swing_duration = 0.31
+                    self.stance_duration = 0.08
+                else:
+                    self.swing_duration = 0.08
+                    self.stance_duration = 0.31
+                # also change stance mode
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            elif self.phase_input_mode == "ratio":
+                # change stance mode and durations, but vary by scale of 60%
+                self.swing_duration = random.randint(15, 40) / 100
+                self.stance_duration = 0.6 * self.swing_duration
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
             else:
-                self.left_clock = self.run_clock_func_path["left"]
-                self.right_clock = self.run_clock_func_path["right"]
-        elif self.reward_func == "aslip_clock":
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
-        elif self.reward_func == "max_vel_clock":
-            self.left_clock = self.reward_clock_func["left"]
-            self.right_clock = self.reward_clock_func["right"]
+                # random everything
+                self.swing_duration = random.randint(1, 50) / 100
+                self.stance_duration = random.randint(1, 30) / 100
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            
+            # constants
+            self.strict_relaxer = 0.1
+            self.have_incentive = True
+
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+        
+        # ELSE load in clock based reward func
+        else:
+            if self.reward_func == "clock":
+                self.left_clock = self.reward_clock_func["left"]
+                self.right_clock = self.reward_clock_func["right"]
+            elif self.reward_func == "switch_clock":
+                if self.speed < self.switch_speed:
+                    self.left_clock = self.walk_clock_func_path["left"]
+                    self.right_clock = self.walk_clock_func_path["right"]
+                else:
+                    self.left_clock = self.run_clock_func_path["left"]
+                    self.right_clock = self.run_clock_func_path["right"]
+            elif self.reward_func == "aslip_clock":
+                self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
+                self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+            elif self.reward_func == "max_vel_clock":
+                self.left_clock = self.reward_clock_func["left"]
+                self.right_clock = self.reward_clock_func["right"]
 
         self.simsteps = 0
 
-        self.phase = random.randint(0, self.phaselen)
+        self.phase = random.randint(0, floor(self.phaselen))
         self.time = 0
         self.counter = 0
 
@@ -666,12 +741,23 @@ class CassieEnv_v2:
         else:
             self.speed = 0
 
-        if self.reward_func == "aslip_clock":
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
-        elif self.reward_func == "switch_clock":
-            self.left_clock = self.walk_clock_func_path["left"]
-            self.right_clock = self.walk_clock_func_path["right"]
+        # Set up phase based / load in clock based reward func
+        if self.phase_based:
+            # variable inputs
+            self.swing_duration = 0.31
+            self.stance_duration = 0.08
+            self.stance_mode = "zero"
+            # constants
+            self.strict_relaxer = 0.1
+            self.have_incentive = True
+            self.set_up_phase_reward()
+        else:
+            if self.reward_func == "aslip_clock":
+                self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
+                self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+            elif self.reward_func == "switch_clock":
+                self.left_clock = self.walk_clock_func_path["left"]
+                self.right_clock = self.walk_clock_func_path["right"]
 
         if not full_reset:
             qpos, qvel = self.get_ref_state(self.phase)
@@ -734,34 +820,46 @@ class CassieEnv_v2:
         else:
             self.speed = new_speed
         
-            # # Make sure that if speed is above 2, freq is at least 1.2
-            # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
-            #     self.phase_add = 1.1 + (self.speed - 1)* 0.2
+        if self.phase_based:
+            self.swing_duration = max(0.01, self.swing_duration)
+            self.stance_duration = max(0.01, self.stance_duration)
+            old_phaselen = self.phaselen
+            self.set_up_phase_reward()
+            self.phase = int(self.phaselen * self.phase / old_phaselen)
         
-        if self.reward_func == "aslip_clock":
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
-        elif self.reward_func == "switch_clock":
-            if self.speed < self.switch_speed:
-                self.left_clock = self.walk_clock_func_path["left"]
-                self.right_clock = self.walk_clock_func_path["right"]
-            else:
-                self.left_clock = self.run_clock_func_path["left"]
-                self.right_clock = self.run_clock_func_path["right"]
+        # if self.reward_func == "aslip_clock":
+        #     self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
+        #     self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+        # elif self.reward_func == "switch_clock":
+        #     if self.speed < self.switch_speed:
+        #         self.left_clock = self.walk_clock_func_path["left"]
+        #         self.right_clock = self.walk_clock_func_path["right"]
+        #     else:
+        #         self.left_clock = self.run_clock_func_path["left"]
+        #         self.right_clock = self.run_clock_func_path["right"]
 
     def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        if self.reward_func == "clock" or self.reward_func == "switch_clock":
-            self.early_term_cutoff = 0.0
-            return clock_reward(self, action)
+        if self.reward_func == "clock":
+            self.early_term_cutoff = -99.
+            return clock_reward(self, action)            
+        elif self.reward_func == "load_clock" or self.reward_func == "switch_clock":
+            self.early_term_cutoff = -99.
+            return load_clock_reward(self, action)
+        elif self.reward_func == "low_speed_clock":
+            self.early_term_cutoff = -99.
+            return low_speed_clock_reward(self, action)
+        elif self.reward_func == "no_speed_clock":
+            self.early_term_cutoff = -99.
+            return no_speed_clock_reward(self, action)
         elif self.reward_func == "max_vel_clock":
-            self.early_term_cutoff = 0.0
+            self.early_term_cutoff = -99.
             return max_vel_clock_reward(self, action)
         elif self.reward_func == "aslip_clock":
-            self.early_term_cutoff = 0.0
+            self.early_term_cutoff = -99.
             return aslip_clock_reward(self, action)
         elif self.reward_func == "aslip_old":
             self.early_term_cutoff = 0.0
@@ -780,6 +878,11 @@ class CassieEnv_v2:
 
         if phase > self.phaselen:
             phase = 0
+        
+        # TODO: make this not so hackish
+        if self.phase_based:
+            if phase > floor(len(self.trajectory) / self.simrate) - 1:
+                phase = floor((phase / self.phaselen) * len(self.trajectory) / self.simrate)
 
         desired_ind = phase * self.simrate if not self.aslip_traj else phase
         # phase_diff = desired_ind - math.floor(desired_ind)
@@ -839,11 +942,17 @@ class CassieEnv_v2:
         # line trajectories.
 
         # CLOCK BASED (NO TRAJECTORY)
-        if self.clock_based:
+        if self.phase_based:
             clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
                     np.cos(2 * np.pi *  self.phase / self.phaselen)]
             
+            ext_state = np.concatenate((clock, [self.swing_duration, self.stance_duration], encode_stance_mode(self.stance_mode), [self.speed]))
+        
+        elif self.clock_based:
+            clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
+                    np.cos(2 * np.pi *  self.phase / self.phaselen)]
             ext_state = np.concatenate((clock, [self.speed]))
+
 
         # ASLIP TRAJECTORY
         elif self.aslip_traj and not self.clock_based:

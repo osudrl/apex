@@ -1,6 +1,6 @@
 import torch
 import sys, pickle, argparse
-from util import color, print_logo, env_factory, create_logger, eval_policy, parse_previous
+from util import color, print_logo, env_factory, create_logger, EvalProcessClass, parse_previous
 
 if __name__ == "__main__":
 
@@ -12,6 +12,7 @@ if __name__ == "__main__":
     """
     parser.add_argument("--simrate", default=50, type=int, help="simrate of environment")
     parser.add_argument("--traj", default="walking", type=str, help="reference trajectory to use. options are 'aslip', 'walking', 'stepping'")
+    parser.add_argument("--phase_based", default=False, action='store_true', dest='phase_based')
     parser.add_argument("--not_clock_based", default=True, action='store_false', dest='clock_based')
     parser.add_argument("--not_state_est", default=True, action='store_false', dest='state_est')
     parser.add_argument("--not_dyn_random", default=True, action='store_false', dest='dyn_random')
@@ -239,7 +240,7 @@ if __name__ == "__main__":
         parser.add_argument("--gamma", type=float, default=0.99, help="MDP discount")
         parser.add_argument("--anneal", default=1.0, action='store_true', help="anneal rate for stddev")
         parser.add_argument("--learn_stddev", default=False, action='store_true', help="learn std_dev or keep it fixed")
-        parser.add_argument("--std_dev", type=int, default=-2, help="exponent of exploration std_dev")
+        parser.add_argument("--std_dev", type=int, default=-1.5, help="exponent of exploration std_dev")
         parser.add_argument("--entropy_coeff", type=float, default=0.0, help="Coefficient for entropy regularization")
         parser.add_argument("--clip", type=float, default=0.2, help="Clipping parameter for PPO surrogate loss")
         parser.add_argument("--minibatch_size", type=int, default=64, help="Batch size for PPO updates")
@@ -258,7 +259,6 @@ if __name__ == "__main__":
         if (args.ik_baseline and not args.traj == "aslip") or (args.learn_gains and args.mirror):
             raise Exception("Incompatible environment config settings")
 
-        args.num_steps = args.num_steps // args.num_procs
         args = parse_previous(args)
 
         run_experiment(args)
@@ -271,10 +271,10 @@ if __name__ == "__main__":
         parser.add_argument("--env_name", default="Cassie-v0", type=str)
         parser.add_argument("--traj_len", default=400, type=str)
         parser.add_argument("--history", default=0, type=int)                                    # number of previous states to use as input
-        parser.add_argument("--mission", default="default", type=str) # only used by playground environment
+        parser.add_argument("--mission", default="default", type=str)                            # only used by playground environment
+        parser.add_argument("--terrain", default=None, type=str)                                 # hfield file name (terrain to use)
         parser.add_argument("--debug", default=False, action='store_true')
         parser.add_argument("--no_viz", default=False, action='store_true')
-        parser.add_argument("--eval", default=True, action="store_false", help="Whether to call policy.eval() or not")
 
         args = parser.parse_args()
 
@@ -283,10 +283,14 @@ if __name__ == "__main__":
         if not hasattr(run_args, "simrate"):
             run_args.simrate = 50
             print("manually choosing simrate as 50 (40 Hz)")
+        if not hasattr(run_args, "phase_based"):
+            run_args.phase_based = False
 
         policy = torch.load(args.path + "actor.pt")
-        if args.eval:
-            policy.eval()  # NOTE: for some reason the saved nodelta_neutral_stateest_symmetry policy needs this but it breaks all new policies...
+        policy.eval()
 
-        eval_policy(policy, args, run_args)
+        # eval_policy(policy, args, run_args)
+        # eval_policy_input_viz(policy, args, run_args)
+        ev = EvalProcessClass(args, run_args)
+        ev.eval_policy(policy, args, run_args)
         

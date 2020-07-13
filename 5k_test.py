@@ -1,4 +1,3 @@
-from rl.policies.actor import GaussianMLP_Actor
 from tools.test_commands import *
 from tools.eval_perturb import *
 from tools.eval_mission import *

@@ -186,20 +186,31 @@ class PPO:
         return memory
 
     def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
-        worker = self.sample
-        args = (self, env_fn, policy, critic, min_steps, max_traj_len, deterministic, anneal)
 
-        # Don't don't bother launching another process for single thread
-        if self.n_proc > 1:
-            real_proc = self.n_proc
-            if self.limit_cores:
-                real_proc = 48 - 16*int(np.log2(60 / env_fn().simrate))
-                print("limit cores active, using {} cores".format(real_proc))
-                args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic, anneal)
-            result_ids = [worker.remote(*args) for _ in range(real_proc)]
-            result = ray.get(result_ids)
-        else:
-            result = [worker._function(*args)]
+        worker = self.sample
+        args = (self, env_fn, policy, critic, min_steps // self.n_proc, max_traj_len, deterministic, anneal)
+
+        # Create pool of workers, each getting data for min_steps
+        workers = [worker.remote(*args) for _ in range(self.n_proc)]
+
+        result = []
+        total_steps = 0
+
+        while total_steps < min_steps:
+            # get result from a worker
+            ready_ids, _ = ray.wait(workers, num_returns=1)
+
+            # update result
+            result.append(ray.get(ready_ids[0]))
+
+            # remove ready_ids from workers (O(n)) but n isn't that big
+            workers.remove(ready_ids[0])
+
+            # update total steps
+            total_steps += len(result[-1])
+
+            # start a new worker
+            workers.append(worker.remote(*args))
         
         # O(n)
         def merge(buffers):
@@ -222,8 +233,7 @@ class PPO:
             return merged
 
         total_buf = merge(result)
-        if len(total_buf) > min_steps*self.n_proc * 1.5:
-            self.limit_cores = 1
+
         return total_buf
 
 
@@ -403,7 +413,7 @@ class PPO:
 
             if logger is not None:
                 evaluate_start = time.time()
-                test = self.sample_parallel(env_fn, self.policy, self.critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
+                test = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps // 2, self.max_traj_len, deterministic=True)
                 eval_time = time.time() - evaluate_start
                 print("evaluate time elapsed: {:.2f} s".format(eval_time))
 
@@ -452,11 +462,22 @@ def run_experiment(args):
 
     if args.ik_baseline and args.no_delta:
         args.ik_baseline = False
+    
+    # TODO: remove this at some point once phase_based is stable
+    if args.phase_based:
+        args.clock_based = False
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, simrate=args.simrate, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history)
+    env_fn = env_factory(args.env_name, traj=args.traj, simrate=args.simrate, phase_based=args.phase_based, clock_based=args.clock_based, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, reward=args.reward, history=args.history)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
+
+    # Set up Parallelism
+    os.environ['OMP_NUM_THREADS'] = '1'
+    if args.redis_address is not None:
+        ray.init(num_cpus=args.num_procs, redis_address=args.redis_address)
+    else:
+        ray.init(num_cpus=args.num_procs)
 
     # Set seeds
     torch.manual_seed(args.seed)
@@ -481,9 +502,12 @@ def run_experiment(args):
             critic = FF_V(obs_dim)
 
         with torch.no_grad():
-            policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+            policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn, procs=args.num_procs))
         critic.obs_mean = policy.obs_mean
         critic.obs_std = policy.obs_std
+    
+    policy.train()
+    critic.train()
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
 
@@ -495,6 +519,7 @@ def run_experiment(args):
     print()
     print("Environment: {}".format(args.env_name))
     print(" ├ traj:           {}".format(args.traj))
+    print(" ├ phase_based:    {}".format(args.phase_based))
     print(" ├ clock_based:    {}".format(args.clock_based))
     print(" ├ state_est:      {}".format(args.state_est))
     print(" ├ dyn_random:     {}".format(args.dyn_random))
@@ -502,7 +527,7 @@ def run_experiment(args):
     print(" ├ mirror:         {}".format(args.mirror))
     print(" ├ ik baseline:    {}".format(args.ik_baseline))
     print(" ├ learn gains:    {}".format(args.learn_gains))
-    print(" ├ reward:         {}".format(args.reward))
+    print(" ├ reward:         {}".format(env_fn().reward_func))
     print(" └ obs_dim:        {}".format(obs_dim))
 
     print()
