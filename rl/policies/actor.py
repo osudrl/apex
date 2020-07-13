@@ -42,13 +42,13 @@ class Linear_Actor(Actor):
 
 # Actor network for gaussian mlp
 class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conventions
-  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=torch.nn.functional.relu, fixed_std=None, bounded=False, normc_init=True, obs_std=None, obs_mean=None):
+  def __init__(self, state_dim, action_dim, layers=(256, 256), env_name=None, nonlinearity=torch.nn.functional.relu, fixed_std=None, bounded=False, normc_init=True, obs_std=1, obs_mean=0):
     super(Gaussian_FF_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
     self.actor_layers += [nn.Linear(state_dim, layers[0])]
     for i in range(len(layers)-1):
-        self.actor_layers += [nn.Linear(layers[i], layers[i+1])]
+      self.actor_layers += [nn.Linear(layers[i], layers[i+1])]
     self.means = nn.Linear(layers[-1], action_dim)
 
     if fixed_std is None: # probably don't want to use this for ppo, always use fixed std
@@ -76,20 +76,20 @@ class Gaussian_FF_Actor(Actor): # more consistent with other actor naming conven
 
   def init_parameters(self):
     if self.normc_init:
-        self.apply(normc_fn)
-        self.means.weight.data.mul_(0.01)
+      self.apply(normc_fn)
+      self.means.weight.data.mul_(0.01)
 
   def _get_dist_params(self, state):
-    if self.training == False:
-        state = (state - self.obs_mean) / self.obs_std
+    # if self.training == False:
+    state = (state - self.obs_mean) / self.obs_std
 
     x = state
     for l in self.actor_layers:
-        x = self.nonlinearity(l(x))
+      x = self.nonlinearity(l(x))
     mean = self.means(x)
 
     if self.bounded:
-        mean = torch.tanh(x) 
+      mean = torch.tanh(mean) 
 
     if self.learn_std:
       # sd = torch.clamp(self.log_stds(x), LOG_STD_LO, LOG_STD_HI).exp()
@@ -215,13 +215,13 @@ class LSTM_Actor(Actor):
     return self.action
 
 class Gaussian_LSTM_Actor(Actor):
-  def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=F.tanh, normc_init=False, max_action=1, fixed_std=None):
+  def __init__(self, state_dim, action_dim, layers=(128, 128), env_name=None, nonlinearity=F.tanh, normc_init=False, max_action=1, fixed_std=None, obs_mean=0, obs_std=1):
     super(Gaussian_LSTM_Actor, self).__init__()
 
     self.actor_layers = nn.ModuleList()
     self.actor_layers += [nn.LSTMCell(state_dim, layers[0])]
     for i in range(len(layers)-1):
-        self.actor_layers += [nn.LSTMCell(layers[i], layers[i+1])]
+      self.actor_layers += [nn.LSTMCell(layers[i], layers[i+1])]
     self.network_out = nn.Linear(layers[i-1], action_dim)
 
     self.action = None
@@ -246,8 +246,8 @@ class Gaussian_LSTM_Actor(Actor):
     self.act = self.forward
 
   def _get_dist_params(self, state):
-    if self.training == False:
-        state = (state - self.obs_mean) / self.obs_std
+    # if self.training == False:
+    state = (state - self.obs_mean) / self.obs_std
 
     dims = len(state.size())
 
