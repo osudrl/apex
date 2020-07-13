@@ -28,11 +28,11 @@ class test_worker(object):
 
     def test_5k(self, mission, mission_speed, terrain, friction, foot_mass):
         if ".npy" in terrain:
-            self.cassie_env.sim = CassieSim("cassie_hfield.xml", reinit=True)
+            self.cassie_env.sim = CassieSim("./cassie/cassiemujoco/cassie_hfield.xml", reinit=True)
             hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", terrain))
             self.cassie_env.sim.set_hfield_data(hfield_data.flatten())
         else:
-            self.cassie_env.sim = CassieSim("cassie.xml", reinit=True)
+            self.cassie_env.sim = CassieSim("./cassie/cassiemujoco/cassie.xml", reinit=True)
             if not (".xml" in terrain):     # If not xml file, assume specify direction and angle for tilt
                 direct, angle = terrain.split("_")
                 if direct == "left":
@@ -300,7 +300,7 @@ default_mass = .1498
 if args.full:
     print("Running full test")
     # Run all terrains and missions
-    terrains = ["cassie.xml", "noise1.npy", "noise2.npy", "noise3.npy", "rand_hill1.npy", "rand_hill2.npy", "rand_hill3.npy"
+    terrains = ["cassie.xml", "noise1.npy", "noise2.npy", "noise3.npy", "rand_hill1.npy", "rand_hill2.npy", "rand_hill3.npy",
                 "left_3", "right_3", "up_3", "down_3"]
     missions = ["curvy", "straight", "90_left", "90_right"]
     mission_speeds = [0.5, 0.9, 1.4, 1.9, 2.3, 2.8]
@@ -325,7 +325,7 @@ for mission in missions:
             mission_dict[mission+str(speed)] = pickle.load(mission_file)         
 
 # Make list of test args
-test_args = [(mission, mission_speed, os.path.join(model_dir, terrain), friction, mass) \
+test_args = [(mission, mission_speed, terrain, friction, mass) \
             for terrain in terrains for mission in missions for mission_speed in mission_speeds for friction in frictions for mass in masses]
 # test_args = test_args[0:4] # For debugging. Makes n_procs > 4 fail obbiously
 
@@ -386,10 +386,6 @@ if not args.vis:
     ray.shutdown()
     with open(os.path.join(args.path, "5k_test.pkl"), 'wb') as savefile:
         pickle.dump([pass_data, terrain_data, mission_data, mission_speed_data, friction_data, mass_data], savefile)
-        # pickle.dump(terrain_data, savefile)
-        # pickle.dump(mission_data, savefile)
-        # pickle.dump(friction_data, savefile)
-        # pickle.dump(mass_data, savefile)
 
     report_stats(args.path)
 
