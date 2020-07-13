@@ -120,7 +120,7 @@ class PPO:
 
         self.save_path = save_path
 
-        os.environ['OMP_NUM_THREADS'] = '1'
+        # os.environ['OMP_NUM_THREA DS'] = '1'
         if args['redis_address'] is not None:
             ray.init(num_cpos=self.n_proc, redis_address=args['redis_address'])
         else:
@@ -330,7 +330,7 @@ class PPO:
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
-            if self.highest_reward > self.max_traj_len and curr_anneal > 0.5:
+            if self.highest_reward > (2/3)*self.max_traj_len and curr_anneal > 0.5:
                 curr_anneal *= anneal_rate
             batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len, anneal=curr_anneal)
 
@@ -448,7 +448,7 @@ class PPO:
 def run_experiment(args):
     from util import env_factory, create_logger
 
-    torch.set_num_threads(1)
+    # torch.set_num_threads(1)
 
     if args.ik_baseline and args.no_delta:
         args.ik_baseline = False
@@ -475,9 +475,9 @@ def run_experiment(args):
             critic = LSTM_V(obs_dim)
         else:
             if args.learn_stddev:
-                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=None, env_name=args.env_name)
+                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=None, env_name=args.env_name, bounded=args.bounded)
             else:
-                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(args.std_dev), env_name=args.env_name)
+                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(args.std_dev), env_name=args.env_name, bounded=args.bounded)
             critic = FF_V(obs_dim)
 
         with torch.no_grad():
