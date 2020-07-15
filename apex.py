@@ -251,6 +251,7 @@ if __name__ == "__main__":
         parser.add_argument("--max_grad_norm", type=float, default=0.05, help="Value to clip gradients at.")
         parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
         parser.add_argument("--recurrent",   action='store_true')
+        parser.add_argument("--bounded",   type=bool, default=False)
 
         args = parser.parse_args()
 
