@@ -136,8 +136,8 @@ class CassieEnv_v2:
         # Set up phase based / load in clock based reward func
         if self.phase_based:
             # variable inputs
-            self.swing_duration = 0.31
-            self.stance_duration = 0.08
+            self.swing_duration = 0.15
+            self.stance_duration = 0.25
             self.stance_mode = "zero"
             # constants
             self.strict_relaxer = 0.1
@@ -246,7 +246,7 @@ class CassieEnv_v2:
         self.orient_time = 500
 
         # Keep track of actions, torques
-        self.prev_action = np.zeros(10)
+        self.prev_action = None
         self.curr_action = None
         self.prev_torque = None
 
@@ -534,10 +534,17 @@ class CassieEnv_v2:
         else:
             done = False
 
+        # make sure trackers aren't None and calculate reward
+        if self.prev_action is None:
+            self.prev_action = action
+        if self.prev_torque is None:
+            self.prev_torque = np.asarray(self.cassie_state.motor.torque[:])
         reward = self.compute_reward(action)
 
         # update previous action
         self.prev_action = action
+        # update previous torque
+        self.prev_torque = np.asarray(self.cassie_state.motor.torque[:])
 
         # TODO: make 0.3 a variable/more transparent
         if reward < self.early_term_cutoff:
@@ -600,9 +607,8 @@ class CassieEnv_v2:
 
             if self.phase_input_mode == "library":
                 # library input -- pick total duration and swing/stance phase based on that. also randomize grounded vs aerial vs zero
-                self.speed = (random.randint(0, 20)) / 10 # constrain speed again
                 total_duration = random.randint(3, 6) / 10 # this if for one swing and stance, so 2 * total_duration = walk cycle time
-                ratio = random.randint(3, 7) / 10
+                ratio = random.randint(2, 8) / 10
                 self.swing_duration = total_duration * ratio
                 self.stance_duration = total_duration - self.swing_duration
                 # also change stance mode
@@ -744,9 +750,9 @@ class CassieEnv_v2:
         # Set up phase based / load in clock based reward func
         if self.phase_based:
             # variable inputs
-            self.swing_duration = 0.31
-            self.stance_duration = 0.08
-            self.stance_mode = "zero"
+            self.swing_duration = 0.2
+            self.stance_duration = 0.2
+            self.stance_mode = "grounded"
             # constants
             self.strict_relaxer = 0.1
             self.have_incentive = True
@@ -843,12 +849,9 @@ class CassieEnv_v2:
         qvel = np.copy(self.sim.qvel())
 
         ref_pos, ref_vel = self.get_ref_state(self.phase)
-        if self.reward_func == "clock":
+        if self.reward_func == "clock" or self.reward_func == "load_clock" or self.reward_func == "switch_clock":
             self.early_term_cutoff = -99.
-            return clock_reward(self, action)            
-        elif self.reward_func == "load_clock" or self.reward_func == "switch_clock":
-            self.early_term_cutoff = -99.
-            return load_clock_reward(self, action)
+            return clock_reward(self, action)
         elif self.reward_func == "low_speed_clock":
             self.early_term_cutoff = -99.
             return low_speed_clock_reward(self, action)
