@@ -627,6 +627,9 @@ class CassieEnv_v2:
                     self.stance_mode = "grounded"
                 else:
                     self.stance_mode = "aerial"
+            total_duration = 1.0 + (0.6 - 1.0) / 3.0 * self.speed
+            self.swing_duration = min((0.25 + ((0.75 - 0.25) / 3) * self.speed) * total_duration, 0.8)
+            self.stance_duration = max(total_duration - self.swing_duration, 0.2)
 
         self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
 
