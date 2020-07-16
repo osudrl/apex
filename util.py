@@ -478,6 +478,8 @@ class EvalProcessClass():
                     elif c == 'r':
                         state = env.reset()
                         speed = env.speed
+                        if hasattr(policy, 'init_hidden_state'):
+                            policy.init_hidden_state()
                         print("Resetting environment via env.reset()")
                     elif c == 'p':
                         push = 100
