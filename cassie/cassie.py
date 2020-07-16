@@ -627,9 +627,9 @@ class CassieEnv_v2:
                     self.stance_mode = "grounded"
                 else:
                     self.stance_mode = "aerial"
-            total_duration = 1.0 + (0.6 - 1.0) / 3.0 * self.speed
-            self.swing_duration = min((0.25 + ((0.75 - 0.25) / 3) * self.speed) * total_duration, 0.8)
-            self.stance_duration = max(total_duration - self.swing_duration, 0.2)
+            total_duration = (0.9 - 0.2 / 3.0 * self.speed) / 2
+            self.swing_duration = (0.375 + ((0.625 - 0.375) / 3) * self.speed) * total_duration
+            self.stance_duration = (0.625 - ((0.625 - 0.375) / 3) * self.speed) * total_duration
 
         self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
 
@@ -795,7 +795,14 @@ class CassieEnv_v2:
             old_phaselen = self.phaselen
             self.set_up_phase_reward()
             self.phase = int(self.phaselen * self.phase / old_phaselen)
-        
+        else:
+            total_duration = (0.9 - 0.2 / 3.0 * self.speed) / 2
+            self.swing_duration = (0.375 + ((0.625 - 0.375) / 3) * self.speed) * total_duration
+            self.stance_duration = (0.625 - ((0.625 - 0.375) / 3) * self.speed) * total_duration
+            old_phaselen = self.phaselen
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+            self.phase = int(self.phaselen * self.phase / old_phaselen)
+
         # if self.reward_func == "aslip_clock":
         #     self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
         #     self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]

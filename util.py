@@ -493,7 +493,7 @@ class EvalProcessClass():
 
                     env.update_speed(speed)
                     # print(speed)
-                    print("speed: ", env.speed)
+                    print(f"speed: {env.speed}\t stance duration: {env.stance_duration}\t swing duration: {env.swing_duration}")
 
                     if env.phase_based and visualize:
                         send((env.swing_duration, env.stance_duration, env.strict_relaxer, env.stance_mode, env.have_incentive))
