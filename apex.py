@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
     parser.add_argument("--learn_gains", default=False, action='store_true', dest='learn_gains')             # learn PD gains or not
     parser.add_argument("--ik_baseline", default=False, action='store_true', dest='ik_baseline')             # use ik as baseline for aslip + delta policies?
-    parser.add_argument("--reward", default="iros_paper", type=str)
+    parser.add_argument("--reward", default=None, type=str)                                             # reward to use. this is a required argument
     # parser.add_argument("--gainsDivide", default=1.0, type=float)
 
     """
@@ -274,6 +274,7 @@ if __name__ == "__main__":
         parser.add_argument("--mission", default="default", type=str)                            # only used by playground environment
         parser.add_argument("--terrain", default=None, type=str)                                 # hfield file name (terrain to use)
         parser.add_argument("--debug", default=False, action='store_true')
+        parser.add_argument("--no_stats", dest="stats", default=True, action='store_false')
         parser.add_argument("--no_viz", default=False, action='store_true')
 
         args = parser.parse_args()

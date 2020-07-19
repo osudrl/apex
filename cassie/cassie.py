@@ -142,6 +142,7 @@ class CassieEnv_v2:
         self.have_incentive = False if "no_incentive" in self.reward_func else True
 
         # Set up phase based / load in clock based reward func
+        self.early_reward = False
         if self.phase_based:
             self.set_up_phase_reward()
         elif self.clock_based:
@@ -261,6 +262,9 @@ class CassieEnv_v2:
 
         self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
 
+        if "early" in self.reward_func:
+            self.early_reward = True
+
         if "library" in self.reward_func:
             self.phase_input_mode = "library"
         else:
@@ -274,6 +278,9 @@ class CassieEnv_v2:
     # Set up clock reward for loaded in phase functions
     def set_up_clock_reward(self, dirname):
         
+        if "early" in self.reward_func:
+            self.early_reward = True
+
         if "load" in self.reward_func:
             self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
             self.left_clock = self.reward_clock_func["left"]
@@ -821,7 +828,10 @@ class CassieEnv_v2:
         ref_pos, ref_vel = self.get_ref_state(self.phase)
         if self.reward_func == "clock" or self.reward_func == "load_clock" or self.reward_func == "switch_clock":
             self.early_term_cutoff = -99.
-            return clock_reward(self, action)
+            if self.early_reward:
+                return early_clock_reward(self, action)
+            else:
+                return clock_reward(self, action)
         elif self.reward_func == "no_speed_clock":
             self.early_term_cutoff = -99.
             return no_speed_clock_reward(self, action)
