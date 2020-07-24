@@ -632,7 +632,11 @@ class CassieEnv_v2:
                 self.swing_duration = random.randint(1, 50) / 100
                 self.stance_duration = random.randint(1, 30) / 100
                 self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
         # ELSE load in clock based reward func
+        elif self.reward_func == "aslip_clock" or self.reward_func == "load_clock":
+            pass
+        # ELSE use simple relationship to define swing and stance duration
         else:
             if self.reward_func == "switch_clock":
                 if self.speed < self.switch_speed:
@@ -642,9 +646,8 @@ class CassieEnv_v2:
             total_duration = (0.9 - 0.2 / 3.0 * self.speed) / 2
             self.swing_duration = (0.375 + ((0.625 - 0.375) / 3) * self.speed) * total_duration
             self.stance_duration = (0.625 - ((0.625 - 0.375) / 3) * self.speed) * total_duration
-
-        self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
-
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+            
         self.simsteps = 0
 
         self.phase = random.randint(0, floor(self.phaselen))
@@ -733,12 +736,16 @@ class CassieEnv_v2:
         else:
             self.speed = 0
 
-        # variable inputs
-        self.swing_duration = 0.15
-        self.stance_duration = 0.25
-        self.stance_mode = "grounded"
-
-        self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+        # load in clock based reward func
+        if self.reward_func == "aslip_clock" or self.reward_func == "load_clock":
+            pass
+        # ELSE use simple relationship to define swing and stance duration
+        else:
+            # variable inputs
+            self.swing_duration = 0.15
+            self.stance_duration = 0.25
+            self.stance_mode = "grounded"
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
 
         if not full_reset:
             qpos, qvel = self.get_ref_state(self.phase)
@@ -807,6 +814,8 @@ class CassieEnv_v2:
             old_phaselen = self.phaselen
             self.set_up_phase_reward()
             self.phase = int(self.phaselen * self.phase / old_phaselen)
+        elif self.reward_func == "aslip_clock":
+            pass
         else:
             total_duration = (0.9 - 0.2 / 3.0 * self.speed) / 2
             self.swing_duration = (0.375 + ((0.625 - 0.375) / 3) * self.speed) * total_duration
@@ -814,17 +823,6 @@ class CassieEnv_v2:
             old_phaselen = self.phaselen
             self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
             self.phase = int(self.phaselen * self.phase / old_phaselen)
-
-        # if self.reward_func == "aslip_clock":
-        #     self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-        #     self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
-        # elif self.reward_func == "switch_clock":
-        #     if self.speed < self.switch_speed:
-        #         self.left_clock = self.walk_clock_func_path["left"]
-        #         self.right_clock = self.walk_clock_func_path["right"]
-        #     else:
-        #         self.left_clock = self.run_clock_func_path["left"]
-        #         self.right_clock = self.run_clock_func_path["right"]
 
     def compute_reward(self, action):
         qpos = np.copy(self.sim.qpos())

@@ -377,10 +377,10 @@ def aslip_clock_reward(self, action):
     straight_diff += height_diff
 
     # force/vel clock errors
-    left_frc_clock = self.left_clock[0](self.phase)
-    right_frc_clock = self.right_clock[0](self.phase)
-    left_vel_clock = self.left_clock[1](self.phase)
-    right_vel_clock = self.right_clock[1](self.phase)
+    left_frc_clock = self.left_clock[0][0](self.phase)
+    right_frc_clock = self.right_clock[0][0](self.phase)
+    left_vel_clock = self.left_clock[0][1](self.phase)
+    right_vel_clock = self.right_clock[0][1](self.phase)
 
     left_frc_score = np.tanh(left_frc_clock * normed_left_frc)
     left_vel_score = np.tanh(left_vel_clock * normed_left_vel)
