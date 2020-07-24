@@ -1,6 +1,6 @@
 import torch
 import sys, pickle, argparse
-from util import color, print_logo, env_factory, create_logger, EvalProcessClass, parse_previous
+from util import color, print_logo, env_factory, create_logger, EvalProcessClass, parse_previous, collect_data
 
 if __name__ == "__main__":
 
@@ -276,6 +276,7 @@ if __name__ == "__main__":
         parser.add_argument("--debug", default=False, action='store_true')
         parser.add_argument("--no_stats", dest="stats", default=True, action='store_false')
         parser.add_argument("--no_viz", default=False, action='store_true')
+        parser.add_argument("--collect_data", default=False, action='store_true')
 
         args = parser.parse_args()
 
@@ -290,8 +291,10 @@ if __name__ == "__main__":
         policy = torch.load(args.path + "actor.pt")
         policy.eval()
 
-        # eval_policy(policy, args, run_args)
-        # eval_policy_input_viz(policy, args, run_args)
-        ev = EvalProcessClass(args, run_args)
-        ev.eval_policy(policy, args, run_args)
-        
+        if args.collect_data:
+            collect_data(policy, args, run_args)
+        else:
+            # eval_policy(policy, args, run_args)
+            # eval_policy_input_viz(policy, args, run_args)
+            ev = EvalProcessClass(args, run_args)
+            ev.eval_policy(policy, args, run_args)

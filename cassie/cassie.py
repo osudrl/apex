@@ -286,6 +286,11 @@ class CassieEnv_v2:
             self.left_clock = self.reward_clock_func["left"]
             self.right_clock = self.reward_clock_func["right"]
             self.reward_func = "load_clock"
+        elif "aslip" in self.reward_func:
+            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", "no_incentive_aslip_clock_strict0.3.pkl"))
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
+            self.reward_func = "aslip_clock"
         else:
 
             if "grounded" in self.reward_func:

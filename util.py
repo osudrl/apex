@@ -7,6 +7,7 @@ from cassie.quaternion_function import *
 from tkinter import *
 import multiprocessing as mp
 from cassie.phase_function import LivePlot
+import matplotlib.pyplot as plt
 
 import tty
 import termios
@@ -580,8 +581,138 @@ class EvalProcessClass():
 
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-            
 
+def collect_data(policy, args, run_args):
+    wait_steps = 0
+    num_cycles = 35
+    speed = 0.0
+
+    if args.reward is None:
+        args.reward = run_args.reward
+
+    if run_args.env_name is None:
+        env_name = args.env_name
+    else:
+        env_name = run_args.env_name
+    if env_name == "Cassie-v0":
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif env_name == "CassiePlayground-v0":
+        env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
+    elif env_name == "CassieNoaccelFootDistOmniscient":
+        env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif env_name == "CassieFootDist":
+        env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif env_name == "CassieNoaccelFootDist":
+        env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif env_name == "CassieNoaccelFootDistNojoint":
+        env = CassieEnv_noaccel_footdist_nojoint(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    else:
+        env = CassieStandingEnv(state_est=run_args.state_est)
+
+    if hasattr(policy, 'init_hidden_state'):
+        policy.init_hidden_state()
+
+    state = torch.Tensor(env.reset_for_test())
+    env.update_speed(speed)
+    env.render()
+
+    time_log, speed_log, grf_log = [], [], []
+
+    # print("iros: ", iros_env.simrate, iros_env.phaselen)
+    # print("aslip: ", aslip_env.simrate, aslip_env.phaselen)
+
+    with torch.no_grad():
+
+        # Run few cycles to stabilize (do separate incase two envs have diff phaselens)
+        for i in range(wait_steps):
+            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+            state, reward, done, _ = env.step(action)
+            env.render()
+            print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}")
+            # curr_qpos = aslip_env.sim.qpos()
+            # print("curr height: ", curr_qpos[2])
+
+        # Collect actual data (avg foot force over simrate)
+        # start_time = time.time()
+        # for i in range(math.floor(num_cycles*env.phaselen)+1):
+        #     action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+        #     state, reward, done, _ = env.step(action)
+        #     speed_log.append([env.speed, env.sim.qvel()[0]])
+
+        #     # grf_log.append(np.concatenate([[time.time()-start_time],env.sim.get_foot_forces()]))
+        #     grf_log.append([time.time()-start_time, env.l_foot_frc, env.r_foot_frc])
+        #     env.render()
+        #     print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}")
+        #     # curr_qpos = aslip_env.sim.qpos()
+        #     # print("curr height: ", curr_qpos[2])
+
+        # Collect actual data (foot force each sim step)
+        print("Start actual data")
+        start_time = time.time()
+        for i in range(num_cycles):
+            for j in range(math.floor(env.phaselen)+1):
+                action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+                for k in range(env.simrate):
+                    env.step_simulation(action)
+                    time_log.append(time.time()-start_time)
+                    speed_log.append([env.speed, env.sim.qvel()[0]])
+                    grf_log.append(env.sim.get_foot_forces())
+                
+                env.time += 1
+                env.phase += env.phase_add
+                if env.phase > env.phaselen:
+                    env.phase = 0
+                    env.counter += 1
+                state = env.get_full_state()
+                env.speed = i * 0.1
+                env.render()
+        
+        time_log, speed_log, grf_log = map(np.array, (time_log, speed_log, grf_log))
+        print(speed_log.shape)
+        print(grf_log.shape)
+
+    ### Process the data
+
+    # average data and get std dev
+    mean_speed = np.mean(speed_log, axis=0)
+    stddev_speed = np.mean(speed_log, axis=0)
+    mean_grfs = np.mean(grf_log[:, 1:], axis=0)
+    stddev_grfs = np.std(grf_log[:, 1:], axis=0)
+    print(mean_speed)
+    print(stddev_speed)
+    print(mean_grfs)
+    print(stddev_grfs)
+
+    ### Save the data
+    output = {
+        "time": time_log,
+        "speed": speed_log,
+        "grfs": grf_log
+    }
+    with open(os.path.join(args.path, "collect_data.pkl"), "wb") as f:
+        pickle.dump(output, f)
+
+    with open(os.path.join(args.path, "collect_data.pkl"), "rb") as f:
+        data = pickle.load(f)
+    
+    time_data = data["time"]
+    speed_data = data["speed"]
+    grf_data = data["grfs"]
+
+    ### Plot the data
+    fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True)
+    axs[0].plot(time_data, speed_data, label="commanded speed")
+    axs[0].plot(time_data, speed_data, label="actual speed")
+    axs[0].set_title("Speed")
+    axs[0].set_xlabel("Time (Seconds)")
+    axs[0].set_ylabel("m/s")
+    axs[1].plot(time_data, grf_log[:,0], label="sim left foot")
+    axs[1].plot(time_data, grf_log[:,1], label="sim right foot")
+    axs[1].set_title("GRFs")
+    axs[1].set_xlabel("Time (Seconds)")
+    axs[1].set_ylabel("Newtons")
+    plt.legend(loc="upper right")
+    plt.show()
 
 # Rule for curriculum learning is that env observation space should be the same (so attributes like env.clock_based or env.state_est shouldn't be different and are forced to be same here)
 # deal with loading hyperparameters of previous run continuation
