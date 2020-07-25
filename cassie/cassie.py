@@ -46,6 +46,8 @@ class CassieEnv_v2:
         self.dynamics_randomization = dynamics_randomization
         self.ik_baseline = ik_baseline
 
+        assert(not (phase_based and clock_based))
+
         # Arguments generally used for curriculum training
         self.reward_func = reward
         self.early_term_cutoff = 0.3
@@ -64,7 +66,6 @@ class CassieEnv_v2:
             self.speed = self.speeds[self.traj_idx]
             self.trajectory = self.trajectories[self.traj_idx]
             self.aslip_traj = True
-            self.clock_based = False
         else:
             self.aslip_traj = False
             if traj == "walking":
@@ -108,11 +109,26 @@ class CassieEnv_v2:
 
         # NOTE: a reference trajectory represents ONE phase cycle
 
+        # phase function variables
+        self.swing_duration = 0.15
+        self.stance_duration = 0.25
+        self.stance_mode = "zero"
+        # constants
+        self.strict_relaxer = 0.1
+        self.have_incentive = False if "no_incentive" in self.reward_func else True
+
         if not self.phase_based:
             # should be floor(len(traj) / simrate) - 1
             # should be VERY cautious here because wrapping around trajectory
             # badly can cause assymetrical/bad gaits
             self.phaselen = floor(len(self.trajectory) / self.simrate) - 1 if not self.aslip_traj else self.trajectory.length - 1
+
+        # Set up phase based / load in clock based reward func
+        self.early_reward = False
+        if self.phase_based:
+            self.set_up_phase_reward()
+        elif self.clock_based:
+            self.set_up_clock_reward(dirname)
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
@@ -133,21 +149,6 @@ class CassieEnv_v2:
         # global flat foot orientation, can be useful part of reward function:
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
         
-        # phase function variables
-        self.swing_duration = 0.15
-        self.stance_duration = 0.25
-        self.stance_mode = "zero"
-        # constants
-        self.strict_relaxer = 0.1
-        self.have_incentive = False if "no_incentive" in self.reward_func else True
-
-        # Set up phase based / load in clock based reward func
-        self.early_reward = False
-        if self.phase_based:
-            self.set_up_phase_reward()
-        elif self.clock_based:
-            self.set_up_clock_reward(dirname)
-
         # tracking various variables for reward funcs
         self.stepcount = 0
         self.l_high = False  # only true if foot is above 0.2m 
@@ -325,33 +326,37 @@ class CassieEnv_v2:
         clock_size     = 2
         # NOTE: phase_based includes clock also
         phase_size     = 5      # swing duration, stance duration, one-hot encoding of stance mode
-        
-        # Find the mirrored trajectory
-        if self.aslip_traj:
-            ref_traj_size = 18
-            mirrored_traj = np.array([6,7,8,9,10,11,0.1,1,2,3,4,5,12,13,14,15,16,17])
-        else:
-            ref_traj_size = 40
-            mirrored_traj = np.array([0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12,
-                                        20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
-            
+
+        # Determine robot state portion of obs, mirr_obs
         if self.state_est:
             base_mir_obs = np.array([0.1, 1, -2, 3, -4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, -16, 17, -18, 19, -20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, -32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42])
             obs_size = state_est_size
         else:
             base_mir_obs = np.array([0.1, 1, 2, -3, 4, -5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, -21, 22, -23, 24, -25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
             obs_size = mjstate_size
+        
+        # CLOCK_BASED : clock, speed
         if self.clock_based:
             append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+speed_size)])
             mirrored_obs = np.concatenate([base_mir_obs, append_obs])
             clock_inds = append_obs[0:clock_size].tolist()
             obs_size += clock_size + speed_size
+        # PHASE_BASED : clock, phase info, speed
         elif self.phase_based:
             append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+phase_size+speed_size)])
             mirrored_obs = np.concatenate([base_mir_obs, append_obs])
             clock_inds = append_obs[0:clock_size].tolist()
             obs_size += clock_size + phase_size + speed_size
+        # REF TRAJ INPUT : use traj indices determined earlier
         else:
+            # Find the mirrored trajectory
+            if self.aslip_traj:
+                ref_traj_size = 18
+                mirrored_traj = np.array([6,7,8,9,10,11,0.1,1,2,3,4,5,12,13,14,15,16,17])
+            else:
+                ref_traj_size = 40
+                mirrored_traj = np.array([0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12,
+                                            20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
             mirrored_traj_sign = np.multiply(np.sign(mirrored_traj), obs_size+np.floor(np.abs(mirrored_traj)))
             mirrored_obs = np.concatenate([base_mir_obs, mirrored_traj_sign])
             clock_inds = None

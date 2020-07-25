@@ -149,8 +149,6 @@ def early_clock_reward(self, action):
 
     # com vel error
     com_vel_error += np.linalg.norm(self.speed - com_vel)
-    if self.speed - com_vel < 0:
-        com_vel_error *= -1
     
     # pelvis motion penalty : straight_diff, height deadzone, pelvis acceleration penalty
     straight_diff = np.abs(qpos[1])  # straight difference penalty
