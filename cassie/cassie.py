@@ -160,6 +160,8 @@ class CassieEnv_v2:
         self.r_foot_pos = np.zeros(3)
         self.l_foot_orient = 0
         self.r_foot_orient = 0
+        self.hiproll_cost = 0
+        self.hiproll_act = 0
 
         # TODO: should this be mujoco tracking var or use state estimator. real command interface will use state est
         # Track pelvis position as baseline for pelvis tracking command inputs
@@ -246,7 +248,7 @@ class CassieEnv_v2:
         self.orient_time = 500
 
         # Keep track of actions, torques
-        self.prev_action = np.zeros(10)
+        self.prev_action = None
         self.curr_action = None
         self.prev_torque = None
 
@@ -479,6 +481,8 @@ class CassieEnv_v2:
         self.r_foot_pos = np.zeros(3)
         self.l_foot_orient_cost = 0
         self.r_foot_orient_cost = 0
+        self.hiproll_cost = 0
+        self.hiproll_act = 0
 
         if self.learn_gains:
             action, learned_gains = action[0:10], action[10:]
@@ -502,6 +506,12 @@ class CassieEnv_v2:
             # Foot Orientation Cost
             self.l_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
             self.r_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
+            # Hip Yaw velocity cost
+            self.hiproll_cost += (np.abs(qvel[6]) + np.abs(qvel[19])) / 3
+            if self.prev_action is not None:
+                self.hiproll_act += 2*np.linalg.norm(self.prev_action[[0, 5]] - action[[0, 5]])
+            else:
+                self.hiproll_act += 0
         
         self.l_foot_frc              /= self.simrate
         self.r_foot_frc              /= self.simrate        
@@ -509,6 +519,8 @@ class CassieEnv_v2:
         self.r_foot_pos              /= self.simrate
         self.l_foot_orient_cost      /= self.simrate
         self.r_foot_orient_cost      /= self.simrate
+        self.hiproll_cost                /= self.simrate
+        self.hiproll_act                 /= self.simrate
 
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -688,6 +700,8 @@ class CassieEnv_v2:
         self.r_foot_frc = 0
         self.l_foot_orient_cost = 0
         self.r_foot_orient_cost = 0
+        self.hiproll_cost = 0
+        self.hiproll_act = 0
 
         if self.dynamics_randomization:
             #### Dynamics Randomization ####
@@ -868,6 +882,10 @@ class CassieEnv_v2:
             return iros_paper_reward(self)
         elif self.reward_func == "5k_speed_reward":
             return old_speed_reward(self)
+        elif self.reward_func == "trajmatch_footorient_hiprollvelact_reward":
+            return trajmatch_footorient_hiprollvelact_reward(self)
+        elif self.reward_func == "speedmatch_footorient_hiprollvelact_reward":
+            return speedmatch_footorient_hiprollvelact_reward(self)
         else:
             raise NotImplementedError
 
