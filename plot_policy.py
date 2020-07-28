@@ -5,7 +5,7 @@ from torch.autograd import Variable
 import time, os, sys
 
 from util import env_factory
-from rl.policies.actor import GaussianMLP_Actor
+from rl.policies.actor import Gaussian_FF_Actor
 
 import argparse
 import pickle
@@ -23,12 +23,17 @@ args = parser.parse_args()
 
 run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 
+print("pre steps: {}\tnum_steps: {}".format(args.pre_steps, args.num_steps))
+print("pre speed: {}\tplot_speed: {}".format(args.pre_speed, args.plot_speed))
+
 # RUN_NAME = run_args.run_name if run_args.run_name != None else "plot"
 
 # RUN_NAME = "7b7e24-seed0"
 # POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
 
 # Load environment and policy
+if (not hasattr('run_args', 'simrate')):
+    run_args.simrate = 50
 env_fn = env_factory(run_args.env_name, traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
                     mirror=False, clock_based=run_args.clock_based, reward="iros_paper", history=run_args.history)
 cassie_env = env_fn()
@@ -64,19 +69,24 @@ pelheight = np.zeros(num_steps*simrate)
 act_diff = np.zeros(num_steps*simrate)
 actuated_pos = np.zeros((num_steps*simrate, 10))
 actuated_vel = np.zeros((num_steps*simrate, 10))
+torque_cost = np.zeros(num_steps*simrate)
+motor_pos = np.zeros((num_steps*simrate, 10))
 prev_action = None
 pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
 vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
+
 # Execute policy and save torques
 with torch.no_grad():
     state = cassie_env.reset_for_test()
     cassie_env.speed = args.pre_speed
+    # cassie_env.update_speed(1.0)
     # cassie_env.side_speed = .2
     for i in range(pre_steps):
         action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
         state, reward, done, _ = cassie_env.step(action)
         state = torch.Tensor(state)
     cassie_env.speed = args.plot_speed
+    # cassie_env.update_speed(1.0)
     for i in range(num_steps):
         action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
         lin_steps = int(60 * 3/4)  # Number of steps to interpolate over. Should be between 0 and self.simrate
@@ -109,10 +119,15 @@ with torch.no_grad():
             targets[i*simrate+j, :] = target
             # print(target)
 
+            zero2zero_clock = 0.5*(np.cos(2*np.pi/(cassie_env.phaselen+1)*(cassie_env.phase-(cassie_env.phaselen+1)/2)) + 1)
+            one2one_clock = 0.5*(np.cos(2*np.pi/(cassie_env.phaselen+1)*cassie_env.phase) + 1)
+
             cassie_env.step_simulation(real_action)
             curr_qpos = cassie_env.sim.qpos()
             curr_qvel = cassie_env.sim.qvel()
+            motor_pos[i*simrate+j, :] = np.array(curr_qpos)[cassie_env.pos_idx]
             torques[i*simrate+j, :] = cassie_env.cassie_state.motor.torque[:]
+            torque_cost[i*simrate+j] = zero2zero_clock*0.006*np.linalg.norm(np.square(torques[i*simrate+j, [0, 1]]))
             GRFs[i*simrate+j, :] = cassie_env.sim.get_foot_forces()
             heights[i*simrate+j] = curr_qpos[2]
             speeds[i*simrate+j] = cassie_env.sim.qvel()[0]
@@ -206,6 +221,22 @@ for i in range(5):
 plt.tight_layout()
 plt.savefig(os.path.join(args.path, "actions.png"))
 
+# Graph motor pos data
+fig, ax = plt.subplots(2, 5, figsize=(15, 5))
+t = np.linspace(0, num_steps-1, num_steps*simrate)
+titles = ["Hip Roll", "Hip Yaw", "Hip Pitch", "Knee", "Foot"]
+ax[0][0].set_ylabel("Motor Angle")
+ax[1][0].set_ylabel("Motor Angle")
+for i in range(5):
+    ax[0][i].plot(t, motor_pos[:, i])
+    ax[0][i].set_title("Left " + titles[i])
+    ax[1][i].plot(t, motor_pos[:, i+5])
+    ax[1][i].set_title("Right " + titles[i])
+    ax[1][i].set_xlabel("Timesteps (0.03 sec)")
+
+plt.tight_layout()
+plt.savefig(os.path.join(args.path, "motor_pos.png"))
+
 # Graph state data
 fig, ax = plt.subplots(2, 2, figsize=(10, 5))
 t = np.linspace(0, num_steps-1, num_steps*simrate)
@@ -264,12 +295,21 @@ plt.tight_layout()
 plt.savefig(os.path.join(args.path, "phaseportrait.png"))
 
 # Misc Plotting
-fig, ax = plt.subplots()
+fig, ax = plt.subplots(1, 1, figsize=(15, 8))
 t = np.linspace(0, num_steps-1, num_steps*simrate)
 # ax.set_ylabel("norm")
 # ax.set_title("Action - Prev Action Norm")
 # ax.plot(t, act_diff)
-ax.set_ylabel("Height (m)")
-ax.set_title("Pelvis Height")
-ax.plot(t, pelheight)
+# ax.set_ylabel("Height (m)")
+# ax.set_title("Torque Cost")
+ax.plot(t, torque_cost)
+# sides = ["Left", "Right"]
+# for i in range(2):
+#     ax[0].plot(t, actuated_vel[:, 5*i], label=sides[i] + " Roll Vel")
+#     ax[0].plot(t, actuated_vel[:, 1+5*i], label=sides[i] + " Yaw Vel")
+#     ax[1].plot(t, torques[:, 5*i], label=sides[i] + " Roll Torque")
+#     ax[1].plot(t, torques[:, 1+5*i], label=sides[i] + " Yaw Torque")
+
+# ax[0].legend()
+# ax[1].legend()
 plt.savefig(os.path.join(args.path, "misc.png"))
