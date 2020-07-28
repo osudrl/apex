@@ -510,11 +510,12 @@ def run_experiment(args):
     action_dim = env_fn().action_space.shape[0]
 
     # Set up Parallelism
-    # os.environ['OMP_NUM_THREADS'] = '1'
-    if args.redis_address is not None:
-        ray.init(num_cpus=args.num_procs, redis_address=args.redis_address)
-    else:
-        ray.init(num_cpus=args.num_procs)
+    os.environ['OMP_NUM_THREADS'] = '1'
+    if not ray.is_initialized():
+        if args.redis_address is not None:
+            ray.init(num_cpus=args.num_procs, redis_address=args.redis_address)
+        else:
+            ray.init(num_cpus=args.num_procs)
 
     # Set seeds
     torch.manual_seed(args.seed)
