@@ -7,6 +7,7 @@ from cassie.quaternion_function import *
 from tkinter import *
 import multiprocessing as mp
 from cassie.phase_function import LivePlot
+import matplotlib.pyplot as plt
 
 import tty
 import termios
@@ -134,6 +135,7 @@ def create_logger(args):
             if args.exchange_reward is not None:
                 output_dir = args.previous[0:-1] + "_NEW-" + args.reward
             else:
+                print(args.previous[0:-1])
                 output_dir = args.previous[0:-1] + '-cont'
         else:
             # get a unique hash for the hyperparameter settings, truncated at 10 chars
@@ -370,12 +372,21 @@ class EvalProcessClass():
 
     #TODO: Add pausing, and window quiting along with other render functionality
     def eval_policy(self, policy, args, run_args):
-        
+
+        def print_input_update(e):
+            print(f"\n\nstance dur.: {e.stance_duration:.2f}\t swing dur.: {e.swing_duration:.2f}\t stance mode: {e.stance_mode}\n")
+
         if run_args.phase_based and not args.no_viz:
             send = self.plot_pipe.send
 
         def isData():
             return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
+        
+        if args.debug:
+            args.stats = False
+
+        if args.reward is None:
+            args.reward = run_args.reward
 
         max_traj_len = args.traj_len
         visualize = not args.no_viz
@@ -385,7 +396,7 @@ class EvalProcessClass():
         else:
             env_name = run_args.env_name
         if env_name == "Cassie-v0":
-            env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=run_args.reward, history=run_args.history)
+            env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
         elif env_name == "CassiePlayground-v0":
             env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
         elif env_name == "CassieNoaccelFootDistOmniscient":
@@ -408,6 +419,7 @@ class EvalProcessClass():
             env.sim.set_hfield_data(hfield_data.flatten())
 
         print(env.reward_func)
+        print()
 
         if hasattr(policy, 'init_hidden_state'):
             policy.init_hidden_state()
@@ -442,42 +454,44 @@ class EvalProcessClass():
                         speed -= 0.1
                     elif c == 'j':
                         env.phase_add += .1
-                        print("Increasing frequency to: {:.1f}".format(env.phase_add))
+                        # print("Increasing frequency to: {:.1f}".format(env.phase_add))
                     elif c == 'h':
                         env.phase_add -= .1
-                        print("Decreasing frequency to: {:.1f}".format(env.phase_add))
+                        # print("Decreasing frequency to: {:.1f}".format(env.phase_add))
                     elif c == 'l':
                         orient_add += .1
-                        print("Increasing orient_add to: ", orient_add)
+                        # print("Increasing orient_add to: ", orient_add)
                     elif c == 'k':
                         orient_add -= .1
-                        print("Decreasing orient_add to: ", orient_add)
+                        # print("Decreasing orient_add to: ", orient_add)
                     
                     elif c == 'x':
                         env.swing_duration += .01
-                        print("Increasing swing duration to: ", env.swing_duration)
+                        print_input_update(env)
                     elif c == 'z':
                         env.swing_duration -= .01
-                        print("Decreasing swing duration  to: ", env.swing_duration)
+                        print_input_update(env)
                     elif c == 'v':
                         env.stance_duration += .01
-                        print("Increasing stance duration to: ", env.stance_duration)
+                        print_input_update(env)
                     elif c == 'c':
                         env.stance_duration -= .01
-                        print("Decreasing stance duration  to: ", env.stance_duration)
+                        print_input_update(env)
 
                     elif c == '1':
                         env.stance_mode = "zero"
-                        print("Stance mode: ", env.stance_mode)
+                        print_input_update(env)
                     elif c == '2':
                         env.stance_mode = "grounded"
-                        print("Stance mode: ", env.stance_mode)
+                        print_input_update(env)
                     elif c == '3':
                         env.stance_mode = "aerial"
-                        print("Stance mode: ", env.stance_mode)
+                        
                     elif c == 'r':
                         state = env.reset()
                         speed = env.speed
+                        if hasattr(policy, 'init_hidden_state'):
+                            policy.init_hidden_state()
                         print("Resetting environment via env.reset()")
                     elif c == 'p':
                         push = 100
@@ -487,15 +501,18 @@ class EvalProcessClass():
                         env.sim.apply_force(force_arr)
                     elif c == 't':
                         slowmo = not slowmo
-                        print("Slowmo : ", slowmo)
+                        print("Slowmo : \n", slowmo)
 
                     env.update_speed(speed)
                     # print(speed)
-                    print("speed: ", env.speed)
 
                     if env.phase_based and visualize:
                         send((env.swing_duration, env.stance_duration, env.strict_relaxer, env.stance_mode, env.have_incentive))
                 
+                if args.stats:
+                    print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}\t phase add: {env.phase_add:.2f}\t orient add: {orient_add}", end="\r")
+                    # print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}\t phase add: {env.phase_add:.2f}\t orient add: {orient_add}", end="\r")
+
                 if hasattr(env, 'simrate'):
                     start = time.time()
 
@@ -564,8 +581,138 @@ class EvalProcessClass():
 
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-            
 
+def collect_data(policy, args, run_args):
+    wait_steps = 0
+    num_cycles = 35
+    speed = 0.0
+
+    if args.reward is None:
+        args.reward = run_args.reward
+
+    if run_args.env_name is None:
+        env_name = args.env_name
+    else:
+        env_name = run_args.env_name
+    if env_name == "Cassie-v0":
+        env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif env_name == "CassiePlayground-v0":
+        env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
+    elif env_name == "CassieNoaccelFootDistOmniscient":
+        env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif env_name == "CassieFootDist":
+        env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif env_name == "CassieNoaccelFootDist":
+        env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    elif env_name == "CassieNoaccelFootDistNojoint":
+        env = CassieEnv_noaccel_footdist_nojoint(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+    else:
+        env = CassieStandingEnv(state_est=run_args.state_est)
+
+    if hasattr(policy, 'init_hidden_state'):
+        policy.init_hidden_state()
+
+    state = torch.Tensor(env.reset_for_test())
+    env.update_speed(speed)
+    env.render()
+
+    time_log, speed_log, grf_log = [], [], []
+
+    # print("iros: ", iros_env.simrate, iros_env.phaselen)
+    # print("aslip: ", aslip_env.simrate, aslip_env.phaselen)
+
+    with torch.no_grad():
+
+        # Run few cycles to stabilize (do separate incase two envs have diff phaselens)
+        for i in range(wait_steps):
+            action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+            state, reward, done, _ = env.step(action)
+            env.render()
+            print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}")
+            # curr_qpos = aslip_env.sim.qpos()
+            # print("curr height: ", curr_qpos[2])
+
+        # Collect actual data (avg foot force over simrate)
+        # start_time = time.time()
+        # for i in range(math.floor(num_cycles*env.phaselen)+1):
+        #     action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+        #     state, reward, done, _ = env.step(action)
+        #     speed_log.append([env.speed, env.sim.qvel()[0]])
+
+        #     # grf_log.append(np.concatenate([[time.time()-start_time],env.sim.get_foot_forces()]))
+        #     grf_log.append([time.time()-start_time, env.l_foot_frc, env.r_foot_frc])
+        #     env.render()
+        #     print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}")
+        #     # curr_qpos = aslip_env.sim.qpos()
+        #     # print("curr height: ", curr_qpos[2])
+
+        # Collect actual data (foot force each sim step)
+        print("Start actual data")
+        start_time = time.time()
+        for i in range(num_cycles):
+            for j in range(math.floor(env.phaselen)+1):
+                action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+                for k in range(env.simrate):
+                    env.step_simulation(action)
+                    time_log.append(time.time()-start_time)
+                    speed_log.append([env.speed, env.sim.qvel()[0]])
+                    grf_log.append(env.sim.get_foot_forces())
+                
+                env.time += 1
+                env.phase += env.phase_add
+                if env.phase > env.phaselen:
+                    env.phase = 0
+                    env.counter += 1
+                state = env.get_full_state()
+                env.speed = i * 0.1
+                env.render()
+        
+        time_log, speed_log, grf_log = map(np.array, (time_log, speed_log, grf_log))
+        print(speed_log.shape)
+        print(grf_log.shape)
+
+    ### Process the data
+
+    # average data and get std dev
+    mean_speed = np.mean(speed_log, axis=0)
+    stddev_speed = np.mean(speed_log, axis=0)
+    mean_grfs = np.mean(grf_log[:, 1:], axis=0)
+    stddev_grfs = np.std(grf_log[:, 1:], axis=0)
+    print(mean_speed)
+    print(stddev_speed)
+    print(mean_grfs)
+    print(stddev_grfs)
+
+    ### Save the data
+    output = {
+        "time": time_log,
+        "speed": speed_log,
+        "grfs": grf_log
+    }
+    with open(os.path.join(args.path, "collect_data.pkl"), "wb") as f:
+        pickle.dump(output, f)
+
+    with open(os.path.join(args.path, "collect_data.pkl"), "rb") as f:
+        data = pickle.load(f)
+    
+    time_data = data["time"]
+    speed_data = data["speed"]
+    grf_data = data["grfs"]
+
+    ### Plot the data
+    fig, axs = plt.subplots(nrows=2, ncols=1, sharex=True)
+    axs[0].plot(time_data, speed_data, label="commanded speed")
+    axs[0].plot(time_data, speed_data, label="actual speed")
+    axs[0].set_title("Speed")
+    axs[0].set_xlabel("Time (Seconds)")
+    axs[0].set_ylabel("m/s")
+    axs[1].plot(time_data, grf_log[:,0], label="sim left foot")
+    axs[1].plot(time_data, grf_log[:,1], label="sim right foot")
+    axs[1].set_title("GRFs")
+    axs[1].set_xlabel("Time (Seconds)")
+    axs[1].set_ylabel("Newtons")
+    plt.legend(loc="upper right")
+    plt.show()
 
 # Rule for curriculum learning is that env observation space should be the same (so attributes like env.clock_based or env.state_est shouldn't be different and are forced to be same here)
 # deal with loading hyperparameters of previous run continuation

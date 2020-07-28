@@ -121,10 +121,10 @@ class PPO:
         self.save_path = save_path
 
         # os.environ['OMP_NUM_THREA DS'] = '1'
-        if args['redis_address'] is not None:
-            ray.init(num_cpos=self.n_proc, redis_address=args['redis_address'])
-        else:
-            ray.init(num_cpus=self.n_proc)
+        # if args['redis_address'] is not None:
+        #     ray.init(num_cpos=self.n_proc, redis_address=args['redis_address'])
+        # else:
+        #     ray.init(num_cpus=self.n_proc)
 
     def save(self, policy, critic):
 
@@ -211,6 +211,43 @@ class PPO:
 
             # start a new worker
             workers.append(worker.remote(*args))
+        
+        # O(n)
+        def merge(buffers):
+            merged = PPOBuffer(self.gamma, self.lam)
+            for buf in buffers:
+                offset = len(merged)
+
+                merged.states  += buf.states
+                merged.actions += buf.actions
+                merged.rewards += buf.rewards
+                merged.values  += buf.values
+                merged.returns += buf.returns
+
+                merged.ep_returns += buf.ep_returns
+                merged.ep_lens    += buf.ep_lens
+
+                merged.traj_idx += [offset + i for i in buf.traj_idx[1:]]
+                merged.ptr += buf.ptr
+
+            return merged
+
+        total_buf = merge(result)
+
+        return total_buf
+
+    def sample_parallel_old(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
+
+        result = []
+        total_steps = 0
+
+        real_proc = self.n_proc
+        if self.limit_cores:
+            real_proc = 48 - 16*int(np.log2(60 / env_fn().simrate))
+            print("limit cores active, using {} cores".format(real_proc))
+            args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
+        result_ids = [self.sample.remote(*args) for _ in range(real_proc)]
+        result = ray.get(result_ids)
         
         # O(n)
         def merge(buffers):
@@ -474,10 +511,11 @@ def run_experiment(args):
 
     # Set up Parallelism
     os.environ['OMP_NUM_THREADS'] = '1'
-    if args.redis_address is not None:
-        ray.init(num_cpus=args.num_procs, redis_address=args.redis_address)
-    else:
-        ray.init(num_cpus=args.num_procs)
+    if not ray.is_initialized():
+        if args.redis_address is not None:
+            ray.init(num_cpus=args.num_procs, redis_address=args.redis_address)
+        else:
+            ray.init(num_cpus=args.num_procs)
 
     # Set seeds
     torch.manual_seed(args.seed)

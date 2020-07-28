@@ -5,7 +5,10 @@ from torch.autograd import Variable
 import time, os, sys
 
 from util import env_factory
+<<<<<<< HEAD
 from rl.policies.actor import Gaussian_FF_Actor
+=======
+>>>>>>> ed7815cacac97f21f6b66cbbf8f22c610e5f1d19
 
 import argparse
 import pickle
@@ -14,7 +17,6 @@ import pickle
 parser = argparse.ArgumentParser()
 # General args
 parser.add_argument("--path", type=str, default=None, help="path to folder containing policy and run details")
-parser.add_argument("--eval", default=False, action="store_true", help="Whether to call policy.eval() or not")
 parser.add_argument("--pre_steps", type=int, default=300, help="Number of \"presteps\" to take for the policy to stabilize before data is recorded")
 parser.add_argument("--num_steps", type=int, default=100, help="Number of steps to record")
 parser.add_argument("--pre_speed", type=float, default=0.5, help="Commanded action during the presteps")
@@ -38,8 +40,7 @@ env_fn = env_factory(run_args.env_name, traj=run_args.traj, simrate=run_args.sim
                     mirror=False, clock_based=run_args.clock_based, reward="iros_paper", history=run_args.history)
 cassie_env = env_fn()
 policy = torch.load(os.path.join(args.path, "actor.pt"))
-if args.eval:
-    policy.eval()
+policy.eval()
 
 if hasattr(policy, 'init_hidden_state'):
     policy.init_hidden_state()
@@ -78,15 +79,14 @@ vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 # Execute policy and save torques
 with torch.no_grad():
     state = cassie_env.reset_for_test()
-    cassie_env.speed = args.pre_speed
-    # cassie_env.update_speed(1.0)
+    cassie_env.update_speed(args.pre_speed)
     # cassie_env.side_speed = .2
     for i in range(pre_steps):
         action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
         state, reward, done, _ = cassie_env.step(action)
         state = torch.Tensor(state)
-    cassie_env.speed = args.plot_speed
-    # cassie_env.update_speed(1.0)
+        # cassie_env.render()
+    cassie_env.update_speed(args.plot_speed)
     for i in range(num_steps):
         action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
         lin_steps = int(60 * 3/4)  # Number of steps to interpolate over. Should be between 0 and self.simrate
@@ -157,6 +157,7 @@ with torch.no_grad():
             cassie_env.counter += 1
 
         state = cassie_env.get_full_state()
+        # cassie_env.render()
 
 # Graph torque data
 fig, ax = plt.subplots(2, 5, figsize=(15, 5))

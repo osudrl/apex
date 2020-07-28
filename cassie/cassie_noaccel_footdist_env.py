@@ -60,6 +60,10 @@ class CassieEnv_noaccel_footdist:
 
         self.P = np.array([100,  100,  88,  96,  50]) 
         self.D = np.array([10.0, 10.0, 8.0, 9.6, 5.0])
+        self.P[0] *= 0.8
+        self.D[0] *= 0.8
+        self.P[1] *= 0.8
+        self.D[1] *= 0.8
 
         self.u = pd_in_t()
 
@@ -187,8 +191,10 @@ class CassieEnv_noaccel_footdist:
         self.y_offset = 0
 
         ### Random commands during training ###
-        self.speed_schedule = np.zeros(4)
+        self.speed_schedule = np.zeros(3)
         self.orient_add = 0
+        self.orient_command = 0
+        self.orient_time = 1000 
 
 
         # Keep track of actions, torques
@@ -219,7 +225,12 @@ class CassieEnv_noaccel_footdist:
         self.torque_cost = 0
         self.hiproll_cost = 0
         self.hiproll_act = 0
+        self.hipyaw_vel = 0
+        self.hipyaw_act = 0
+        self.pel_stable = 0
         self.prev_torque = None
+        self.left_rollyaw_torque_cost = 0
+        self.right_rollyaw_torque_cost = 0
 
         self.debug = False
 
@@ -389,8 +400,13 @@ class CassieEnv_noaccel_footdist:
         self.torque_cost = 0
         self.hiproll_cost = 0
         self.hiproll_act = 0
+        self.hipyaw_vel = 0
+        self.hipyaw_act = 0
         foot_pos = np.zeros(6)
         self.smooth_cost = 0
+        self.pel_stable = 0
+        self.left_rollyaw_torque_cost = 0
+        self.right_rollyaw_torque_cost = 0
 
         for _ in range(self.simrate):
             self.step_simulation(action)
@@ -402,10 +418,16 @@ class CassieEnv_noaccel_footdist:
 
             # Hip Yaw velocity cost
             self.hiproll_cost += (np.abs(qvel[6]) + np.abs(qvel[19])) / 3
+            self.hipyaw_vel += (np.abs(qvel[7]) + np.abs(qvel[20]))
             if self.prev_action is not None:
                 self.hiproll_act += 2*np.linalg.norm(self.prev_action[[0, 5]] - action[[0, 5]])
+                self.hipyaw_act += 2*np.linalg.norm(self.prev_action[[1, 6]] - action[[1, 6]])
             else:
                 self.hiproll_act += 0
+                self.hipyaw_act += 0
+
+            # Stable Pelvis cost
+            self.pel_stable += 0.05*(np.abs(self.cassie_state.pelvis.rotationalVelocity[:]).sum() + np.abs(self.cassie_state.pelvis.translationalAcceleration[:]).sum())
 
             # Foot height cost
             des_height = 0.15
@@ -485,6 +507,9 @@ class CassieEnv_noaccel_footdist:
                 self.smooth_cost += 0
             self.prev_torque = curr_torques
             self.torque_cost += 0.00006*np.linalg.norm(np.square(curr_torques))
+            self.left_rollyaw_torque_cost += zero2zero_clock*0.006*np.linalg.norm(np.square(curr_torques[[0, 1]]))
+            self.right_rollyaw_torque_cost += one2one_clock*0.006*np.linalg.norm(np.square(curr_torques[[5, 6]]))
+
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -498,8 +523,13 @@ class CassieEnv_noaccel_footdist:
         self.r_foot_cost_clock          /= self.simrate
         self.smooth_cost                /= self.simrate
         self.torque_cost                /= self.simrate
-        self.hiproll_cost                /= self.simrate
-        self.hiproll_act                 /= self.simrate
+        self.hiproll_cost               /= self.simrate
+        self.hiproll_act                /= self.simrate
+        self.hipyaw_vel                 /= self.simrate
+        self.hipyaw_act                 /= self.simrate
+        self.pel_stable                 /= self.simrate
+        self.left_rollyaw_torque_cost   /= self.simrate
+        self.right_rollyaw_torque_cost  /= self.simrate
 
         # print("hipyaw cost: ", self.hipyaw_cost)
         # print("torquecost: ", self.torque_cost)
@@ -527,6 +557,9 @@ class CassieEnv_noaccel_footdist:
 
         # update previous action
         self.prev_action = action
+        self.speed = self.speed_schedule[min(int(np.floor(self.time/self.speed_time)), 2)]
+        if self.time > self.orient_time:
+            self.orient_add = self.orient_command
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.3:
@@ -585,13 +618,19 @@ class CassieEnv_noaccel_footdist:
             self.phaselen = self.trajectory.length - 1
         else:
             self.speed = (random.randint(0, 30)) / 10
+            # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
+            self.speed_schedule = self.speed*np.ones(3)
+            self.speed_time = 100 - np.random.randint(-20, 20)
+            self.speed = self.speed_schedule[0]
         # Make sure that if speed is above 2, freq is at least 1.2
-        # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
-        #     self.phase_add = 1.3 + 0.7*random.random()
-        # else:
-        self.phase_add = 1 + random.random()
+        if self.speed > 1.7 or np.any(self.speed_schedule > 1.7):
+            self.phase_add = 1.3 + 0.7*random.random()
+        else:
+            self.phase_add = 1 + random.random()
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
+        self.orient_command = 0#random.randint(-10, 10) * np.pi / 25
+        self.orient_time = 500#random.randint(50, 200) 
 
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
@@ -636,7 +675,12 @@ class CassieEnv_noaccel_footdist:
         self.torque_cost = 0
         self.hiproll_cost = 0
         self.hiproll_act = 0
+        self.hipyaw_vel = 0
+        self.hipyaw_act = 0
+        self.pel_stable = 0
         self.prev_torque = None
+        self.left_rollyaw_torque_cost = 0
+        self.right_rollyaw_torque_cost = 0
 
         return self.get_full_state()
 
@@ -657,6 +701,10 @@ class CassieEnv_noaccel_footdist:
             self.phaselen = self.trajectory.length - 1
         else:
             self.speed = 0
+
+        self.speed_schedule = self.speed * np.ones(3)
+        self.orient_command = 0
+        self.orient_time = 1000 
 
         if not full_reset:
             qpos, qvel = self.get_ref_state(self.phase)
@@ -697,7 +745,12 @@ class CassieEnv_noaccel_footdist:
         self.torque_cost = 0
         self.hiproll_cost = 0
         self.hiproll_act = 0
+        self.hipyaw_vel = 0
+        self.hipyaw_act = 0
+        self.pel_stable = 0
         self.prev_torque = None
+        self.left_rollyaw_torque_cost = 0
+        self.right_rollyaw_torque_cost = 0
 
         return self.get_full_state()
 
@@ -777,6 +830,12 @@ class CassieEnv_noaccel_footdist:
             return speedmatch_footheightsmooth_footorient_hiproll_reward(self)
         elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiprollvelact_reward":
             return speedmatch_footheightsmooth_footorient_hiprollvelact_reward(self)
+        elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiprollvelact_orientchange_reward":
+            return speedmatch_footheightsmooth_footorient_hiprollvelact_orientchange_reward(self)
+        elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiprollyawvelact_reward":
+            return speedmatch_footheightsmooth_footorient_hiprollyawvelact_reward(self)
+        elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiprollyawphasetorque_reward":
+            return speedmatch_footheightsmooth_footorient_hiprollyawphasetorque_reward(self)
         else:
             raise NotImplementedError
 

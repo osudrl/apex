@@ -1,6 +1,6 @@
 import torch
 import sys, pickle, argparse
-from util import color, print_logo, env_factory, create_logger, EvalProcessClass, parse_previous
+from util import color, print_logo, env_factory, create_logger, EvalProcessClass, parse_previous, collect_data
 
 if __name__ == "__main__":
 
@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
     parser.add_argument("--learn_gains", default=False, action='store_true', dest='learn_gains')             # learn PD gains or not
     parser.add_argument("--ik_baseline", default=False, action='store_true', dest='ik_baseline')             # use ik as baseline for aslip + delta policies?
-    parser.add_argument("--reward", default="iros_paper", type=str)
+    parser.add_argument("--reward", default=None, type=str)                                             # reward to use. this is a required argument
     # parser.add_argument("--gainsDivide", default=1.0, type=float)
 
     """
@@ -274,7 +274,9 @@ if __name__ == "__main__":
         parser.add_argument("--mission", default="default", type=str)                            # only used by playground environment
         parser.add_argument("--terrain", default=None, type=str)                                 # hfield file name (terrain to use)
         parser.add_argument("--debug", default=False, action='store_true')
+        parser.add_argument("--no_stats", dest="stats", default=True, action='store_false')
         parser.add_argument("--no_viz", default=False, action='store_true')
+        parser.add_argument("--collect_data", default=False, action='store_true')
 
         args = parser.parse_args()
 
@@ -289,8 +291,10 @@ if __name__ == "__main__":
         policy = torch.load(args.path + "actor.pt")
         policy.eval()
 
-        # eval_policy(policy, args, run_args)
-        # eval_policy_input_viz(policy, args, run_args)
-        ev = EvalProcessClass(args, run_args)
-        ev.eval_policy(policy, args, run_args)
-        
+        if args.collect_data:
+            collect_data(policy, args, run_args)
+        else:
+            # eval_policy(policy, args, run_args)
+            # eval_policy_input_viz(policy, args, run_args)
+            ev = EvalProcessClass(args, run_args)
+            ev.eval_policy(policy, args, run_args)

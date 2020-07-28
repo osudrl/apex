@@ -94,6 +94,8 @@ class CassieAslipTrajectory:
         self.pos_f_interp = trajectory["pos_f_interp"]
         self.ik_pos = None
 
+    def __len__(self):
+        return self.length
 
 # delta position : difference between desired taskspace position and current position.
 def get_ref_aslip_ext_state(self, current_state, last_compos, phase=None, offset=None):
