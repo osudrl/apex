@@ -28,13 +28,13 @@ class PPOBuffer:
     A buffer for storing trajectory data and calculating returns for the policy
     and critic updates.
     This container is intentionally not optimized w.r.t. to memory allocation
-    speed because such allocation is almost never a bottleneck for policy 
-    gradient. 
-    
+    speed because such allocation is almost never a bottleneck for policy
+    gradient.
+
     On the other hand, experience buffers are a frequent source of
     off-by-one errors and other bugs in policy gradient implementations, so
     this code is optimized for clarity and readability, at the expense of being
-    (very) marginally slower than some other implementations. 
+    (very) marginally slower than some other implementations.
     (Premature optimization is the root of all evil).
     """
     def __init__(self, gamma=0.99, lam=0.95, use_gae=False):
@@ -51,7 +51,7 @@ class PPOBuffer:
 
         self.ptr = 0
         self.traj_idx = [0]
-    
+
     def __len__(self):
         return len(self.states)
 
@@ -69,19 +69,19 @@ class PPOBuffer:
         self.values  += [value.squeeze(0)]
 
         self.ptr += 1
-    
+
     def finish_path(self, last_val=None):
         self.traj_idx += [self.ptr]
         rewards = self.rewards[self.traj_idx[-2]:self.traj_idx[-1]]
 
         returns = []
 
-        R = last_val.squeeze(0).copy() # Avoid copy?
+        R = last_val.squeeze(0).copy()  # Avoid copy?
         for reward in reversed(rewards):
             R = self.gamma * R + reward
-            returns.insert(0, R) # TODO: self.returns.insert(self.path_idx, R) ? 
-                                 # also technically O(k^2), may be worth just reversing list
-                                 # BUG? This is adding copies of R by reference (?)
+            returns.insert(0, R)  # TODO: self.returns.insert(self.path_idx, R) ?
+                                  # also technically O(k^2), may be worth just reversing list
+                                  # BUG? This is adding copies of R by reference (?)
 
         self.returns += returns
 
@@ -140,16 +140,16 @@ class PPO:
     @torch.no_grad()
     def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
         """
-        Sample at least min_steps number of total timesteps, truncating 
+        Sample at least min_steps number of total timesteps, truncating
         trajectories only if they exceed max_traj_len number of timesteps
         """
-        torch.set_num_threads(1) # By default, PyTorch will use multiple cores to speed up operations.
-                                 # This can cause issues when Ray also uses multiple cores, especially on machines
-                                 # with a lot of CPUs. I observed a significant speedup when limiting PyTorch 
-                                 # to a single core - I think it basically stopped ray workers from stepping on each
-                                 # other's toes.
+        torch.set_num_threads(1)    # By default, PyTorch will use multiple cores to speed up operations.
+                                    # This can cause issues when Ray also uses multiple cores, especially on machines
+                                    # with a lot of CPUs. I observed a significant speedup when limiting PyTorch 
+                                    # to a single core - I think it basically stopped ray workers from stepping on each
+                                    # other's toes.
 
-        env = WrapEnv(env_fn) # TODO
+        env = WrapEnv(env_fn)  # TODO
 
         memory = PPOBuffer(self.gamma, self.lam)
 
@@ -211,7 +211,7 @@ class PPO:
 
             # start a new worker
             workers.append(worker.remote(*args))
-        
+
         # O(n)
         def merge(buffers):
             merged = PPOBuffer(self.gamma, self.lam)
@@ -248,7 +248,7 @@ class PPO:
             args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
         result_ids = [self.sample.remote(*args) for _ in range(real_proc)]
         result = ray.get(result_ids)
-        
+
         # O(n)
         def merge(buffers):
             merged = PPOBuffer(self.gamma, self.lam)
@@ -273,7 +273,6 @@ class PPO:
 
         return total_buf
 
-
     def update_policy(self, obs_batch, action_batch, return_batch, advantage_batch, mask, env_fn, mirror_observation=None, mirror_action=None):
         policy = self.policy
         critic = self.critic
@@ -286,9 +285,9 @@ class PPO:
         with torch.no_grad():
             old_pdf = old_policy.distribution(obs_batch)
             old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
-        
+
         log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
-        
+
         ratio = (log_probs - old_log_probs).exp()
 
         cpi_loss = ratio * advantage_batch * mask
@@ -301,29 +300,29 @@ class PPO:
 
         # Mirror Symmetry Loss
         if mirror_observation is not None and mirror_action is not None:
-          env = env_fn()
-          deterministic_actions = policy(obs_batch)
-          if env.clock_based:
-              if self.recurrent:
-                  mir_obs = torch.stack([mirror_observation(obs_batch[i,:,:], env.clock_inds) for i in range(obs_batch.shape[0])])
-                  mirror_actions = policy(mir_obs)
-              else:
-                mir_obs = mirror_observation(obs_batch, env.clock_inds)
-                mirror_actions = policy(mir_obs)
-          else:
-              if self.recurrent:
-                mirror_actions = policy(mirror_observation(torch.stack([mirror_observation(obs_batch[i,:,:]) for i in range(obs_batch.shape[0])])))
-              else:
-                mirror_actions = policy(mirror_observation(obs_batch))
-          mirror_actions = mirror_action(mirror_actions)
-          mirror_loss = 4 * (deterministic_actions - mirror_actions).pow(2).mean()
+            env = env_fn()
+            deterministic_actions = policy(obs_batch)
+            if env.clock_based:
+                if self.recurrent:
+                    mir_obs = torch.stack([mirror_observation(obs_batch[i,:,:], env.clock_inds) for i in range(obs_batch.shape[0])])
+                    mirror_actions = policy(mir_obs)
+                else:
+                    mir_obs = mirror_observation(obs_batch, env.clock_inds)
+                    mirror_actions = policy(mir_obs)
+            else:
+                if self.recurrent:
+                    mirror_actions = policy(mirror_observation(torch.stack([mirror_observation(obs_batch[i,:,:]) for i in range(obs_batch.shape[0])])))
+                else:
+                    mirror_actions = policy(mirror_observation(obs_batch))
+            mirror_actions = mirror_action(mirror_actions)
+            mirror_loss = 0.4 * (deterministic_actions - mirror_actions).pow(2).mean()
         else:
-          mirror_loss = 0 
+            mirror_loss = 0
 
         self.actor_optimizer.zero_grad()
         (actor_loss + mirror_loss + entropy_penalty).backward()
 
-        # Clip the gradient norm to prevent "unlucky" minibatches from 
+        # Clip the gradient norm to prevent "unlucky" minibatches from
         # causing pathological updates
         torch.nn.utils.clip_grad_norm_(policy.parameters(), self.grad_clip)
         self.actor_optimizer.step()
@@ -331,13 +330,13 @@ class PPO:
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
 
-        # Clip the gradient norm to prevent "unlucky" minibatches from 
+        # Clip the gradient norm to prevent "unlucky" minibatches from
         # causing pathological updates
         torch.nn.utils.clip_grad_norm_(critic.parameters(), self.grad_clip)
         self.critic_optimizer.step()
 
         with torch.no_grad():
-          kl = kl_divergence(pdf, old_pdf)
+            kl = kl_divergence(pdf, old_pdf)
 
         if mirror_observation is not None and mirror_action is not None:
             mirror_loss_return = mirror_loss.item()
@@ -440,7 +439,7 @@ class PPO:
                 # TODO: add verbosity arguments to suppress this
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
-                # Early stopping 
+                # Early stopping
                 if np.mean(kl) > 0.02:
                     print("Max kl reached, stopping optimization early.")
                     break
@@ -499,7 +498,7 @@ def run_experiment(args):
 
     if args.ik_baseline and args.no_delta:
         args.ik_baseline = False
-    
+
     # TODO: remove this at some point once phase_based is stable
     if args.phase_based:
         args.clock_based = False
