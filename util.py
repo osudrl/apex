@@ -13,7 +13,7 @@ import tty
 import termios
 import select
 import numpy as np
-from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist
+from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_novel_footdist, CassieEnv_mininput
 from cassie.cassiemujoco import CassieSim
 
 class color:
@@ -408,9 +408,13 @@ class EvalProcessClass():
         elif env_name == "CassieFootDist":
             env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
         elif env_name == "CassieNoaccelFootDist":
-            env = CassieEnv_noaccel_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+            env = CassieEnv_noaccel_footdist(traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
         elif env_name == "CassieNoaccelFootDistNojoint":
             env = CassieEnv_noaccel_footdist_nojoint(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        elif env_name == "CassieNovelFootDist":
+            env = CassieEnv_novel_footdist(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
+        elif env_name == "CassieMinInput":
+            env = CassieEnv_mininput(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
         else:
             env = CassieStandingEnv(state_est=run_args.state_est)
         
@@ -463,10 +467,10 @@ class EvalProcessClass():
                         env.phase_add -= .1
                         # print("Decreasing frequency to: {:.1f}".format(env.phase_add))
                     elif c == 'l':
-                        orient_add += .1
+                        orient_add -= .1
                         # print("Increasing orient_add to: ", orient_add)
                     elif c == 'k':
-                        orient_add -= .1
+                        orient_add += .1
                         # print("Decreasing orient_add to: ", orient_add)
                     
                     elif c == 'x':
@@ -514,7 +518,7 @@ class EvalProcessClass():
                         send((env.swing_duration, env.stance_duration, env.strict_relaxer, env.stance_mode, env.have_incentive))
                 
                 if args.stats:
-                    print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}\t phase add: {env.phase_add:.2f}\t orient add: {orient_add}", end="\r")
+                    print(f"act spd: {env.sim.qvel()[0]:.2f}   cmd speed: {env.speed:.2f}   phase add: {env.phase_add:.2f}   orient add: {orient_add:.2f}", end="\r")
                     # print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}\t phase add: {env.phase_add:.2f}\t orient add: {orient_add}", end="\r")
 
                 if hasattr(env, 'simrate'):

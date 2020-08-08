@@ -79,6 +79,7 @@ class CassieEnv_noaccel_footdist:
 
         # NOTE: a reference trajectory represents ONE phase cycle
         self.var_clock = True
+        self.phase_based = False
 
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
