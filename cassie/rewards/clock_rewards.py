@@ -170,15 +170,15 @@ def early_clock_reward(self, action):
     right_vel_clock = self.right_clock[1](self.phase)
 
     # scaled force/vel reward
-    # left_frc_score = np.tanh(left_frc_clock * normed_left_frc)
-    # left_vel_score = np.tanh(left_vel_clock * normed_left_vel)
-    # right_frc_score = np.tanh(right_frc_clock * normed_right_frc)
-    # right_vel_score = np.tanh(right_vel_clock * normed_right_vel)
+    left_frc_score = np.tanh(left_frc_clock * normed_left_frc)
+    left_vel_score = np.tanh(left_vel_clock * normed_left_vel)
+    right_frc_score = np.tanh(right_frc_clock * normed_right_frc)
+    right_vel_score = np.tanh(right_vel_clock * normed_right_vel)
 
-    left_frc_score = np.tan(np.pi/4 * left_frc_clock * normed_left_frc)
-    left_vel_score = np.tan(np.pi/4 * left_vel_clock * normed_left_vel)
-    right_frc_score = np.tan(np.pi/4 * right_frc_clock * normed_right_frc)
-    right_vel_score = np.tan(np.pi/4 * right_vel_clock * normed_right_vel)
+    # left_frc_score = np.tan(np.pi/4 * left_frc_clock * normed_left_frc)
+    # left_vel_score = np.tan(np.pi/4 * left_vel_clock * normed_left_vel)
+    # right_frc_score = np.tan(np.pi/4 * right_frc_clock * normed_right_frc)
+    # right_vel_score = np.tan(np.pi/4 * right_vel_clock * normed_right_vel)
 
     foot_frc_score = left_frc_score + right_frc_score
     foot_vel_score = left_vel_score + right_vel_score
@@ -194,10 +194,10 @@ def early_clock_reward(self, action):
     action_penalty = 5 * sum(np.abs(self.prev_action - action)) / len(action)
 
     reward = 0.250 * foot_frc_score + \
-             0.250 * foot_vel_score + \
+             0.350 * foot_vel_score + \
              0.200 * np.exp(-com_vel_error) + \
-             0.150 * np.exp(-(com_orient_error + foot_orient_error)) + \
-             0.150 * np.exp(-pelvis_motion)
+             0.100 * np.exp(-(com_orient_error + foot_orient_error)) + \
+             0.100 * np.exp(-pelvis_motion)
             #  0.050 * np.exp(-hip_roll_penalty) + \
             #  0.025 * np.exp(-torque_penalty) + \
             #  0.025 * np.exp(-action_penalty)
@@ -229,7 +229,7 @@ def no_speed_clock_reward(self, action):
 
     # These used for normalizing the foot forces and velocities
     desired_max_foot_frc = 250
-    desired_max_foot_vel = 2.0
+    desired_max_foot_vel = 3.0
     orient_targ = np.array([1, 0, 0, 0])
 
     # state info
