@@ -138,7 +138,7 @@ class PPO:
 
     @ray.remote
     @torch.no_grad()
-    def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
+    def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0, term_thresh=0):
         """
         Sample at least min_steps number of total timesteps, truncating 
         trajectories only if they exceed max_traj_len number of timesteps
@@ -171,7 +171,7 @@ class PPO:
                 action = policy(state, deterministic=False, anneal=anneal)
                 value = critic(state)
 
-                next_state, reward, done, _ = env.step(action.numpy())
+                next_state, reward, done, _ = env.step(action.numpy(), term_thresh=term_thresh)
 
                 memory.store(state.numpy(), action.numpy(), reward, value.numpy())
 
@@ -185,10 +185,10 @@ class PPO:
 
         return memory
 
-    def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
+    def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0, term_thresh=0):
 
         worker = self.sample
-        args = (self, env_fn, policy, critic, min_steps // self.n_proc, max_traj_len, deterministic, anneal)
+        args = (self, env_fn, policy, critic, min_steps // self.n_proc, max_traj_len, deterministic, anneal, term_thresh)
 
         # Create pool of workers, each getting data for min_steps
         workers = [worker.remote(*args) for _ in range(self.n_proc)]
@@ -373,13 +373,19 @@ class PPO:
             act_mirr = env.mirror_action
 
         curr_anneal = 1.0
+        curr_thresh = 0
+        start_itr = 0
+        ep_counter = 0
+        do_term = False
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
             if self.highest_reward > (2/3)*self.max_traj_len and curr_anneal > 0.5:
                 curr_anneal *= anneal_rate
-            batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len, anneal=curr_anneal)
+            if do_term and curr_thresh < 0.35:
+                curr_thresh = .1 * 1.0006**(itr-start_itr)
+            batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len, anneal=curr_anneal, term_thresh=curr_thresh)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
             samp_time = time.time() - sample_start
@@ -448,6 +454,12 @@ class PPO:
             opt_time = time.time() - optimizer_start
             print("optimizer time elapsed: {:.2f} s".format(opt_time))
 
+            if np.mean(batch.ep_lens) >= self.max_traj_len * 0.75:
+                ep_counter += 1
+            if do_term == False and ep_counter > 50:
+                do_term = True
+                start_itr = itr
+
             if logger is not None:
                 evaluate_start = time.time()
                 test = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps // 2, self.max_traj_len, deterministic=True)
@@ -486,6 +498,7 @@ class PPO:
                 logger.add_scalar("Misc/Sample Times", samp_time, itr)
                 logger.add_scalar("Misc/Optimize Times", opt_time, itr)
                 logger.add_scalar("Misc/Evaluation Times", eval_time, itr)
+                logger.add_scalar("Misc/Termination Threshold", curr_thresh, itr)
 
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:

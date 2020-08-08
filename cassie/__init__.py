@@ -6,6 +6,8 @@ from .cassie_noaccel_footdist_omniscient import CassieEnv_noaccel_footdist_omnis
 from .cassie_footdist_env import CassieEnv_footdist
 from .cassie_noaccel_footdist_env import CassieEnv_noaccel_footdist
 from .cassie_noaccel_footdist_nojoint_env import CassieEnv_noaccel_footdist_nojoint
+from .cassie_novel_footdist_env import CassieEnv_novel_footdist
+from .cassie_mininput_env import CassieEnv_mininput
 
 
 from .cassiemujoco import *

@@ -489,7 +489,7 @@ class CassieEnv_v2:
 
         self.cassie_state = self.sim.step_pd(self.u)
 
-    def step(self, action, return_omniscient_state=False):
+    def step(self, action, return_omniscient_state=False, f_term=0):
         
         # reset mujoco tracking variables
         self.l_foot_frc = 0

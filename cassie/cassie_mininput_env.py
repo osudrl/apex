@@ -15,7 +15,7 @@ import copy
 
 import pickle
 
-class CassieEnv_noaccel_footdist:
+class CassieEnv_mininput:
     def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -78,14 +78,11 @@ class CassieEnv_noaccel_footdist:
         self.counter = 0 # number of phase cycles completed in episode
 
         # NOTE: a reference trajectory represents ONE phase cycle
-        self.var_clock = True
 
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
         self.phaselen = floor(len(self.trajectory) / self.simrate) - 1 if not self.aslip_traj else self.trajectory.length - 1
-        if self.var_clock: 
-            self.phaselen = floor((.9*2000 / self.simrate) - 1)
 
         self.load_clock = False
         if self.load_clock:
@@ -243,7 +240,7 @@ class CassieEnv_noaccel_footdist:
     def set_up_state_space(self):
 
         mjstate_size   = 40
-        state_est_size = 44
+        state_est_size = 21
 
         speed_size     = 1
 
@@ -260,9 +257,9 @@ class CassieEnv_noaccel_footdist:
                                         20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
         
         if self.state_est:
-            base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, -7, 8, -9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, -21, 22,
-                                    -23, 24, -25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 
-                                    38, 39, 36, 37, 42, 43, 40, 41])
+            base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, -7, 8, -9,   # L and R foot, orient
+                                    -10, 11, -12,     # Rot Vel
+                                    17, -18, 19, -20, 13, -14, 15, -16])
             # base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, 7, 8, 9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, 21, 22,
             #                         23, 24, 25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 36, 37, 38, 
             #                         42, 43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47])
@@ -419,9 +416,7 @@ class CassieEnv_noaccel_footdist:
         # Reward clocks
         one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen+1)*self.phase) + 1)
         zero2zero_clock = 0.5*(np.cos(2*np.pi/(self.phaselen+1)*(self.phase-(self.phaselen+1)/2)) + 1)
-        one2one_var, zero2zero_var = 1, 0
-        if self.var_clock:
-            one2one_var, zero2zero_var = self.clock_fn(self.swing_ratio, self.phase, self.phaselen+1)
+        one2one_var, zero2zero_var = 1, 0#self.clock_fn(self.swing_ratio, self.phase, self.phaselen+1)
         for _ in range(self.simrate):
             self.step_simulation(action)
             qvel = self.sim.qvel()
@@ -667,11 +662,10 @@ class CassieEnv_noaccel_footdist:
             self.speed_time = 100 - np.random.randint(-20, 20)
             self.speed = self.speed_schedule[0]
         # Make sure that if speed is above 2, freq is at least 1.2
-        # if self.speed > 1.7 or np.any(self.speed_schedule > 1.7):
-            # self.phase_add = 1.3 + 0.7*random.random()
-        # else:
-            # self.phase_add = 1 + random.random()
-        self.phase_add = 1
+        if self.speed > 1.7 or np.any(self.speed_schedule > 1.7):
+            self.phase_add = 1.3 + 0.7*random.random()
+        else:
+            self.phase_add = 1 + random.random()
         self.update_speed(self.speed)
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
@@ -832,13 +826,10 @@ class CassieEnv_noaccel_footdist:
             self.offset = ref_pos[self.pos_idx]
         else:
             self.speed = new_speed
-            if self.var_clock:
-                total_duration = (0.9 - 0.2 / 3.0 * self.speed)
-                self.phaselen = floor((total_duration * 2000 / self.simrate) - 1)
-                if new_speed > 1:
-                    self.swing_ratio = 0.4 + .3*(new_speed - 1)/2
-                else:
-                    self.swing_ratio = 0.4 
+            if new_speed > 1:
+                self.swing_ratio = 0.4 + .3*(new_speed - 1)/2
+            else:
+                self.swing_ratio = 0.4 
 
     def compute_reward(self, action):
         # qpos = np.copy(self.sim.qpos())
@@ -1001,14 +992,11 @@ class CassieEnv_noaccel_footdist:
             self.cassie_state.leftFoot.position[:],     # left foot position
             self.cassie_state.rightFoot.position[:],     # right foot position
             new_orient,                                 # pelvis orientation
-            motor_pos,                                     # actuated joint positions
 
-            new_translationalVelocity,                       # pelvis translational velocity
             self.cassie_state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
-            self.cassie_state.motor.velocity[:],                                     # actuated joint velocities
             
-            joint_pos,                                     # unactuated joint positions
-            joint_vel                                      # unactuated joint velocities
+            self.cassie_state.leftFoot.orientation[:],     # unactuated joint positions
+            self.cassie_state.rightFoot.orientation[:]     # unactuated joint velocities
         ])
 
         #TODO: Set up foot position for non state est
