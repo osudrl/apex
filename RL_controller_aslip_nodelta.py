@@ -179,7 +179,7 @@ atexit.register(log)
 # Prevent latency issues by disabling multithreading in pytorch
 torch.set_num_threads(1)
 
-policy = torch.load("./trained_models/aslip_unified_no_delta_80_TS_only.pt")
+policy = torch.load("./trained_models/aslip_unified_no_delta_10_TS_only.pt")
 # policy = torch.load("./trained_models/aslip_unified_no_delta_0_v6.pt")
 policy.eval()
 
@@ -268,7 +268,7 @@ while True:
 
     if platform.node() == 'cassie':
         # Radio control
-        orient_add -= state.radio.channel[3] / 60.0
+        orient_add -= state.radio.channel[1] / 60.0
 
         # Reset orientation on STO
         if state.radio.channel[8] < 0:

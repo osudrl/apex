@@ -247,6 +247,12 @@ MIN_HEIGHT = 0.4
 D_mult = 1  # Reaaaaaally bad stability problems if this is pushed higher as a multiplier
             # Might be worth tuning by joint but something else if probably needed
 
+SCHEDULE_MODE_ON = False
+START_TIME, END_TIME = None, None
+SPEED_SCHEDULE = [0.5, 0.8, 1.9, 0.4, 1.3, 0.5]
+SPEED_HOLD_TIME = 4
+SECONDS_TO_TEST = SPEED_HOLD_TIME * (len(SPEED_SCHEDULE) - 1)
+
 while True:
     # Wait until next cycle time
     while time.monotonic() - t < 60/2000:
@@ -263,7 +269,8 @@ while True:
 
     if platform.node() == 'cassie':
         # Radio control
-        orient_add -= state.radio.channel[3] / 60.0
+        if abs(state.radio.channel[1]) > 0.2:
+            orient_add -= state.radio.channel[1] / 60.0
 
         # Reset orientation on STO
         if state.radio.channel[8] < 0:
@@ -285,24 +292,37 @@ while True:
 
         # Switch the operation mode based on the toggle next to STO
         if state.radio.channel[9] < -0.5: # towards operator means damping shutdown mode
-            operation_mode = 2
+            operation_mode = 2  # 2
             #D_mult = 5.5 + 4.5* state.radio.channel[7]     # Tune with right side knob 1x-10x (went unstable really fast)
                                                             # Consider using this for some sort of p gain based 
 
-        elif state.radio.channel[9] > 0.5: # away from the operator means that standing pose
-            operation_mode = 1
-            standing_height = MIN_HEIGHT + (MAX_HEIGHT - MIN_HEIGHT)*0.5*(state.radio.channel[6] + 1)
+        elif state.radio.channel[9] > 0.5: # away from the operator means speed schedule mode
+            operation_mode = 0  # 1
+            if not SCHEDULE_MODE_ON:
+                START_TIME = tt
+            SCHEDULE_MODE_ON = True
 
         else:                               # Middle means normal walking 
             operation_mode = 0
+            SCHEDULE_MODE_ON = False
         
         # curr_max = max_speed / 2# + (max_speed / 2)*state.radio.channel[4]
         curr_max = max_speed
         # speed_add = (max_speed / 2) * state.radio.channel[4]
         speed_add = 0
-        traj.speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
+        if SCHEDULE_MODE_ON:
+            idx = int((tt-START_TIME) / SPEED_HOLD_TIME)
+            if idx > len(SPEED_SCHEDULE) - 1:
+                SCHEDULE_MODE_ON = False
+                traj.speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
+            else:
+                traj.speed = SPEED_SCHEDULE[idx]
+                traj.speed = max(min_speed, traj.speed)
+                traj.speed = min(max_speed, traj.speed)
+        else:
+            traj.speed = max(min_speed, state.radio.channel[0] * curr_max + speed_add)
         #traj.speed = min(max_speed, state.radio.channel[0] * curr_max + speed_add)
-        
+        print("schedule: ", SCHEDULE_MODE_ON)
         print("speed: ", traj.speed)
         # phase_add = 1+state.radio.channel[5]
         # env.y_speed = max(min_y_speed, -state.radio.channel[1] * max_y_speed)

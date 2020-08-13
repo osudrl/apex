@@ -161,6 +161,8 @@ filep = open(filename, "wb")
 max_speed = 2.0
 min_speed = 0.0
 
+PREFIX = "./"
+
 if len(sys.argv) > 1:
     filename = PREFIX + "logs/" + sys.argv[1]
 else:
@@ -207,6 +209,12 @@ vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 _, offset = traj.update_info(min_speed)
 # offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
+SCHEDULE_MODE_ON = False
+START_TIME, END_TIME = None, None
+SPEED_SCHEDULE = [0.0, 0.8, 1.9, 0.4, 1.3, 0.5, 0.0]
+SPEED_HOLD_TIME = 4
+SECONDS_TO_TEST = SPEED_HOLD_TIME * (len(SPEED_SCHEDULE) - 1)
+
 # Determine whether running in simulation or on the robot
 if platform.node() == 'cassie':
     cassie = CassieUdp(remote_addr='10.10.10.3', remote_port='25010',
@@ -252,7 +260,21 @@ while True:
     if state.radio.channel[8] < 1:
         orient_add = quaternion2euler(state.pelvis.orientation[:])[2]
 
+    if state.radio.channel[9] > 0.5:  # Away from operator means speed schedule walking
+        SCHEDULE_MODE_ON = not SCHEDULE_MODE_ON
+        if SCHEDULE_MODE_ON:
+            START_TIME = tt
+        print("Schedule mode: ", SCHEDULE_MODE_ON)
+
     print("orient add: ", orient_add)
+    if SCHEDULE_MODE_ON:
+        idx = int((tt-START_TIME) / SPEED_HOLD_TIME)
+        if idx > len(SPEED_SCHEDULE) - 1:
+            SCHEDULE_MODE_ON = False
+        else:
+            traj.speed = SPEED_SCHEDULE[idx]
+            traj.speed = max(min_speed, traj.speed)
+            traj.speed = min(max_speed, traj.speed)
     traj.speed = max(min_speed, state.radio.channel[0] * max_speed)
     traj.speed = min(max_speed, state.radio.channel[0] * max_speed)
     print("speed input: ", state.radio.channel[0] * max_speed)

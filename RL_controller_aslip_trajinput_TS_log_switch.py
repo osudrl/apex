@@ -275,7 +275,8 @@ while True:
 
     if platform.node() == 'cassie':
         # Radio control
-        orient_add -= state.radio.channel[3] / 60.0
+        if abs(state.radio.channel[1]) > 0.2:
+            orient_add -= state.radio.channel[1] / 60.0
 
         # Reset orientation on STO
         if state.radio.channel[8] < 0:
