@@ -1,5 +1,6 @@
 from .cassie_playground import CassiePlayground
 from .cassie import CassieEnv_v2 as CassieEnv
+from .cassie_min import CassieEnv_v3 as CassieMinEnv
 from .cassie_standing_env import CassieStandingEnv
 from .cassie import CassieEnv_v2
 from .cassie_noaccel_footdist_omniscient import CassieEnv_noaccel_footdist_omniscient

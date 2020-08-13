@@ -13,7 +13,7 @@ import tty
 import termios
 import select
 import numpy as np
-from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_novel_footdist, CassieEnv_mininput
+from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_novel_footdist, CassieEnv_mininput
 from cassie.cassiemujoco import CassieSim
 
 class color:
@@ -55,12 +55,14 @@ def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based
 
 
     # Custom Cassie Environment
-    if path in ['Cassie-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieFootDist', 'CassieNoaccelFootDist', 'CassieNoaccelFootDistNojoint', 'CassieNovelFootDist', 'CassieMinInput']:
-        from cassie import CassieEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput
+    if path in ['Cassie-v0', 'CassieMin-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieFootDist', 'CassieNoaccelFootDist', 'CassieNoaccelFootDistNojoint', 'CassieNovelFootDist', 'CassieMinInput']:
+        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput
 
         if path == 'Cassie-v0':
             # env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
             env_fn = partial(CassieEnv, traj=traj, simrate=simrate, phase_based=phase_based, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed)
+        elif path == 'CassieMin-v0':
+            env_fn = partial(CassieMinEnv, traj=traj, simrate=simrate, phase_based=phase_based, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, fixed_speed=fixed_speed)
         elif path == 'CassiePlayground-v0':
             env_fn = partial(CassiePlayground, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == 'CassieStandingEnv-v0':
@@ -401,6 +403,8 @@ class EvalProcessClass():
             env_name = run_args.env_name
         if env_name == "Cassie-v0":
             env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        elif env_name == "CassieMin-v0":
+            env = CassieMinEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
         elif env_name == "CassiePlayground-v0":
             env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
         elif env_name == "CassieNoaccelFootDistOmniscient":
