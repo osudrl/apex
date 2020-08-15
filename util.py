@@ -731,6 +731,7 @@ def collect_data(policy, args, run_args):
 def parse_previous(args):
     if args.previous is not None:
         run_args = pickle.load(open(args.previous + "experiment.pkl", "rb"))
+        args.env_name = run_args.env_name
         args.traj = run_args.traj
         args.phase_based = run_args.phase_based
         args.clock_based = run_args.clock_based
