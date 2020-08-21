@@ -4,18 +4,27 @@
 
 Apex is a small, modular library that contains some implementations of continuous reinforcement learning algorithms. Fully compatible with OpenAI gym.
 
+<img src="img/output.gif" alt="running1"/>
+<img src="img/output2.gif" alt="running2"/>
+
 ## Running experiments
 
 ### Basics
 Any algorithm can be run from the apex.py entry point.
 
-To run DDPG on Walker2d-v2,
+To run PPO on a cassie environment,
 
 ```bash
-python apex.py ddpg --env_name Walker2d-v2 --batch_size 64
+python apex.py ppo --env_name Cassie-v0 --num_procs 12 --run_name experiment01
 ```
 
-### Logging details / Monitoring live training progress
+To run TD3 on the gym environment Walker-v2,
+
+```bash
+python apex.py td3_async --env_name Walker-v2 --num_procs 12 --run_name experiment02
+```
+
+## Logging details / Monitoring live training progress
 Tensorboard logging is enabled by default for all algorithms. The logger expects that you supply an argument named ```logdir```, containing the root directory you want to store your logfiles in, and an argument named ```seed```, which is used to seed the pseudorandom number generators.
 
 A basic command line script illustrating this is:
@@ -27,9 +36,9 @@ python apex.py ars --logdir logs/ars --seed 1337
 The resulting directory tree would look something like this:
 ```
 trained_models/                         # directory with all of the saved models and tensorboard logs
-└── td3_async                           # algorithm name
+└── ars                                 # algorithm name
     └── Cassie-v0                       # environment name
-        └── 8b8b12-seed1                # unique run name created with hash of hyperparameters + seed
+        └── 8b8b12-seed1                # unique run name created with hash of hyperparameters
             ├── actor.pt                # actor network for algo
             ├── critic.pt               # critic network for algo
             ├── events.out.tfevents     # tensorboard binary file
@@ -41,17 +50,16 @@ Using tensorboard makes it easy to compare experiments and resume training later
 
 To see live training progress
 
-Run ```$ tensorboard --logdir logs/ --port=8097``` then navigate to ```http://localhost:8097/``` in your browser
+Run ```$ tensorboard --logdir logs/``` then navigate to ```http://localhost:6006/``` in your browser
 
-## Unit tests
-You can run the unit tests using pytest.
+## Cassie Environments:
+* `Cassie-v0` : basic unified environment for walking/running policies
+* `CassieTraj-v0` : unified environment with reference trajectories
+* `CassiePlayground-v0` : environment for executing autonomous missions
+* `CassieStanding-v0` : environment for training standing policies
 
-### To Do
-- [ ] Sphinx documentation and github wiki
-- [ ] Support loading pickle of hyperparameters for resuming training
-- [ ] Improve/Tune implementations of TD3, add capability to resume training for off policy algorithms
-
-## Features:
+## Algorithms:
+#### Currently implemented:
 * Parallelism with [Ray](https://github.com/ray-project/ray)
 * [GAE](https://arxiv.org/abs/1506.02438)/TD(lambda) estimators
 * [PPO](https://arxiv.org/abs/1707.06347), VPG with ratio objective and with log likelihood objective

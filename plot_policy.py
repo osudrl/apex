@@ -4,11 +4,7 @@ import torch
 from torch.autograd import Variable
 import time, os, sys
 
-from util import env_factory
-<<<<<<< HEAD
-from rl.policies.actor import Gaussian_FF_Actor
-=======
->>>>>>> ed7815cacac97f21f6b66cbbf8f22c610e5f1d19
+from util.env import env_factory
 
 import argparse
 import pickle
@@ -28,30 +24,40 @@ run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 print("pre steps: {}\tnum_steps: {}".format(args.pre_steps, args.num_steps))
 print("pre speed: {}\tplot_speed: {}".format(args.pre_speed, args.plot_speed))
 
-# RUN_NAME = run_args.run_name if run_args.run_name != None else "plot"
-
-# RUN_NAME = "7b7e24-seed0"
-# POLICY_PATH = "../trained_models/ppo/Cassie-v0/" + RUN_NAME + "/actor.pt"
-
-# Load environment and policy
-if (not hasattr('run_args', 'simrate')):
-    run_args.simrate = 50
-env_fn = env_factory(run_args.env_name, traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
-                    mirror=False, clock_based=run_args.clock_based, reward="iros_paper", history=run_args.history)
+# Load environment
+env_fn = env = env_factory(
+    run_args.env_name,
+    command_profile=run_args.command_profile,
+    input_profile=run_args.input_profile,
+    simrate=run_args.simrate,
+    dynamics_randomization=run_args.dyn_random,
+    mirror=run_args.mirror,
+    learn_gains=run_args.learn_gains,
+    reward=run_args.reward,
+    history=run_args.history,
+    no_delta=run_args.no_delta,
+    traj=run_args.traj,
+    ik_baseline=run_args.ik_baseline
+)
 cassie_env = env_fn()
+
+# Load policy
 policy = torch.load(os.path.join(args.path, "actor.pt"))
 policy.eval()
-
 if hasattr(policy, 'init_hidden_state'):
     policy.init_hidden_state()
 
-obs_dim = cassie_env.observation_space.shape[0] # TODO: could make obs and ac space static properties
+obs_dim = cassie_env.observation_space.shape[0]  # TODO: could make obs and ac space static properties
 action_dim = cassie_env.action_space.shape[0]
 
-no_delta = cassie_env.no_delta
+if hasattr(cassie_env, "no_delta"):
+    no_delta = cassie_env.no_delta
+else:
+    no_delta = True
 limittargs = False
 lininterp = False
 offset = cassie_env.offset
+learn_gains = cassie_env.learn_gains
 
 num_steps = args.num_steps
 pre_steps = args.pre_steps
@@ -89,6 +95,8 @@ with torch.no_grad():
     cassie_env.update_speed(args.plot_speed)
     for i in range(num_steps):
         action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
+        if learn_gains:
+            action, gain_deltas = action[:10], action[10:]
         lin_steps = int(60 * 3/4)  # Number of steps to interpolate over. Should be between 0 and self.simrate
         alpha = 1 / lin_steps
         for j in range(simrate):
@@ -122,7 +130,10 @@ with torch.no_grad():
             zero2zero_clock = 0.5*(np.cos(2*np.pi/(cassie_env.phaselen+1)*(cassie_env.phase-(cassie_env.phaselen+1)/2)) + 1)
             one2one_clock = 0.5*(np.cos(2*np.pi/(cassie_env.phaselen+1)*cassie_env.phase) + 1)
 
-            cassie_env.step_simulation(real_action)
+            if learn_gains:
+                cassie_env.step_simulation(real_action, learned_gains=gain_deltas)
+            else:
+                cassie_env.step_simulation(real_action)
             curr_qpos = cassie_env.sim.qpos()
             curr_qvel = cassie_env.sim.qvel()
             motor_pos[i*simrate+j, :] = np.array(curr_qpos)[cassie_env.pos_idx]

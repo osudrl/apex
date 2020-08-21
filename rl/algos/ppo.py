@@ -505,19 +505,11 @@ class PPO:
                 self.save(policy, critic)
 
 def run_experiment(args):
-    from util import env_factory, create_logger
-
-    # torch.set_num_threads(1)
-
-    if args.ik_baseline and args.no_delta:
-        args.ik_baseline = False
-
-    # TODO: remove this at some point once phase_based is stable
-    if args.phase_based:
-        args.clock_based = False
+    from util.env import env_factory
+    from util.log import create_logger
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, simrate=args.simrate, phase_based=args.phase_based, clock_based=args.clock_based, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, reward=args.reward, history=args.history)
+    env_fn = env_factory(args.env_name, simrate=args.simrate, command_profile=args.command_profile, input_profile=args.input_profile, learn_gains=args.learn_gains, dynamics_randomization=args.dyn_random, reward=args.reward, history=args.history, mirror=args.mirror, ik_baseline=args.ik_baseline, no_delta=args.no_delta, traj=args.traj)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
 
@@ -565,20 +557,6 @@ def run_experiment(args):
     logger = create_logger(args)
 
     algo = PPO(args=vars(args), save_path=logger.dir)
-
-    print()
-    print("Environment: {}".format(args.env_name))
-    print(" ├ traj:           {}".format(args.traj))
-    print(" ├ phase_based:    {}".format(args.phase_based))
-    print(" ├ clock_based:    {}".format(args.clock_based))
-    print(" ├ state_est:      {}".format(args.state_est))
-    print(" ├ dyn_random:     {}".format(args.dyn_random))
-    print(" ├ no_delta:       {}".format(args.no_delta))
-    print(" ├ mirror:         {}".format(args.mirror))
-    print(" ├ ik baseline:    {}".format(args.ik_baseline))
-    print(" ├ learn gains:    {}".format(args.learn_gains))
-    print(" ├ reward:         {}".format(env_fn().reward_func))
-    print(" └ obs_dim:        {}".format(obs_dim))
 
     print()
     print("Synchronous Distributed Proximal Policy Optimization:")

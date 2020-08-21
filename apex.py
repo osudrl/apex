@@ -1,6 +1,8 @@
 import torch
 import sys, pickle, argparse
-from util import color, print_logo, env_factory, create_logger, EvalProcessClass, parse_previous, collect_data
+from util.logo import print_logo
+from util.log import parse_previous
+from util.eval import EvalProcessClass
 
 if __name__ == "__main__":
 
@@ -10,31 +12,31 @@ if __name__ == "__main__":
     """
         General arguments for configuring the environment
     """
+    # command input, state input, env attributes
+    parser.add_argument("--command_profile", default="clock", type=str.lower, choices=["clock", "phase", "traj"])
+    parser.add_argument("--input_profile", default="full", type=str.lower, choices=["full", "min"])
     parser.add_argument("--simrate", default=50, type=int, help="simrate of environment")
-    parser.add_argument("--traj", default="walking", type=str, help="reference trajectory to use. options are 'aslip', 'walking', 'stepping'")
-    parser.add_argument("--phase_based", default=False, action='store_true', dest='phase_based')
-    parser.add_argument("--not_clock_based", default=True, action='store_false', dest='clock_based')
-    parser.add_argument("--not_state_est", default=True, action='store_false', dest='state_est')
     parser.add_argument("--not_dyn_random", default=True, action='store_false', dest='dyn_random')
-    parser.add_argument("--not_no_delta", default=True, action='store_false', dest='no_delta')
-    parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
     parser.add_argument("--learn_gains", default=False, action='store_true', dest='learn_gains')             # learn PD gains or not
+    # attributes for trajectory based environments
+    parser.add_argument("--traj", default="walking", type=str, help="reference trajectory to use. options are 'aslip', 'walking', 'stepping'")
+    parser.add_argument("--not_no_delta", default=True, action='store_false', dest='no_delta')
     parser.add_argument("--ik_baseline", default=False, action='store_true', dest='ik_baseline')             # use ik as baseline for aslip + delta policies?
+    # mirror loss and reward
+    parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
     parser.add_argument("--reward", default=None, type=str)                                             # reward to use. this is a required argument
-    # parser.add_argument("--gainsDivide", default=1.0, type=float)
 
     """
         General arguments for configuring the logger
     """
+    parser.add_argument("--env_name", default="Cassie-v0")                             # environment name
     parser.add_argument("--run_name", default=None)                                    # run name
 
-
     """
-        Arguments generally used for Curriculum Learning
+        General arguments for Curriculum Learning
     """
     parser.add_argument("--exchange_reward", default=None)                              # Can only be used with previous (below)
     parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
-    parser.add_argument("--fixed_speed", type=float, default=None)                      # Fixed speed to train/test at
 
     if len(sys.argv) < 2:
         print("Usage: python apex.py [option]", sys.argv)
@@ -59,7 +61,6 @@ if __name__ == "__main__":
         parser.add_argument("--recurrent",    "-r",   action='store_true')                  # whether to use a recurrent policy
         parser.add_argument("--logdir",               default="./trained_models/ars/", type=str)
         parser.add_argument("--seed",     "-s",       default=0, type=int)
-        parser.add_argument("--env_name", "-e",       default="Hopper-v3")
         parser.add_argument("--average_every",        default=10, type=int)
         parser.add_argument("--save_model",   "-m",   default=None, type=str)               # where to save the trained model to
         parser.add_argument("--redis",                default=None)
@@ -105,7 +106,6 @@ if __name__ == "__main__":
         else:
             parser.add_argument("--logdir",                 default="./trained_models/ddpg/", type=str)
         parser.add_argument("--seed",     "-s",   default=0, type=int)
-        parser.add_argument("--env_name", "-e",   default="Hopper-v3")
 
         args = parser.parse_args()
 
@@ -126,7 +126,6 @@ if __name__ == "__main__":
         # general args
         parser.add_argument("--logdir",       default="./trained_models/syncTD3/", type=str)
         parser.add_argument("--previous", type=str, default=None)                           # path to directory of previous policies for resuming training
-        parser.add_argument("--env_name", default="Cassie-v0")                    # environment name
         parser.add_argument("--history", default=0, type=int)                                     # number of previous states to use as input
         parser.add_argument("--redis_address", type=str, default=None)                  # address of redis server (for cluster setups)
         parser.add_argument("--seed", default=0, type=int)                              # Sets Gym, PyTorch and Numpy seeds
@@ -168,7 +167,6 @@ if __name__ == "__main__":
         from rl.algos.async_td3 import run_experiment
 
         # args common for actors and learners
-        parser.add_argument("--env_name", default="Cassie-v0")                    # environment name
         parser.add_argument("--hidden_size", default=256)                         # neurons in hidden layer
         parser.add_argument("--history", default=0, type=int)                     # number of previous states to use as input
 
@@ -223,8 +221,6 @@ if __name__ == "__main__":
         from rl.algos.ppo import run_experiment
 
         # general args
-        parser.add_argument("--algo_name", default="ppo")                                   # algo name
-        parser.add_argument("--env_name", "-e",   default="Cassie-v0")
         parser.add_argument("--logdir", type=str, default="./trained_models/ppo/")          # Where to log diagnostics to
         parser.add_argument("--seed", default=0, type=int)                                  # Sets Gym, PyTorch and Numpy seeds
         parser.add_argument("--history", default=0, type=int)                                         # number of previous states to use as input
@@ -252,12 +248,7 @@ if __name__ == "__main__":
         parser.add_argument("--max_traj_len", type=int, default=400, help="Max episode horizon")
         parser.add_argument("--recurrent",   action='store_true')
         parser.add_argument("--bounded",   type=bool, default=False)
-
         args = parser.parse_args()
-
-        # Argument setup checks. Ideally all arg settings are compatible with each other, but that's not convenient for fast development
-        if (args.ik_baseline and not args.traj == "aslip") or (args.learn_gains and args.mirror):
-            raise Exception("Incompatible environment config settings")
 
         args = parse_previous(args)
 
@@ -267,8 +258,7 @@ if __name__ == "__main__":
 
         sys.argv.remove(sys.argv[1])
 
-        parser.add_argument("--path", type=str, default="./trained_models/ppo/Cassie-v0/7b7e24-seed0/", help="path to folder containing policy and run details")
-        parser.add_argument("--env_name", default="Cassie-v0", type=str)
+        parser.add_argument("--path", type=str, default="./trained_models/nodelta_neutral_StateEst_symmetry_speed0-3_freq1-2/", help="path to folder containing policy and run details")
         parser.add_argument("--traj_len", default=400, type=str)
         parser.add_argument("--history", default=0, type=int)                                    # number of previous states to use as input
         parser.add_argument("--mission", default="default", type=str)                            # only used by playground environment
@@ -276,25 +266,15 @@ if __name__ == "__main__":
         parser.add_argument("--debug", default=False, action='store_true')
         parser.add_argument("--no_stats", dest="stats", default=True, action='store_false')
         parser.add_argument("--no_viz", default=False, action='store_true')
-        parser.add_argument("--collect_data", default=False, action='store_true')
 
         args = parser.parse_args()
 
         run_args = pickle.load(open(args.path + "experiment.pkl", "rb"))
 
-        if not hasattr(run_args, "simrate"):
-            run_args.simrate = 50
-            print("manually choosing simrate as 50 (40 Hz)")
-        if not hasattr(run_args, "phase_based"):
-            run_args.phase_based = False
-
         policy = torch.load(args.path + "actor.pt")
         policy.eval()
 
-        if args.collect_data:
-            collect_data(policy, args, run_args)
-        else:
-            # eval_policy(policy, args, run_args)
-            # eval_policy_input_viz(policy, args, run_args)
-            ev = EvalProcessClass(args, run_args)
-            ev.eval_policy(policy, args, run_args)
+        # eval_policy(policy, args, run_args)
+        # eval_policy_input_viz(policy, args, run_args)
+        ev = EvalProcessClass(args, run_args)
+        ev.eval_policy(policy, args, run_args)

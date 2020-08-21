@@ -1,12 +1,11 @@
-from cassie import CassieEnv, CassiePlayground
-from rl.policies.actor import GaussianMLP_Actor
+from cassie import CassiePlayground
 from tools.test_commands import *
 from tools.eval_perturb import *
 from tools.eval_mission import *
 from tools.compare_pols import *
 from tools.eval_sensitivity import *
 from collections import OrderedDict
-from util import env_factory
+from util.env import env_factory
 
 import torch
 import pickle
@@ -47,8 +46,20 @@ run_args = pickle.load(open(os.path.join(args.path, "experiment.pkl"), "rb"))
 # env_fn = partial(CassieEnv, traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random)
 # Make mirror False so that env_factory returns a regular wrap env function and not a symmetric env function that can be called to return
 # a cassie environment (symmetric env cannot be called to make another env)
-env_fn = env_factory(run_args.env_name, traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, 
-                    mirror=False, clock_based=run_args.clock_based, reward=run_args.reward, history=run_args.history)
+env_fn = env = env_factory(
+    run_args.env_name,
+    command_profile=run_args.command_profile,
+    input_profile=run_args.input_profile,
+    simrate=run_args.simrate,
+    dynamics_randomization=run_args.dyn_random,
+    mirror=run_args.mirror,
+    learn_gains=run_args.learn_gains,
+    reward=run_args.reward,
+    history=run_args.history,
+    no_delta=run_args.no_delta,
+    traj=run_args.traj,
+    ik_baseline=run_args.ik_baseline
+)
 cassie_env = env_fn()
 policy = torch.load(os.path.join(args.path, "actor.pt"))
 if args.eval:
@@ -56,25 +67,24 @@ if args.eval:
 if hasattr(policy, 'init_hidden_state'):
     policy.init_hidden_state()
 
-
-#TODO: make returning/save data in file inside function consist for all testing functions
+# TODO: make returning/save data in file inside function consist for all testing functions
 def test_commands(cassie_env, policy, args):
     print("Testing speed and orient commands")
     if args.n_procs == 1:
-        save_data = eval_commands(cassie_env, policy, num_steps=args.n_steps, num_commands=args.n_commands, 
+        save_data = eval_commands(cassie_env, policy, num_steps=args.n_steps, num_commands=args.n_commands,
                 max_speed=args.max_speed, min_speed=args.min_speed, num_iters=args.n_iter)
         np.save(os.path.join(args.path, "eval_commands.npy"), save_data)
     else:
-        eval_commands_multi(env_fn, policy, num_steps=args.n_steps, num_commands=args.n_commands, max_speed=args.max_speed, 
+        eval_commands_multi(env_fn, policy, num_steps=args.n_steps, num_commands=args.n_commands, max_speed=args.max_speed,
                 min_speed=args.min_speed, num_iters=args.n_iter, num_procs=args.n_procs, filename=os.path.join(args.path, "eval_commands.npy"))
 
 def test_perturbs(cassie_env, policy, args):
     print("Testing perturbations")
     if args.n_procs == 1:
-        save_data = compute_perturbs(cassie_env, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size, 
+        save_data = compute_perturbs(cassie_env, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size,
                     perturb_incr=args.pert_incr, perturb_body=args.pert_body, num_angles=args.num_angles)
     else:
-        save_data = compute_perturbs_multi(env_fn, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size, 
+        save_data = compute_perturbs_multi(env_fn, policy, wait_time=args.wait_time, perturb_duration=args.pert_dur, perturb_size=args.pert_size,
                     perturb_incr=args.pert_incr, perturb_body=args.pert_body, num_angles=args.num_angles, num_procs=args.n_procs)
     np.save(os.path.join(args.path, "eval_perturbs.npy"), save_data)
 
@@ -92,7 +102,7 @@ elif args.test == "mission":
     if not args.viz:
         print("Testing missions")
         save_data = []
-       
+
         for mission in missions:
             print(mission + " mission:")
             cassie_env = CassiePlayground(traj=run_args.traj, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, mission=mission)

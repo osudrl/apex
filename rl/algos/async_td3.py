@@ -4,7 +4,7 @@ from rl.policies.actor import FF_Actor as O_Actor
 from rl.policies.critic import Dual_Q_Critic as Critic
 
 # Plot results
-from apex import create_logger
+from util.log import create_logger
 
 import time
 import os
@@ -26,7 +26,8 @@ device = torch.device('cpu')
 # TODO: create way to resume experiment by loading actor and critic pt files
 def run_experiment(args):
     torch.set_num_threads(1)
-    from apex import env_factory, create_logger
+    from util.env import env_factory
+    from util.log import create_logger
 
     # Start ray
     ray.init(num_gpus=0, include_webui=True, redis_address=args.redis_address)

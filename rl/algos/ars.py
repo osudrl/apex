@@ -3,7 +3,8 @@ import torch
 import ray
 import time
 
-from apex import env_factory, create_logger
+from util.env import env_factory
+from util.log import create_logger
 
 # This function adapted from https://github.com/modestyachts/ARS/blob/master/code/shared_noise.py
 # (Thanks to Horia Mania)
