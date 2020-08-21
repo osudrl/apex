@@ -53,6 +53,12 @@ class CassieTrajEnv:
         self.dynamics_randomization = dynamics_randomization
         self.no_delta = no_delta
         self.ik_baseline = ik_baseline
+        self.has_side_speed = True
+
+        # dealing with kwargs
+        for key, val in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, val)
 
         # Arguments for reward function
         self.reward_func = reward
@@ -275,7 +281,7 @@ class CassieTrajEnv:
 
         full_state_est_size = 46
         min_state_est_size = 21
-        speed_size     = 2      # x speed, y speed
+        speed_size     = 2 if self.has_side_speed else 1      # x speed, y speed
         clock_size     = 2      # sin, cos
         phase_size     = 5      # swing duration, stance duration, one-hot encoding of stance mode
 
@@ -990,16 +996,18 @@ class CassieTrajEnv:
         # trajectory despite being global coord. Y is only invariant to straight
         # line trajectories.
 
+        speed_input = [self.speed] if not self.has_side_speed else [self.speed, self.side_speed]
+
         # command --> PHASE_BASED : clock, phase info, speed
         if self.phase_based:
             clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
                     np.cos(2 * np.pi * self.phase / self.phaselen)]
-            ext_state = np.concatenate((clock, [self.swing_duration, self.stance_duration], encode_stance_mode(self.stance_mode), [self.speed, self.side_speed]))
+            ext_state = np.concatenate((clock, [self.swing_duration, self.stance_duration], encode_stance_mode(self.stance_mode), speed_input))
         # command --> CLOCK_BASED : clock, speed
         elif self.clock_based:
             clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
                     np.cos(2 * np.pi * self.phase / self.phaselen)]
-            ext_state = np.concatenate((clock, [self.speed, self.side_speed]))
+            ext_state = np.concatenate((clock, speed_input))
         # command --> REF_TRAJ_BASED : aslip trajectory
         elif self.aslip_traj and not self.clock_based:
             if(self.phase == 0):

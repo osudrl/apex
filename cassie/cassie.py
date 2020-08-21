@@ -25,7 +25,7 @@ def load_reward_clock_funcs(path):
 
 
 class CassieEnv:
-    def __init__(self, traj='walking', simrate=50, command_profile="clock", input_profile="full", dynamics_randomization=True,
+    def __init__(self, simrate=50, command_profile="clock", input_profile="full", dynamics_randomization=True,
                  learn_gains=False, reward="iros_paper",
                  config="./cassie/cassiemujoco/cassie.xml", history=0, **kwargs):
 
@@ -38,8 +38,14 @@ class CassieEnv:
         # Arguments for the simulation and state space
         self.command_profile = command_profile
         self.input_profile = input_profile
-        self.clock_based = True
         self.dynamics_randomization = dynamics_randomization
+
+        # kwargs
+        self.has_side_speed = True
+        self.training = True
+        for key, val in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, val)
 
         # Arguments for reward function
         self.reward_func = reward
@@ -235,7 +241,7 @@ class CassieEnv:
 
         full_state_est_size = 46
         min_state_est_size = 21
-        speed_size     = 2      # x speed, y speed
+        speed_size     = 2 if self.has_side_speed else 1      # x speed, y speed
         clock_size     = 2      # sin, cos
         phase_size     = 5      # swing duration, stance duration, one-hot encoding of stance mode
 
@@ -480,15 +486,17 @@ class CassieEnv:
         if reward < self.early_term_cutoff:
             done = True
 
-        if np.random.randint(300) == 0:  # random changes to orientation
-            self.orient_add += np.random.uniform(-self.max_orient_change, self.max_orient_change)
+        if self.training:
 
-        if np.random.randint(100) == 0:  # random changes to speed
-            self.speed = np.random.uniform(self.min_speed, self.max_speed)
-            self.speed = np.clip(self.speed, self.min_speed, self.max_speed)
-        
-        if np.random.randint(300) == 0:  # random changes to sidespeed
-            self.side_speed = np.random.uniform(self.min_side_speed, self.max_side_speed)
+            if np.random.randint(300) == 0:  # random changes to orientation
+                self.orient_add += np.random.uniform(-self.max_orient_change, self.max_orient_change)
+
+            if np.random.randint(100) == 0:  # random changes to speed
+                self.speed = np.random.uniform(self.min_speed, self.max_speed)
+                self.speed = np.clip(self.speed, self.min_speed, self.max_speed)
+            
+            if np.random.randint(300) == 0:  # random changes to sidespeed
+                self.side_speed = np.random.uniform(self.min_side_speed, self.max_side_speed)
 
         if return_omniscient_state:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
@@ -801,16 +809,18 @@ class CassieEnv:
         # trajectory despite being global coord. Y is only invariant to straight
         # line trajectories.
 
+        speed_input = [self.speed] if not self.has_side_speed else [self.speed, self.side_speed]
+
         # command --> PHASE_BASED : clock, phase info, speed
         if self.command_profile == "phase":
             clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
                     np.cos(2 * np.pi * self.phase / self.phaselen)]
-            ext_state = np.concatenate((clock, [self.swing_duration, self.stance_duration], encode_stance_mode(self.stance_mode), [self.speed, self.side_speed]))
+            ext_state = np.concatenate((clock, [self.swing_duration, self.stance_duration], encode_stance_mode(self.stance_mode), speed_input))
         # command --> CLOCK_BASED : clock, speed
         elif self.command_profile == "clock":
             clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
                     np.cos(2 * np.pi * self.phase / self.phaselen)]
-            ext_state = np.concatenate((clock, [self.speed, self.side_speed]))
+            ext_state = np.concatenate((clock, speed_input))
         else:
             raise NotImplementedError
 

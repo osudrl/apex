@@ -1,6 +1,7 @@
 command_profile: clock
 dyn_random: False
 env_name: Cassie-v0
+has_side_speed: False
 history: 0
 ik_baseline: None
 input_profile: full

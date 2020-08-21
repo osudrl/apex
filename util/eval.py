@@ -52,6 +52,11 @@ class EvalProcessClass():
         else:
             env_name = run_args.env_name
         
+        if hasattr(run_args, "has_side_speed"):
+            has_side_speed = run_args.has_side_speed
+        else:
+            has_side_speed = True
+
         env = env_factory(
             args.env_name,
             command_profile=run_args.command_profile,
@@ -64,7 +69,9 @@ class EvalProcessClass():
             history=run_args.history,
             no_delta=run_args.no_delta,
             traj=run_args.traj,
-            ik_baseline=run_args.ik_baseline
+            ik_baseline=run_args.ik_baseline,
+            has_side_speed=has_side_speed,
+            training=False
         )()
         
         if args.debug:
@@ -75,15 +82,10 @@ class EvalProcessClass():
             hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
             env.sim.set_hfield_data(hfield_data.flatten())
 
-        print(env.reward_func)
-        print()
-
         if hasattr(policy, 'init_hidden_state'):
             policy.init_hidden_state()
 
         old_settings = termios.tcgetattr(sys.stdin)
-
-        orient_add = 0
 
         slowmo = False
 
@@ -113,7 +115,7 @@ class EvalProcessClass():
                     elif c == 'd':
                         side_speed += 0.02
                     elif c == 'a':
-                        side_speed -= 0.
+                        side_speed -= 0.02
                     elif c == 'j':
                         env.phase_add += .1
                         # print("Increasing frequency to: {:.1f}".format(env.phase_add))
@@ -121,10 +123,10 @@ class EvalProcessClass():
                         env.phase_add -= .1
                         # print("Decreasing frequency to: {:.1f}".format(env.phase_add))
                     elif c == 'l':
-                        orient_add -= .1
+                        env.orient_add -= .1
                         # print("Increasing orient_add to: ", orient_add)
                     elif c == 'k':
-                        orient_add += .1
+                        env.orient_add += .1
                         # print("Decreasing orient_add to: ", orient_add)
                     
                     elif c == 'x':
@@ -172,14 +174,12 @@ class EvalProcessClass():
                         send((env.swing_duration, env.stance_duration, env.strict_relaxer, env.stance_mode, env.have_incentive))
                 
                 if args.stats:
-                    print(f"act spd: {env.sim.qvel()[0]:+.2f}   cmd speed: {env.speed:+.2f}   cmd_sd_spd: {env.side_speed:+.2f}   phase add: {env.phase_add:.2f}   orient add: {orient_add:+.2f}", end="\r")
+                    print(f"act spd: {env.sim.qvel()[0]:+.2f}   cmd speed: {env.speed:+.2f}   cmd_sd_spd: {env.side_speed:+.2f}   phase add: {env.phase_add:.2f}   orient add: {env.orient_add:+.2f}", end="\r")
 
                 if hasattr(env, 'simrate'):
                     start = time.time()
 
                 if (not env.vis.ispaused()):
-                    # Update Orientation
-                    env.orient_add = orient_add
                         
                     action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
 

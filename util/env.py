@@ -23,13 +23,13 @@ def env_factory(path, command_profile="clock", input_profile="full", simrate=50,
     if path in ['Cassie-v0', 'CassieTraj-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0']:
 
         if path == 'Cassie-v0':
-            env_fn = partial(CassieEnv, command_profile=command_profile, input_profile=input_profile, simrate=simrate, dynamics_randomization=dynamics_randomization, learn_gains=learn_gains, reward=reward, history=history)
+            env_fn = partial(CassieEnv, command_profile=command_profile, input_profile=input_profile, simrate=simrate, dynamics_randomization=dynamics_randomization, learn_gains=learn_gains, reward=reward, history=history, **kwargs)
         elif path == 'CassieTraj-v0':
-            env_fn = partial(CassieTrajEnv, traj=traj, command_profile=command_profile, input_profile=input_profile, simrate=simrate, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history)
+            env_fn = partial(CassieTrajEnv, traj=traj, command_profile=command_profile, input_profile=input_profile, simrate=simrate, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, ik_baseline=ik_baseline, reward=reward, history=history, **kwargs)
         elif path == 'CassiePlayground-v0':
-            env_fn = partial(CassiePlayground, command_profile=command_profile, input_profile=input_profile, simrate=simrate, dynamics_randomization=dynamics_randomization, learn_gains=learn_gains, reward=reward, history=history)
+            env_fn = partial(CassiePlayground, command_profile=command_profile, input_profile=input_profile, simrate=simrate, dynamics_randomization=dynamics_randomization, learn_gains=learn_gains, reward=reward, history=history, **kwargs)
         elif path == 'CassieStandingEnv-v0':
-            env_fn = partial(CassieStandingEnv, command_profile=command_profile, input_profile=input_profile, simrate=simrate, dynamics_randomization=dynamics_randomization, learn_gains=learn_gains, reward=reward, history=history)
+            env_fn = partial(CassieStandingEnv, command_profile=command_profile, input_profile=input_profile, simrate=simrate, dynamics_randomization=dynamics_randomization, learn_gains=learn_gains, reward=reward, history=history, **kwargs)
 
         if mirror:
             from rl.envs.wrappers import SymmetricEnv
