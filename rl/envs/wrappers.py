@@ -9,8 +9,8 @@ class WrapEnv:
     def __getattr__(self, attr):
         return getattr(self.env, attr)
 
-    def step(self, action):
-        state, reward, done, info = self.env.step(action[0])
+    def step(self, action, term_thresh=0):
+        state, reward, done, info = self.env.step(action[0], f_term=term_thresh)
         return np.array([state]), np.array([reward]), np.array([done]), np.array([info])
 
     def render(self):
@@ -57,8 +57,8 @@ class SymmetricEnv:
     # when the SymmeticEnv is created should not move the clock input order. The indices of the obs vector
     # where the clocks are located need to be inputted.
     def mirror_clock_observation(self, obs, clock_inds):
-        print(obs.shape)
-        print(self.obs_mirror_matrix.shape)
+        # print("obs.shape = ", obs.shape)
+        # print("obs_mirror_matrix.shape = ", self.obs_mirror_matrix.shape)
         mirror_obs = obs @ self.obs_mirror_matrix
         clock = mirror_obs[:, self.clock_inds]
         # print("clock: ", clock)
