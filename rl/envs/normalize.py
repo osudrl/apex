@@ -4,13 +4,14 @@
 import numpy as np
 import functools
 import torch
+import ray
 
 from .wrapper import WrapEnv
-def get_normalization_params(iter, policy, env_fn, noise_std):
-    print("Gathering input normalization data using {0} steps, noise = {1}...".format(iter, noise_std))
+
+@ray.remote
+def _run_random_actions(iter, policy, env_fn, noise_std):
 
     env = WrapEnv(env_fn)
-
     states = np.zeros((iter, env.observation_space.shape[0]))
 
     state = env.reset()
@@ -28,6 +29,19 @@ def get_normalization_params(iter, policy, env_fn, noise_std):
 
         if done:
             state = env.reset()
+    
+    return states
+
+def get_normalization_params(iter, policy, env_fn, noise_std, procs=4):
+    print("Gathering input normalization data using {0} steps, noise = {1}...".format(iter, noise_std))
+
+    states_ids = [_run_random_actions.remote(iter // procs, policy, env_fn, noise_std) for _ in range(procs)]
+
+    states = []
+    for _ in range(procs):
+        ready_ids, _ = ray.wait(states_ids, num_returns=1)
+        states.extend(ray.get(ready_ids[0]))
+        states_ids.remove(ready_ids[0])
 
     print("Done gathering input normalization data.")
 

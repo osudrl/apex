@@ -28,13 +28,13 @@ class PPOBuffer:
     A buffer for storing trajectory data and calculating returns for the policy
     and critic updates.
     This container is intentionally not optimized w.r.t. to memory allocation
-    speed because such allocation is almost never a bottleneck for policy 
-    gradient. 
-    
+    speed because such allocation is almost never a bottleneck for policy
+    gradient.
+
     On the other hand, experience buffers are a frequent source of
     off-by-one errors and other bugs in policy gradient implementations, so
     this code is optimized for clarity and readability, at the expense of being
-    (very) marginally slower than some other implementations. 
+    (very) marginally slower than some other implementations.
     (Premature optimization is the root of all evil).
     """
     def __init__(self, gamma=0.99, lam=0.95, use_gae=False):
@@ -51,7 +51,7 @@ class PPOBuffer:
 
         self.ptr = 0
         self.traj_idx = [0]
-    
+
     def __len__(self):
         return len(self.states)
 
@@ -69,19 +69,19 @@ class PPOBuffer:
         self.values  += [value.squeeze(0)]
 
         self.ptr += 1
-    
+
     def finish_path(self, last_val=None):
         self.traj_idx += [self.ptr]
         rewards = self.rewards[self.traj_idx[-2]:self.traj_idx[-1]]
 
         returns = []
 
-        R = last_val.squeeze(0).copy() # Avoid copy?
+        R = last_val.squeeze(0).copy()  # Avoid copy?
         for reward in reversed(rewards):
             R = self.gamma * R + reward
-            returns.insert(0, R) # TODO: self.returns.insert(self.path_idx, R) ? 
-                                 # also technically O(k^2), may be worth just reversing list
-                                 # BUG? This is adding copies of R by reference (?)
+            returns.insert(0, R)  # TODO: self.returns.insert(self.path_idx, R) ?
+                                  # also technically O(k^2), may be worth just reversing list
+                                  # BUG? This is adding copies of R by reference (?)
 
         self.returns += returns
 
@@ -120,11 +120,11 @@ class PPO:
 
         self.save_path = save_path
 
-        os.environ['OMP_NUM_THREADS'] = '1'
-        if args['redis_address'] is not None:
-            ray.init(num_cpos=self.n_proc, redis_address=args['redis_address'])
-        else:
-            ray.init(num_cpus=self.n_proc)
+        # os.environ['OMP_NUM_THREA DS'] = '1'
+        # if args['redis_address'] is not None:
+        #     ray.init(num_cpos=self.n_proc, redis_address=args['redis_address'])
+        # else:
+        #     ray.init(num_cpus=self.n_proc)
 
     def save(self, policy, critic):
 
@@ -138,18 +138,18 @@ class PPO:
 
     @ray.remote
     @torch.no_grad()
-    def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
+    def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0, term_thresh=0):
         """
-        Sample at least min_steps number of total timesteps, truncating 
+        Sample at least min_steps number of total timesteps, truncating
         trajectories only if they exceed max_traj_len number of timesteps
         """
-        torch.set_num_threads(1) # By default, PyTorch will use multiple cores to speed up operations.
-                                 # This can cause issues when Ray also uses multiple cores, especially on machines
-                                 # with a lot of CPUs. I observed a significant speedup when limiting PyTorch 
-                                 # to a single core - I think it basically stopped ray workers from stepping on each
-                                 # other's toes.
+        torch.set_num_threads(1)    # By default, PyTorch will use multiple cores to speed up operations.
+                                    # This can cause issues when Ray also uses multiple cores, especially on machines
+                                    # with a lot of CPUs. I observed a significant speedup when limiting PyTorch 
+                                    # to a single core - I think it basically stopped ray workers from stepping on each
+                                    # other's toes.
 
-        env = WrapEnv(env_fn) # TODO
+        env = WrapEnv(env_fn)  # TODO
 
         memory = PPOBuffer(self.gamma, self.lam)
 
@@ -171,7 +171,7 @@ class PPO:
                 action = policy(state, deterministic=False, anneal=anneal)
                 value = critic(state)
 
-                next_state, reward, done, _ = env.step(action.numpy())
+                next_state, reward, done, _ = env.step(action.numpy(), term_thresh=term_thresh)
 
                 memory.store(state.numpy(), action.numpy(), reward, value.numpy())
 
@@ -185,22 +185,33 @@ class PPO:
 
         return memory
 
-    def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
-        worker = self.sample
-        args = (self, env_fn, policy, critic, min_steps, max_traj_len, deterministic, anneal)
+    def sample_parallel(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0, term_thresh=0):
 
-        # Don't don't bother launching another process for single thread
-        if self.n_proc > 1:
-            real_proc = self.n_proc
-            if self.limit_cores:
-                real_proc = 48 - 16*int(np.log2(60 / env_fn().simrate))
-                print("limit cores active, using {} cores".format(real_proc))
-                args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic, anneal)
-            result_ids = [worker.remote(*args) for _ in range(real_proc)]
-            result = ray.get(result_ids)
-        else:
-            result = [worker._function(*args)]
-        
+        worker = self.sample
+        args = (self, env_fn, policy, critic, min_steps // self.n_proc, max_traj_len, deterministic, anneal, term_thresh)
+
+        # Create pool of workers, each getting data for min_steps
+        workers = [worker.remote(*args) for _ in range(self.n_proc)]
+
+        result = []
+        total_steps = 0
+
+        while total_steps < min_steps:
+            # get result from a worker
+            ready_ids, _ = ray.wait(workers, num_returns=1)
+
+            # update result
+            result.append(ray.get(ready_ids[0]))
+
+            # remove ready_ids from workers (O(n)) but n isn't that big
+            workers.remove(ready_ids[0])
+
+            # update total steps
+            total_steps += len(result[-1])
+
+            # start a new worker
+            workers.append(worker.remote(*args))
+
         # O(n)
         def merge(buffers):
             merged = PPOBuffer(self.gamma, self.lam)
@@ -222,10 +233,45 @@ class PPO:
             return merged
 
         total_buf = merge(result)
-        if len(total_buf) > min_steps*self.n_proc * 1.5:
-            self.limit_cores = 1
+
         return total_buf
 
+    def sample_parallel_old(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
+
+        result = []
+        total_steps = 0
+
+        real_proc = self.n_proc
+        if self.limit_cores:
+            real_proc = 48 - 16*int(np.log2(60 / env_fn().simrate))
+            print("limit cores active, using {} cores".format(real_proc))
+            args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
+        result_ids = [self.sample.remote(*args) for _ in range(real_proc)]
+        result = ray.get(result_ids)
+
+        # O(n)
+        def merge(buffers):
+            merged = PPOBuffer(self.gamma, self.lam)
+            for buf in buffers:
+                offset = len(merged)
+
+                merged.states  += buf.states
+                merged.actions += buf.actions
+                merged.rewards += buf.rewards
+                merged.values  += buf.values
+                merged.returns += buf.returns
+
+                merged.ep_returns += buf.ep_returns
+                merged.ep_lens    += buf.ep_lens
+
+                merged.traj_idx += [offset + i for i in buf.traj_idx[1:]]
+                merged.ptr += buf.ptr
+
+            return merged
+
+        total_buf = merge(result)
+
+        return total_buf
 
     def update_policy(self, obs_batch, action_batch, return_batch, advantage_batch, mask, env_fn, mirror_observation=None, mirror_action=None):
         policy = self.policy
@@ -239,9 +285,9 @@ class PPO:
         with torch.no_grad():
             old_pdf = old_policy.distribution(obs_batch)
             old_log_probs = old_pdf.log_prob(action_batch).sum(-1, keepdim=True)
-        
+
         log_probs = pdf.log_prob(action_batch).sum(-1, keepdim=True)
-        
+
         ratio = (log_probs - old_log_probs).exp()
 
         cpi_loss = ratio * advantage_batch * mask
@@ -254,29 +300,29 @@ class PPO:
 
         # Mirror Symmetry Loss
         if mirror_observation is not None and mirror_action is not None:
-          env = env_fn()
-          deterministic_actions = policy(obs_batch)
-          if env.clock_based:
-              if self.recurrent:
-                  mir_obs = torch.stack([mirror_observation(obs_batch[i,:,:], env.clock_inds) for i in range(obs_batch.shape[0])])
-                  mirror_actions = policy(mir_obs)
-              else:
-                mir_obs = mirror_observation(obs_batch, env.clock_inds)
-                mirror_actions = policy(mir_obs)
-          else:
-              if self.recurrent:
-                mirror_actions = policy(mirror_observation(torch.stack([mirror_observation(obs_batch[i,:,:]) for i in range(obs_batch.shape[0])])))
-              else:
-                mirror_actions = policy(mirror_observation(obs_batch))
-          mirror_actions = mirror_action(mirror_actions)
-          mirror_loss = 4 * (deterministic_actions - mirror_actions).pow(2).mean()
+            env = env_fn()
+            deterministic_actions = policy(obs_batch)
+            if env.clock_based:
+                if self.recurrent:
+                    mir_obs = torch.stack([mirror_observation(obs_batch[i,:,:], env.clock_inds) for i in range(obs_batch.shape[0])])
+                    mirror_actions = policy(mir_obs)
+                else:
+                    mir_obs = mirror_observation(obs_batch, env.clock_inds)
+                    mirror_actions = policy(mir_obs)
+            else:
+                if self.recurrent:
+                    mirror_actions = policy(mirror_observation(torch.stack([mirror_observation(obs_batch[i,:,:]) for i in range(obs_batch.shape[0])])))
+                else:
+                    mirror_actions = policy(mirror_observation(obs_batch))
+            mirror_actions = mirror_action(mirror_actions)
+            mirror_loss = 0.4 * (deterministic_actions - mirror_actions).pow(2).mean()
         else:
-          mirror_loss = 0 
+            mirror_loss = 0
 
         self.actor_optimizer.zero_grad()
         (actor_loss + mirror_loss + entropy_penalty).backward()
 
-        # Clip the gradient norm to prevent "unlucky" minibatches from 
+        # Clip the gradient norm to prevent "unlucky" minibatches from
         # causing pathological updates
         torch.nn.utils.clip_grad_norm_(policy.parameters(), self.grad_clip)
         self.actor_optimizer.step()
@@ -284,13 +330,13 @@ class PPO:
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
 
-        # Clip the gradient norm to prevent "unlucky" minibatches from 
+        # Clip the gradient norm to prevent "unlucky" minibatches from
         # causing pathological updates
         torch.nn.utils.clip_grad_norm_(critic.parameters(), self.grad_clip)
         self.critic_optimizer.step()
 
         with torch.no_grad():
-          kl = kl_divergence(pdf, old_pdf)
+            kl = kl_divergence(pdf, old_pdf)
 
         if mirror_observation is not None and mirror_action is not None:
             mirror_loss_return = mirror_loss.item()
@@ -326,13 +372,19 @@ class PPO:
             act_mirr = env.mirror_action
 
         curr_anneal = 1.0
+        curr_thresh = 0
+        start_itr = 0
+        ep_counter = 0
+        do_term = False
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
-            if self.highest_reward > self.max_traj_len and curr_anneal > 0.5:
+            if self.highest_reward > (2/3)*self.max_traj_len and curr_anneal > 0.5:
                 curr_anneal *= anneal_rate
-            batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len, anneal=curr_anneal)
+            if do_term and curr_thresh < 0.35:
+                curr_thresh = .1 * 1.0006**(itr-start_itr)
+            batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len, anneal=curr_anneal, term_thresh=curr_thresh)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
             samp_time = time.time() - sample_start
@@ -393,7 +445,7 @@ class PPO:
                 # TODO: add verbosity arguments to suppress this
                 print(' '.join(["%g"%x for x in np.mean(losses, axis=0)]))
 
-                # Early stopping 
+                # Early stopping
                 if np.mean(kl) > 0.02:
                     print("Max kl reached, stopping optimization early.")
                     break
@@ -401,9 +453,15 @@ class PPO:
             opt_time = time.time() - optimizer_start
             print("optimizer time elapsed: {:.2f} s".format(opt_time))
 
+            if np.mean(batch.ep_lens) >= self.max_traj_len * 0.75:
+                ep_counter += 1
+            if do_term == False and ep_counter > 50:
+                do_term = True
+                start_itr = itr
+
             if logger is not None:
                 evaluate_start = time.time()
-                test = self.sample_parallel(env_fn, self.policy, self.critic, 800 // self.n_proc, self.max_traj_len, deterministic=True)
+                test = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps // 2, self.max_traj_len, deterministic=True)
                 eval_time = time.time() - evaluate_start
                 print("evaluate time elapsed: {:.2f} s".format(eval_time))
 
@@ -439,6 +497,7 @@ class PPO:
                 logger.add_scalar("Misc/Sample Times", samp_time, itr)
                 logger.add_scalar("Misc/Optimize Times", opt_time, itr)
                 logger.add_scalar("Misc/Evaluation Times", eval_time, itr)
+                logger.add_scalar("Misc/Termination Threshold", curr_thresh, itr)
 
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:
@@ -446,17 +505,21 @@ class PPO:
                 self.save(policy, critic)
 
 def run_experiment(args):
-    from util import env_factory, create_logger
-
-    torch.set_num_threads(1)
-
-    if args.ik_baseline and args.no_delta:
-        args.ik_baseline = False
+    from util.env import env_factory
+    from util.log import create_logger
 
     # wrapper function for creating parallelized envs
-    env_fn = env_factory(args.env_name, traj=args.traj, simrate=args.simrate, state_est=args.state_est, no_delta=args.no_delta, learn_gains=args.learn_gains, ik_baseline=args.ik_baseline, dynamics_randomization=args.dyn_random, mirror=args.mirror, clock_based=args.clock_based, reward=args.reward, history=args.history)
+    env_fn = env_factory(args.env_name, simrate=args.simrate, command_profile=args.command_profile, input_profile=args.input_profile, learn_gains=args.learn_gains, dynamics_randomization=args.dyn_random, reward=args.reward, history=args.history, mirror=args.mirror, ik_baseline=args.ik_baseline, no_delta=args.no_delta, traj=args.traj)
     obs_dim = env_fn().observation_space.shape[0]
     action_dim = env_fn().action_space.shape[0]
+
+    # Set up Parallelism
+    os.environ['OMP_NUM_THREADS'] = '1'
+    if not ray.is_initialized():
+        if args.redis_address is not None:
+            ray.init(num_cpus=args.num_procs, redis_address=args.redis_address)
+        else:
+            ray.init(num_cpus=args.num_procs)
 
     # Set seeds
     torch.manual_seed(args.seed)
@@ -475,15 +538,18 @@ def run_experiment(args):
             critic = LSTM_V(obs_dim)
         else:
             if args.learn_stddev:
-                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=None, env_name=args.env_name)
+                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=None, env_name=args.env_name, bounded=args.bounded)
             else:
-                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(args.std_dev), env_name=args.env_name)
+                policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(args.std_dev), env_name=args.env_name, bounded=args.bounded)
             critic = FF_V(obs_dim)
 
         with torch.no_grad():
-            policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn))
+            policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn, procs=args.num_procs))
         critic.obs_mean = policy.obs_mean
         critic.obs_std = policy.obs_std
+    
+    policy.train()
+    critic.train()
 
     print("obs_dim: {}, action_dim: {}".format(obs_dim, action_dim))
 
@@ -491,19 +557,6 @@ def run_experiment(args):
     logger = create_logger(args)
 
     algo = PPO(args=vars(args), save_path=logger.dir)
-
-    print()
-    print("Environment: {}".format(args.env_name))
-    print(" ├ traj:           {}".format(args.traj))
-    print(" ├ clock_based:    {}".format(args.clock_based))
-    print(" ├ state_est:      {}".format(args.state_est))
-    print(" ├ dyn_random:     {}".format(args.dyn_random))
-    print(" ├ no_delta:       {}".format(args.no_delta))
-    print(" ├ mirror:         {}".format(args.mirror))
-    print(" ├ ik baseline:    {}".format(args.ik_baseline))
-    print(" ├ learn gains:    {}".format(args.learn_gains))
-    print(" ├ reward:         {}".format(args.reward))
-    print(" └ obs_dim:        {}".format(obs_dim))
 
     print()
     print("Synchronous Distributed Proximal Policy Optimization:")

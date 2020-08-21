@@ -2,13 +2,13 @@
 
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
-from .trajectory import *
 from cassie.quaternion_function import *
+from cassie.phase_function import *
 from .rewards import *
 
 from math import floor
 
-import numpy as np 
+import numpy as np
 import os
 import random
 import copy
@@ -24,84 +24,29 @@ def load_reward_clock_funcs(path):
     return clock_funcs
 
 
-class CassieEnv_v2:
-    def __init__(self, traj='walking', simrate=50, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, learn_gains=False, ik_baseline=False, reward="iros_paper", history=0, **kwargs):
+class CassieEnv:
+    def __init__(self, traj='walking', simrate=50, command_profile="clock", input_profile="full", dynamics_randomization=True,
+                 learn_gains=False, reward="iros_paper",
+                 config="./cassie/cassiemujoco/cassie.xml", history=0, **kwargs):
 
         dirname = os.path.dirname(__file__)
-        #xml_path = os.path.join(dirname, "cassiemujoco", "cassie.xml")
-        #self.sim = CassieSim(xml_path)
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+        self.config = config
+        self.sim = CassieSim(self.config)
         # self.sim = CassieSim("./cassie/cassiemujoco/cassie_drop_step.xml")
         self.vis = None
 
         # Arguments for the simulation and state space
-        self.clock_based = clock_based
-        self.state_est = state_est
-        self.no_delta = no_delta
+        self.command_profile = command_profile
+        self.input_profile = input_profile
+        self.clock_based = True
         self.dynamics_randomization = dynamics_randomization
-        self.ik_baseline = ik_baseline
 
-        # Arguments generally used for curriculum training
+        # Arguments for reward function
         self.reward_func = reward
         self.early_term_cutoff = 0.3
-        curriculum_defaults = {
-            "fixed_speed" : None
-        }
-        for (arg, default) in curriculum_defaults.items():
-            setattr(self, arg, kwargs.get(arg, default))
 
-
-        # CONFIGURE REF TRAJECTORY to use
-        if traj == "aslip":
-            self.speeds = np.array([x / 10 for x in range(0, 21)])
-            self.trajectories = getAllTrajectories(self.speeds)
-            self.num_speeds = len(self.trajectories)
-            self.traj_idx = 0
-            self.speed = self.speeds[self.traj_idx]
-            self.trajectory = self.trajectories[self.traj_idx]
-            self.aslip_traj = True
-            self.clock_based = False
-        else:
-            self.aslip_traj = False
-            if traj == "walking":
-                traj_path = os.path.join(dirname, "trajectory", "stepdata.bin")
-            elif traj == "stepping":
-                traj_path = os.path.join(dirname, "trajectory", "more-poses-trial.bin")
-            self.trajectory = CassieTrajectory(traj_path)
-            self.speed = 0
-
-        # Names of Clock-Based reward functions
-        clock_rewards        =  ["clock_smooth", "clock_strict0.1", "clock_strict0.4",
-                                 "clock_smooth_aerial", "clock_strict0.1_aerial", "clock_strict0.4_aerial"]
-        aslip_clock_rewards   = ["aslip_clock_smooth", "aslip_clock_smooth_aerial",
-                                 "aslip_clock_strict0.1", "aslip_clock_strict0.1_aerial",
-                                 "aslip_clock_strict0.4", "aslip_clock_strict0.4_aerial"]
-        max_vel_clock_rewards = ["max_vel_clock_smooth", "max_vel_clock_strict0.1", "max_vel_clock_strict0.4",
-                                 "max_vel_clock_smooth_aerial", "max_vel_clock_strict0.1_aerial", "max_vel_clock_strict0.4_aerial"]
-
-        # If Loading Clock-based Reward Func, do that
-        if self.reward_func in clock_rewards:
-            # TODO: Get dedicated reward funcs for clock reward
-            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", "aslip_" + self.reward_func + ".pkl")
-            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
-            self.left_clock = self.reward_clock_funcs["left"][-1]
-            self.right_clock = self.reward_clock_funcs["right"][-1]
-            self.reward_func = "clock"
-        elif self.reward_func in aslip_clock_rewards:
-            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl")
-            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
-            self.reward_func = "aslip_clock"
-        elif self.reward_func in max_vel_clock_rewards:
-            # TODO: Get dedicated reward funcs for clock reward
-            clock_funcs_path = os.path.join(dirname, "rewards", "reward_clock_funcs", "aslip_" + self.reward_func[8:] + ".pkl")
-            self.reward_clock_funcs = load_reward_clock_funcs(clock_funcs_path)
-            self.left_clock = self.reward_clock_funcs["left"][-1]
-            self.right_clock = self.reward_clock_funcs["right"][-1]
-            self.reward_func = "max_vel_clock"
-
-        self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
+        # State space
+        self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space(self.command_profile, self.input_profile)
 
         # Adds option for state history for FF nets
         self._obs = len(self.observation_space)
@@ -114,32 +59,42 @@ class CassieEnv_v2:
 
         # learn gains means there is a delta on the default PD gains ***FOR EACH LEG***
         self.learn_gains = learn_gains
-        if self.learn_gains == True:
+        if self.learn_gains:
             self.action_space = np.zeros(10 + 20)
+            self.mirrored_acts = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4,
+                                  -15, -16, 17, 18, 19, -10, -11, 12, 13, 14,
+                                  -25, -26, 27, 28, 29, -20, -21, 22, 23, 24]
         else:
             self.action_space = np.zeros(10)
-
+            self.mirrored_acts = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4]
 
         self.u = pd_in_t()
 
         # TODO: should probably initialize this to current state
         self.cassie_state = state_out_t()
-
-        self.simrate = simrate # simulate X mujoco steps with same pd target
-                                # 50 brings simulation from 2000Hz to exactly 40Hz
-
-        self.simsteps = 0 # number of simulation steps
-
-        self.time    = 0 # number of time steps in current episode
-        self.phase   = 0 # portion of the phase the robot is in
-        self.counter = 0 # number of phase cycles completed in episode
+        self.simrate = simrate  # simulate X mujoco steps with same pd target. 50 brings simulation from 2000Hz to exactly 40Hz
+        self.time    = 0        # number of time steps in current episode
+        self.phase   = 0        # portion of the phase the robot is in
+        self.counter = 0        # number of phase cycles completed in episode
 
         # NOTE: a reference trajectory represents ONE phase cycle
 
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(len(self.trajectory) / self.simrate) - 1 if not self.aslip_traj else self.trajectory.length - 1
+        self.phaselen = 32
+        self.phase_add = 1
+
+        # NOTE: phase_based modifies self.phaselen throughout training
+
+        # Set up phase based / load in clock based reward func
+        self.have_incentive = False if "no_incentive" in self.reward_func else True
+        self.strict_relaxer = 0.1
+        self.early_reward = False
+        if self.command_profile == "phase":
+            self.set_up_phase_reward()
+        elif self.command_profile == "clock":
+            self.set_up_clock_reward(dirname)
 
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
@@ -149,18 +104,23 @@ class CassieEnv_v2:
         self.vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
 
         # CONFIGURE OFFSET for No Delta Policies
-        if self.aslip_traj:
-            ref_pos, ref_vel = self.get_ref_state(self.phase)
-            self.offset = ref_pos[self.pos_idx]
-        else:
-            self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
+        self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
-        self.phase_add = 1
+        self.max_orient_change = 0.2
+
+        self.max_simrate = self.simrate + 10
+        self.min_simrate = self.simrate - 20
+
+        self.max_speed = 4.0
+        self.min_speed = -0.3
+
+        self.max_side_speed  = 0.3
+        self.min_side_speed  = -0.3
 
         # global flat foot orientation, can be useful part of reward function:
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
         
-        # tracking various variables for reward funcs
+        # various tracking variables for reward funcs
         self.stepcount = 0
         self.l_high = False  # only true if foot is above 0.2m 
         self.r_high = False
@@ -174,6 +134,8 @@ class CassieEnv_v2:
         self.r_foot_pos = np.zeros(3)
         self.l_foot_orient = 0
         self.r_foot_orient = 0
+        self.hiproll_cost = 0
+        self.hiproll_act = 0
 
         # TODO: should this be mujoco tracking var or use state estimator. real command interface will use state est
         # Track pelvis position as baseline for pelvis tracking command inputs
@@ -183,153 +145,157 @@ class CassieEnv_v2:
         self.dynamics_randomization = dynamics_randomization
         self.slope_rand = dynamics_randomization
         self.joint_rand = dynamics_randomization
-        # Record default dynamics parameters
-        if self.dynamics_randomization:
-            self.default_damping = self.sim.get_dof_damping()
-            self.default_mass = self.sim.get_body_mass()
-            self.default_ipos = self.sim.get_body_ipos()
-            self.default_fric = self.sim.get_geom_friction()
 
-            weak_factor = 0.5
-            strong_factor = 0.5
+        self.max_pitch_incline = 0.03
+        self.max_roll_incline = 0.03
+        
+        self.encoder_noise = 0.01
+        
+        self.damping_low = 0.3
+        self.damping_high = 5.0
 
-            pelvis_damp_range = [[self.default_damping[0], self.default_damping[0]], 
-                                [self.default_damping[1], self.default_damping[1]], 
-                                [self.default_damping[2], self.default_damping[2]], 
-                                [self.default_damping[3], self.default_damping[3]], 
-                                [self.default_damping[4], self.default_damping[4]], 
-                                [self.default_damping[5], self.default_damping[5]]] 
+        self.mass_low = 0.5
+        self.mass_high = 1.5
 
-            hip_damp_range = [[self.default_damping[6]*weak_factor, self.default_damping[6]*strong_factor],
-                            [self.default_damping[7]*weak_factor, self.default_damping[7]*strong_factor],
-                            [self.default_damping[8]*weak_factor, self.default_damping[8]*strong_factor]]  # 6->8 and 19->21
+        self.fric_low = 0.4
+        self.fric_high = 1.1
 
-            achilles_damp_range = [[self.default_damping[9]*weak_factor,  self.default_damping[9]*strong_factor],
-                                    [self.default_damping[10]*weak_factor, self.default_damping[10]*strong_factor], 
-                                    [self.default_damping[11]*weak_factor, self.default_damping[11]*strong_factor]] # 9->11 and 22->24
-
-            knee_damp_range     = [[self.default_damping[12]*weak_factor, self.default_damping[12]*strong_factor]]   # 12 and 25
-            shin_damp_range     = [[self.default_damping[13]*weak_factor, self.default_damping[13]*strong_factor]]   # 13 and 26
-            tarsus_damp_range   = [[self.default_damping[14], self.default_damping[14]]]             # 14 and 27
-            heel_damp_range     = [[self.default_damping[15], self.default_damping[15]]]                           # 15 and 28
-            fcrank_damp_range   = [[self.default_damping[16]*weak_factor, self.default_damping[16]*strong_factor]]   # 16 and 29
-            prod_damp_range     = [[self.default_damping[17], self.default_damping[17]]]                           # 17 and 30
-            foot_damp_range     = [[self.default_damping[18]*weak_factor, self.default_damping[18]*strong_factor]]   # 18 and 31
-
-            side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
-            self.damp_range = pelvis_damp_range + side_damp + side_damp
-
-            hi = 1.1
-            lo = 0.9
-            m = self.default_mass
-            pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
-            hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
-                                    [lo*m[3],  hi*m[3]], 
-                                    [lo*m[4],  hi*m[4]]] 
-
-            achilles_mass_range    = [[lo*m[5],  hi*m[5]]]  # 5 and 17
-            knee_mass_range        = [[lo*m[6],  hi*m[6]]]  # 6 and 18
-            knee_spring_mass_range = [[lo*m[7],  hi*m[7]]]  # 7 and 19
-            shin_mass_range        = [[lo*m[8],  hi*m[8]]]  # 8 and 20
-            tarsus_mass_range      = [[lo*m[9],  hi*m[9]]]  # 9 and 21
-            heel_spring_mass_range = [[lo*m[10], hi*m[10]]] # 10 and 22
-            fcrank_mass_range      = [[lo*m[11], hi*m[11]]] # 11 and 23
-            prod_mass_range        = [[lo*m[12], hi*m[12]]] # 12 and 24
-            foot_mass_range        = [[lo*m[13], hi*m[13]]] # 13 and 25
-
-            side_mass = hip_mass_range + achilles_mass_range \
-                        + knee_mass_range + knee_spring_mass_range \
-                        + shin_mass_range + tarsus_mass_range \
-                        + heel_spring_mass_range + fcrank_mass_range \
-                        + prod_mass_range + foot_mass_range
-
-            self.mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
-
-        # self.sim.set_geom_friction([0.6, 1e-4, 5e-5], "floor")
-        # self.delta_x_min, self.delta_x_max = self.default_ipos[3] - 0.05, self.default_ipos[3] + 0.05
-        # self.delta_y_min, self.delta_y_max = self.default_ipos[4] - 0.05, self.default_ipos[4] + 0.05
-
-        ### Trims ###
-        self.joint_offsets = np.zeros(16)
-        self.com_vel_offset = 0
-        self.y_offset = 0
-
-        ### Random commands during training ###
-        self.speed_schedule = np.zeros(4)
+        self.speed = 0
+        self.side_speed = 0
         self.orient_add = 0
-        self.orient_time = 500
+
+        # Record default dynamics parameters
+        self.default_damping = self.sim.get_dof_damping()
+        self.default_mass = self.sim.get_body_mass()
+        self.default_ipos = self.sim.get_body_ipos()
+        self.default_fric = self.sim.get_geom_friction()
+        self.default_rgba = self.sim.get_geom_rgba()
+        self.default_quat = self.sim.get_geom_quat()
+
+        self.motor_encoder_noise = np.zeros(10)
+        self.joint_encoder_noise = np.zeros(6)
 
         # Keep track of actions, torques
-        self.prev_action = np.zeros(10)
+        self.prev_action = None
         self.curr_action = None
         self.prev_torque = None
 
-        # for RNN policies
-        self.critic_state = None
-
         self.debug = False
 
-    def set_up_state_space(self):
+    # Set up phase reward for dynamic phase functions
+    def set_up_phase_reward(self):
 
-        mjstate_size   = 40
-        state_est_size = 46
+        if "early" in self.reward_func:
+            self.early_reward = True
 
-        speed_size     = 1
+        if "library" in self.reward_func:
+            self.phase_input_mode = "library"
+        else:
+            self.phase_input_mode = None  # Vary all parts of input
 
-        clock_size    = 2
+        if "no_speed" in self.reward_func:
+            self.reward_func = "no_speed_clock"
+        else:
+            self.reward_func = "clock"
+
+    # Set up clock reward for loaded in phase functions
+    def set_up_clock_reward(self, dirname):
         
-        # Find the mirrored trajectory
-        if self.aslip_traj:
-            ref_traj_size = 18
-            mirrored_traj = np.array([6,7,8,9,10,11,0.1,1,2,3,4,5,12,13,14,15,16,17])
+        if "early" in self.reward_func:
+            self.early_reward = True
+
+        if "load" in self.reward_func:
+            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
+            self.left_clock = self.reward_clock_func["left"]
+            self.right_clock = self.reward_clock_func["right"]
+            self.reward_func = "load_clock"
         else:
-            ref_traj_size = 40
-            mirrored_traj = np.array([0.1, 1, 2, 3, 4, 5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12,
-                                        20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
-            
-        if self.state_est:
+
+            if "grounded" in self.reward_func:
+                self.stance_mode = "grounded"
+            elif "aerial" in self.reward_func:
+                self.stance_mode = "aerial"
+            else:
+                self.stance_mode = "zero"
+
+            # Clock based rewards are organized as follows: "<approach>_<pkl-file-path>" where <approach> is either "" or "max_vel" or "switch"
+            # extract <approach> from reward string
+            if "max_vel" in self.reward_func:    
+                self.reward_func = "max_vel_clock"
+            elif "switch" in self.reward_func:
+                # switch from walking to running, where walking path is specified
+                self.switch_speed = 1.8
+                self.reward_func = "clock"
+            else:
+                # match commanded speed input. maybe constrained to walking or running or figuring out based on specified path
+                # approach = ""
+                self.reward_func = "clock"
+
+    def set_up_state_space(self, command_profile, input_profile):
+
+        full_state_est_size = 46
+        min_state_est_size = 21
+        speed_size     = 2      # x speed, y speed
+        clock_size     = 2      # sin, cos
+        phase_size     = 5      # swing duration, stance duration, one-hot encoding of stance mode
+
+        # input --> FULL
+        if input_profile == "full":
             base_mir_obs = np.array([0.1, 1, -2, 3, -4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, -16, 17, -18, 19, -20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, -32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42])
-            obs_size = state_est_size
+            obs_size = full_state_est_size
+        # input --> MIN
+        elif input_profile == "min":
+            base_mir_obs = np.array([
+                3, 4, 5,            # L foot relative pos
+                0.1, 1, 2,          # R foot relative pos
+                6, -7, 8, -9,       # pelvis orient (quaternion)
+                -10, 11, -12,       # pelvis rot Vel
+                17, -18, 19, -20,   # L foot orient
+                13, -14, 15, -16    # R foot orient
+            ])
+            obs_size = min_state_est_size
         else:
-            base_mir_obs = np.array([0.1, 1, 2, -3, 4, -5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, -21, 22, -23, 24, -25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
-            obs_size = mjstate_size
-        if self.clock_based:
+            raise NotImplementedError
+
+        # command --> CLOCK_BASED : clock, speed
+        if command_profile == "clock":
             append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+speed_size)])
             mirrored_obs = np.concatenate([base_mir_obs, append_obs])
             clock_inds = append_obs[0:clock_size].tolist()
             obs_size += clock_size + speed_size
+        # command --> PHASE_BASED : clock, phase info, speed
+        elif command_profile == "phase":
+            append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+phase_size+speed_size)])
+            mirrored_obs = np.concatenate([base_mir_obs, append_obs])
+            clock_inds = append_obs[0:clock_size].tolist()
+            obs_size += clock_size + phase_size + speed_size
         else:
-            mirrored_traj_sign = np.multiply(np.sign(mirrored_traj), obs_size+np.floor(np.abs(mirrored_traj)))
-            mirrored_obs = np.concatenate([base_mir_obs, mirrored_traj_sign])
-            clock_inds = None
-            obs_size += ref_traj_size
+            raise NotImplementedError
 
         observation_space = np.zeros(obs_size)
         mirrored_obs = mirrored_obs.tolist()
 
-        # check_arr = np.arange(obs_size, dtype=np.float64)
-        # check_arr[0] = 0.1
-        # print("mir obs check: ", np.all(np.sort(np.abs(mirrored_obs)) == check_arr))
-        # exit()
-
         return observation_space, clock_inds, mirrored_obs
+
+    def rotate_to_orient(self, vec):
+        quaternion  = euler2quat(z=self.orient_add, y=0, x=0)
+        iquaternion = inverse_quaternion(quaternion)
+
+        if len(vec) == 3:
+            return rotate_by_quaternion(vec, iquaternion)
+
+        elif len(vec) == 4:
+            new_orient = quaternion_product(iquaternion, vec)
+            if new_orient[0] < 0:
+                new_orient = -new_orient
+            return new_orient
 
     def step_simulation(self, action, learned_gains=None):
 
-        if not self.ik_baseline:
-            if self.aslip_traj and self.phase == self.phaselen - 1:
-                ref_pos, ref_vel = self.get_ref_state(0)
-            else:
-                ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
-        else:
-            ref_pos = self.trajectory.ik_pos[self.simsteps]
-
-        if not self.no_delta:
-            self.offset = ref_pos[self.pos_idx]
         target = action + self.offset
 
         if self.joint_rand:
-            target -= self.joint_offsets[0:10]
+            target -= self.motor_encoder_noise
 
         foot_pos = np.zeros(6)
         self.sim.foot_pos(foot_pos)
@@ -339,7 +305,7 @@ class CassieEnv_v2:
 
             # TODO: move setting gains out of the loop?
             # maybe write a wrapper for pd_in_t ?
-            if self.learn_gains == False:                
+            if not self.learn_gains:
                 self.u.leftLeg.motorPd.pGain[i]  = self.P[i]
                 self.u.rightLeg.motorPd.pGain[i] = self.P[i]
                 self.u.leftLeg.motorPd.dGain[i]  = self.D[i]
@@ -350,8 +316,8 @@ class CassieEnv_v2:
                 self.u.leftLeg.motorPd.dGain[i]  = self.D[i] + learned_gains[10+i]
                 self.u.rightLeg.motorPd.dGain[i] = self.D[i] + learned_gains[15+i]
 
-            self.u.leftLeg.motorPd.torque[i]  = 0 # Feedforward torque
-            self.u.rightLeg.motorPd.torque[i] = 0 
+            self.u.leftLeg.motorPd.torque[i]  = 0  # Feedforward torque
+            self.u.rightLeg.motorPd.torque[i] = 0
 
             self.u.leftLeg.motorPd.pTarget[i]  = target[i]
             self.u.rightLeg.motorPd.pTarget[i] = target[i + 5]
@@ -384,8 +350,49 @@ class CassieEnv_v2:
         elif not self.r_swing and foot_pos[5] >= 0:
             self.r_swing = True
 
-    def step(self, action, return_omniscient_state=False):
+    # Basic version of step_simulation, that only simulates forward in time, does not do any other
+    # computation for reward, etc. Is faster and should be used for evaluation purposes
+    def step_sim_basic(self, action, learned_gains=None):
+
+        target = action + self.offset
+
+        if self.joint_rand:
+            target -= self.motor_encoder_noise
+
+        self.u = pd_in_t()
+        for i in range(5):
+
+            # TODO: move setting gains out of the loop?
+            # maybe write a wrapper for pd_in_t ?
+            if self.learn_gains is False:
+                self.u.leftLeg.motorPd.pGain[i]  = self.P[i]
+                self.u.rightLeg.motorPd.pGain[i] = self.P[i]
+                self.u.leftLeg.motorPd.dGain[i]  = self.D[i]
+                self.u.rightLeg.motorPd.dGain[i] = self.D[i]
+            else:
+                self.u.leftLeg.motorPd.pGain[i]  = self.P[i] + learned_gains[i]
+                self.u.rightLeg.motorPd.pGain[i] = self.P[i] + learned_gains[5+i]
+                self.u.leftLeg.motorPd.dGain[i]  = self.D[i] + learned_gains[10+i]
+                self.u.rightLeg.motorPd.dGain[i] = self.D[i] + learned_gains[15+i]
+
+            self.u.leftLeg.motorPd.torque[i]  = 0  # Feedforward torque
+            self.u.rightLeg.motorPd.torque[i] = 0
+
+            self.u.leftLeg.motorPd.pTarget[i]  = target[i]
+            self.u.rightLeg.motorPd.pTarget[i] = target[i + 5]
+
+            self.u.leftLeg.motorPd.dTarget[i]  = 0
+            self.u.rightLeg.motorPd.dTarget[i] = 0
+
+        self.cassie_state = self.sim.step_pd(self.u)
+
+    def step(self, action, return_omniscient_state=False, f_term=0):
         
+        if self.dynamics_randomization:
+            simrate = np.random.uniform(self.max_simrate, self.min_simrate)
+        else:
+            simrate = self.simrate
+
         # reset mujoco tracking variables
         self.l_foot_frc = 0
         self.r_foot_frc = 0
@@ -394,6 +401,8 @@ class CassieEnv_v2:
         self.r_foot_pos = np.zeros(3)
         self.l_foot_orient_cost = 0
         self.r_foot_orient_cost = 0
+        self.hiproll_cost = 0
+        self.hiproll_act = 0
 
         if self.learn_gains:
             action, learned_gains = action[0:10], action[10:]
@@ -403,7 +412,6 @@ class CassieEnv_v2:
                 self.step_simulation(action, learned_gains)
             else:
                 self.step_simulation(action)
-            self.simsteps += 1
             qpos = np.copy(self.sim.qpos())
             qvel = np.copy(self.sim.qvel())
             # Foot Force Tracking
@@ -417,13 +425,21 @@ class CassieEnv_v2:
             # Foot Orientation Cost
             self.l_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
             self.r_foot_orient_cost += (1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
+            # Hip Yaw velocity cost
+            self.hiproll_cost += (np.abs(qvel[6]) + np.abs(qvel[19])) / 3
+            if self.prev_action is not None:
+                self.hiproll_act += 2*np.linalg.norm(self.prev_action[[0, 5]] - action[[0, 5]])
+            else:
+                self.hiproll_act += 0
         
         self.l_foot_frc              /= self.simrate
-        self.r_foot_frc              /= self.simrate        
+        self.r_foot_frc              /= self.simrate
         self.l_foot_pos              /= self.simrate
         self.r_foot_pos              /= self.simrate
         self.l_foot_orient_cost      /= self.simrate
         self.r_foot_orient_cost      /= self.simrate
+        self.hiproll_cost            /= self.simrate
+        self.hiproll_act             /= self.simrate
 
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -431,164 +447,261 @@ class CassieEnv_v2:
         self.time  += 1
         self.phase += self.phase_add
 
-        if (self.aslip_traj and self.phase >= self.phaselen) or self.phase > self.phaselen:
+        if self.phase > self.phaselen:
             self.last_pelvis_pos = self.sim.qpos()[0:3]
-            self.simsteps = 0
             self.phase = 0
             self.counter += 1
 
         # no more knee walking
-        if self.sim.xpos("left-tarsus")[2] < 0.1 or self.sim.xpos("right-tarsus")[2] < 0.1:
-            done = True
+        # if self.sim.xpos("left-tarsus")[2] < 0.1 or self.sim.xpos("right-tarsus")[2] < 0.1:
+        #     done = True
             # print("left tarsus: {:.2f}\tleft foot: {:.2f}".format(self.sim.xpos("left-tarsus")[2], self.sim.xpos("left-foot")[2]))
             # print("right tarsus: {:.2f}\tright foot: {:.2f}".format(self.sim.xpos("right-tarsus")[2], self.sim.xpos("right-foot")[2]))
             # while(1):
             #     self.vis.draw(self.sim)
-        elif height < 0.4 or height > 3.0:
+        if height < 0.4 or height > 3.0:
             done = True
         else:
             done = False
 
+        # make sure trackers aren't None and calculate reward
+        if self.prev_action is None:
+            self.prev_action = action
+        if self.prev_torque is None:
+            self.prev_torque = np.asarray(self.cassie_state.motor.torque[:])
         reward = self.compute_reward(action)
 
         # update previous action
         self.prev_action = action
+        # update previous torque
+        self.prev_torque = np.asarray(self.cassie_state.motor.torque[:])
 
         # TODO: make 0.3 a variable/more transparent
         if reward < self.early_term_cutoff:
             done = True
+
+        if np.random.randint(300) == 0:  # random changes to orientation
+            self.orient_add += np.random.uniform(-self.max_orient_change, self.max_orient_change)
+
+        if np.random.randint(100) == 0:  # random changes to speed
+            self.speed = np.random.uniform(self.min_speed, self.max_speed)
+            self.speed = np.clip(self.speed, self.min_speed, self.max_speed)
+        
+        if np.random.randint(300) == 0:  # random changes to sidespeed
+            self.side_speed = np.random.uniform(self.min_side_speed, self.max_side_speed)
 
         if return_omniscient_state:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
         else:
             return self.get_full_state(), reward, done, {}
 
+    # More basic, faster version of step
+    def step_basic(self, action, return_omniscient_state=False):
+
+        if self.learn_gains:
+            action, learned_gains = action[0:10], action[10:]
+
+        for i in range(self.simrate):
+            if self.learn_gains:
+                self.step_sim_basic(action, learned_gains)
+            else:
+                self.step_sim_basic(action)
+
+        self.time  += 1
+        self.phase += self.phase_add
+
+        if self.phase > self.phaselen:
+            self.last_pelvis_pos = self.sim.qpos()[0:3]
+            self.phase = 0
+            self.counter += 1
+
+        if return_omniscient_state:
+            return self.get_full_state(), self.get_omniscient_state()
+        else:
+            return self.get_full_state()
+
     def reset(self):
 
-        if self.aslip_traj:
-            self.traj_idx = random.randint(0, self.num_speeds-1)
-            self.speed = self.speeds[self.traj_idx]
-            # print("current speed: {}\tcurrent traj: {}".format(self.speed, random_speed_idx))
-            self.trajectory = self.trajectories[self.traj_idx] # switch the current trajectory
-            self.phaselen = self.trajectory.length - 1
+        self.speed = np.random.uniform(self.min_speed, self.max_speed)
+        self.side_speed = np.random.uniform(self.min_side_speed, self.max_side_speed)
+
+        # Set up phase based
+        if self.command_profile == "phase":
+            if self.phase_input_mode == "library":
+                # constrain speed a bit further
+                self.speed = (random.randint(0, 30)) / 10
+                # library input -- pick total duration and swing/stance phase based on that. also randomize grounded vs aerial vs zero
+                total_duration = random.randint(3, 6) / 10  # this if for one swing and stance, so 2 * total_duration = walk cycle time
+                ratio = random.randint(2, 8) / 10
+                self.swing_duration = total_duration * ratio
+                self.stance_duration = total_duration - self.swing_duration
+                # also change stance mode
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            else:
+                # random everything
+                self.swing_duration = random.randint(1, 50) / 100
+                self.stance_duration = random.randint(1, 30) / 100
+                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+        # ELSE load in clock based reward func
+        elif self.reward_func == "load_clock":
+            pass
+        # ELSE use simple relationship to define swing and stance duration
         else:
-            self.speed = (random.randint(0, 20)) / 10
-            # # Make sure that if speed is above 2, freq is at least 1.2
-            # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
-            #     self.phase_add = 1.3 + 0.7*random.random()
-            # else:
-            #     self.phase_add = 1 + random.random()
+            if self.reward_func == "switch_clock":
+                if self.speed < self.switch_speed:
+                    self.stance_mode = "grounded"
+                else:
+                    self.stance_mode = "aerial"
+            total_duration = (0.9 - 0.25 / 3.0 * abs(self.speed)) / 2
+            self.swing_duration = (0.30 + ((0.70 - 0.30) / 3) * abs(self.speed)) * total_duration
+            self.stance_duration = (0.70 - ((0.70 - 0.30) / 3) * abs(self.speed)) * total_duration
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
 
-        if self.fixed_speed != None:
-            self.traj_idx = (np.abs(self.speeds - self.speed)).argmin()
-            self.speed = self.fixed_speed
-        
-        if self.reward_func == "clock":
-            self.left_clock = self.reward_clock_funcs["left"][-1]
-            self.right_clock = self.reward_clock_funcs["right"][-1]
-        elif self.reward_func == "aslip_clock":
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
-        elif self.reward_func == "max_vel_clock":
-            self.left_clock = self.reward_clock_funcs["left"][-1]
-            self.right_clock = self.reward_clock_funcs["right"][-1]
-
-        self.simsteps = 0
-
-        self.phase = random.randint(0, self.phaselen)
+        self.phase = random.randint(0, floor(self.phaselen))
         self.time = 0
         self.counter = 0
 
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
-        qpos, qvel = self.get_ref_state(self.phase)
-        # orientation = random.randint(-10, 10) * np.pi / 25
-        # quaternion = euler2quat(z=orientation, y=0, x=0)
-        # qpos[3:7] = quaternion
-        # self.y_offset = 0#random.uniform(-3.5, 3.5)
-        # qpos[1] = self.y_offset
+        # Randomize dynamics:
+        if self.dynamics_randomization:
+            damp = self.default_damping
 
-        if self.aslip_traj:
-            qvel = np.zeros(qvel.shape)
+            pelvis_damp_range = [[damp[0], damp[0]],
+                                [damp[1], damp[1]],
+                                [damp[2], damp[2]],
+                                [damp[3], damp[3]],
+                                [damp[4], damp[4]],
+                                [damp[5], damp[5]]]  # 0->5
 
-        self.sim.set_qpos(qpos)
-        self.sim.set_qvel(qvel)
+            hip_damp_range = [[damp[6]*self.damping_low, damp[6]*self.damping_high],
+                              [damp[7]*self.damping_low, damp[7]*self.damping_high],
+                              [damp[8]*self.damping_low, damp[8]*self.damping_high]]          # 6->8 and 19->21
+
+            achilles_damp_range = [[damp[9]*self.damping_low, damp[9]*self.damping_high],
+                                   [damp[10]*self.damping_low, damp[10]*self.damping_high],
+                                   [damp[11]*self.damping_low, damp[11]*self.damping_high]]   # 9->11 and 22->24
+
+            knee_damp_range     = [[damp[12]*self.damping_low, damp[12]*self.damping_high]]   # 12 and 25
+            shin_damp_range     = [[damp[13]*self.damping_low, damp[13]*self.damping_high]]   # 13 and 26
+            tarsus_damp_range   = [[damp[14]*self.damping_low, damp[14]*self.damping_high]]   # 14 and 27
+
+            heel_damp_range     = [[damp[15], damp[15]]]                                      # 15 and 28
+            fcrank_damp_range   = [[damp[16]*self.damping_low, damp[16]*self.damping_high]]   # 16 and 29
+            prod_damp_range     = [[damp[17], damp[17]]]                                      # 17 and 30
+            foot_damp_range     = [[damp[18]*self.damping_low, damp[18]*self.damping_high]]   # 18 and 31
+
+            side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
+            damp_range = pelvis_damp_range + side_damp + side_damp
+            damp_noise = [np.random.uniform(a, b) for a, b in damp_range]
+
+            m = self.default_mass
+            pelvis_mass_range      = [[self.mass_low*m[1], self.mass_high*m[1]]]   # 1
+            hip_mass_range         = [[self.mass_low*m[2], self.mass_high*m[2]],   # 2->4 and 14->16
+                                    [self.mass_low*m[3], self.mass_high*m[3]],
+                                    [self.mass_low*m[4], self.mass_high*m[4]]]
+
+            achilles_mass_range    = [[self.mass_low*m[5], self.mass_high*m[5]]]    # 5 and 17
+            knee_mass_range        = [[self.mass_low*m[6], self.mass_high*m[6]]]    # 6 and 18
+            knee_spring_mass_range = [[self.mass_low*m[7], self.mass_high*m[7]]]    # 7 and 19
+            shin_mass_range        = [[self.mass_low*m[8], self.mass_high*m[8]]]    # 8 and 20
+            tarsus_mass_range      = [[self.mass_low*m[9], self.mass_high*m[9]]]    # 9 and 21
+            heel_spring_mass_range = [[self.mass_low*m[10], self.mass_high*m[10]]]  # 10 and 22
+            fcrank_mass_range      = [[self.mass_low*m[11], self.mass_high*m[11]]]  # 11 and 23
+            prod_mass_range        = [[self.mass_low*m[12], self.mass_high*m[12]]]  # 12 and 24
+            foot_mass_range        = [[self.mass_low*m[13], self.mass_high*m[13]]]  # 13 and 25
+
+            side_mass = hip_mass_range + achilles_mass_range \
+                        + knee_mass_range + knee_spring_mass_range \
+                        + shin_mass_range + tarsus_mass_range \
+                        + heel_spring_mass_range + fcrank_mass_range \
+                        + prod_mass_range + foot_mass_range
+
+            mass_range = [[0, 0]] + pelvis_mass_range + side_mass + side_mass
+            mass_noise = [np.random.uniform(a, b) for a, b in mass_range]
+
+            delta = 0.0
+            com_noise = [0, 0, 0] + [np.random.uniform(val - delta, val + delta) for val in self.default_ipos[3:]]
+
+            fric_noise = []
+            translational = np.random.uniform(self.fric_low, self.fric_high)
+            torsional = np.random.uniform(1e-4, 5e-4)
+            rolling = np.random.uniform(1e-4, 2e-4)
+            for _ in range(int(len(self.default_fric)/3)):
+                fric_noise += [translational, torsional, rolling]
+
+            self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
+            self.sim.set_body_mass(np.clip(mass_noise, 0, None))
+            self.sim.set_body_ipos(com_noise)
+            self.sim.set_geom_friction(np.clip(fric_noise, 0, None))
+        else:
+            self.sim.set_body_mass(self.default_mass)
+            self.sim.set_body_ipos(self.default_ipos)
+            self.sim.set_dof_damping(self.default_damping)
+            self.sim.set_geom_friction(self.default_fric)
+
+        if self.slope_rand:
+            geom_plane = [np.random.uniform(-self.max_roll_incline, self.max_roll_incline), np.random.uniform(-self.max_pitch_incline, self.max_pitch_incline), 0]
+            quat_plane   = euler2quat(z=geom_plane[2], y=geom_plane[1], x=geom_plane[0])
+            geom_quat  = list(quat_plane) + list(self.default_quat[4:])
+            self.sim.set_geom_quat(geom_quat)
+        else:
+            self.sim.set_geom_quat(self.default_quat)
+
+        if self.joint_rand:
+            self.motor_encoder_noise = np.random.uniform(-self.encoder_noise, self.encoder_noise, size=10)
+            self.joint_encoder_noise = np.random.uniform(-self.encoder_noise, self.encoder_noise, size=6)
+        else:
+            self.motor_encoder_noise = np.zeros(10)
+            self.joint_encoder_noise = np.zeros(6)
+
+        # apply dynamics
+        self.sim.set_const()
 
         self.last_pelvis_pos = self.sim.qpos()[0:3]
 
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
-        self.orient_time = 0#random.randint(50, 200) 
-        self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
+        # reset commands
+        self.orient_add = 0  # random.randint(-10, 10) * np.pi / 25
+        self.speed = np.random.uniform(self.min_speed, self.max_speed)
+        self.side_speed = np.random.uniform(self.min_side_speed, self.max_side_speed)
 
         # reset mujoco tracking variables
         self.l_foot_frc = 0
         self.r_foot_frc = 0
         self.l_foot_orient_cost = 0
         self.r_foot_orient_cost = 0
-
-        if self.dynamics_randomization:
-            #### Dynamics Randomization ####
-            # damp_noise = [np.random.uniform(a, b) for a, b in self.damp_range]
-            # mass_noise = [np.random.uniform(a, b) for a, b in self.mass_range]
-            # com_noise = [0, 0, 0] + [np.random.uniform(self.delta_x_min, self.delta_x_min)] + [np.random.uniform(self.delta_y_min, self.delta_y_max)] + [0] + list(self.default_ipos[6:])
-            # fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
-            # fric_noise = []
-            # translational = np.random.uniform(0.6, 1.2)
-            # torsional = np.random.uniform(1e-4, 1e-2)
-            # rolling = np.random.uniform(5e-5, 5e-4)
-            # for _ in range(int(len(self.default_fric)/3)):
-            #     fric_noise += [translational, torsional, rolling]
-            fric_noise = [np.random.uniform(0.6, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)]
-            # self.sim.set_dof_damping(np.clip(damp_noise, 0, None))
-            # self.sim.set_body_mass(np.clip(mass_noise, 0, None))
-            # self.sim.set_body_ipos(com_noise)
-            self.sim.set_geom_friction(np.clip(fric_noise, 0, None), "floor")
-            self.sim.set_const()
-
-        if self.slope_rand:
-            rand_angle = np.pi/180*np.random.uniform(-5, 5, 2)
-            floor_quat = euler2quat(z=0, y=rand_angle[0], x=rand_angle[1])
-            self.sim.set_geom_quat(floor_quat, "floor")
-        if self.joint_rand:
-            self.joint_offsets = np.random.uniform(-0.03, 0.03, 16)
-            # Set motor and joint foot to be same offset
-            self.joint_offsets[4] = self.joint_offsets[12]
-            self.joint_offsets[9] = self.joint_offsets[15]
+        self.hiproll_cost = 0
+        self.hiproll_act = 0
 
         return self.get_full_state()
 
     def reset_for_test(self, full_reset=False):
-        self.simsteps = 0
         self.phase = 0
         self.time = 0
         self.counter = 0
         self.orient_add = 0
-        self.orient_time = np.inf
-        self.y_offset = 0
         self.phase_add = 1
 
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
-        if self.aslip_traj:
-            self.traj_idx = 0
-            self.speed = 0
-            # print("current speed: {}".format(self.speed))
-            self.trajectory = self.trajectories[self.traj_idx] # switch the current trajectory
-            self.phaselen = self.trajectory.length - 1
-        else:
-            self.speed = 0
+        self.speed = 0
 
-        if self.reward_func == "aslip_clock":
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+        # load in clock based reward func
+        if self.reward_func == "load_clock":
+            pass
+        # ELSE use simple relationship to define swing and stance duration
+        else:
+            # variable inputs
+            self.swing_duration = 0.15
+            self.stance_duration = 0.25
+            self.stance_mode = "grounded"
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
 
         if not full_reset:
-            qpos, qvel = self.get_ref_state(self.phase)
-            self.sim.set_qpos(qpos)
-            self.sim.set_qvel(qvel)
 
             # reset mujoco tracking variables
             self.last_pelvis_pos = self.sim.qpos()[0:3]
@@ -606,12 +719,16 @@ class CassieEnv_v2:
         if self.dynamics_randomization:
             self.sim.set_dof_damping(self.default_damping)
             self.sim.set_body_mass(self.default_mass)
-            # self.sim.set_body_ipos(self.default_ipos)
+            self.sim.set_body_ipos(self.default_ipos)
             self.sim.set_geom_friction(self.default_fric)
             self.sim.set_const()
 
         if self.slope_rand:
             self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
+
+        if self.joint_rand:
+            self.motor_encoder_noise = np.zeros(10)
+            self.joint_encoder_noise = np.zeros(6)
 
         return self.get_full_state()
 
@@ -629,112 +746,53 @@ class CassieEnv_v2:
         self.cassie_state.joint.velocity[:] = np.zeros(6)
 
     # Helper function for updating the speed, used in visualization tests
-    # not needed in training cause we don't change speeds in middle of rollout, and 
+    # not needed in training cause we don't change speeds in middle of rollout, and
     # we randomize the starting phase of each rollout
-    def update_speed(self, new_speed):
-        if self.aslip_traj:
-            self.traj_idx = (np.abs(self.speeds - new_speed)).argmin()
-            self.speed = self.traj_idx / 10
-            self.trajectory = self.trajectories[self.traj_idx]
+    def update_speed(self, new_speed, new_side_speed=0.0):
+
+        self.speed = np.clip(new_speed, self.min_speed, self.max_speed)
+        self.side_speed = np.clip(new_side_speed, self.min_side_speed, self.max_side_speed)
+        
+        if self.command_profile == "phase":
+            self.swing_duration = max(0.01, self.swing_duration)
+            self.stance_duration = max(0.01, self.stance_duration)
             old_phaselen = self.phaselen
-            self.phaselen = self.trajectory.length - 1
-            # update phase
+            self.set_up_phase_reward()
             self.phase = int(self.phaselen * self.phase / old_phaselen)
-            # new offset
-            ref_pos, ref_vel = self.get_ref_state(self.phase)
-            self.offset = ref_pos[self.pos_idx]
         else:
-            self.speed = new_speed
-        
-            # # Make sure that if speed is above 2, freq is at least 1.2
-            # if self.speed > 1.3:# or np.any(self.speed_schedule > 1.6):
-            #     self.phase_add = 1.1 + (self.speed - 1)* 0.2
-        
-        if self.reward_func == "aslip_clock":
-            self.left_clock = self.reward_clock_funcs["left"][self.traj_idx]
-            self.right_clock = self.reward_clock_funcs["right"][self.traj_idx]
+            total_duration = (0.9 - 0.25 / 3.0 * self.speed) / 2
+            self.swing_duration = (0.30 + ((0.70 - 0.30) / 3) * self.speed) * total_duration
+            self.stance_duration = (0.70 - ((0.70 - 0.30) / 3) * self.speed) * total_duration
+            old_phaselen = self.phaselen
+            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+            self.phase = int(self.phaselen * self.phase / old_phaselen)
 
     def compute_reward(self, action):
-        qpos = np.copy(self.sim.qpos())
-        qvel = np.copy(self.sim.qvel())
 
-        ref_pos, ref_vel = self.get_ref_state(self.phase)
-        if self.reward_func == "clock":
-            self.early_term_cutoff = 0.2
-            return clock_reward(self, action)
+        if self.reward_func == "clock" or self.reward_func == "load_clock" or self.reward_func == "switch_clock":
+            self.early_term_cutoff = -99.
+            if self.early_reward:
+                return early_clock_reward(self, action)
+            else:
+                return clock_reward(self, action)
+        elif self.reward_func == "no_speed_clock":
+            self.early_term_cutoff = -99.
+            return no_speed_clock_reward(self, action)
         elif self.reward_func == "max_vel_clock":
-            self.early_term_cutoff = 0.2
+            self.early_term_cutoff = -99.
             return max_vel_clock_reward(self, action)
-        elif self.reward_func == "aslip_clock":
-            self.early_term_cutoff = 0.2
-            return aslip_clock_reward(self, action)
-        elif self.reward_func == "aslip_old":
-            self.early_term_cutoff = 0.0
-            return aslip_old_reward(self, action)      
-        elif self.reward_func == "iros_paper":
-            return iros_paper_reward(self)
-        elif self.reward_func == "5k_speed_reward":
-            return old_speed_reward(self)
         else:
             raise NotImplementedError
 
-  # get the corresponding state from the reference trajectory for the current phase
-    def get_ref_state(self, phase=None):
-        if phase is None:
-            phase = self.phase
-
-        if phase > self.phaselen:
-            phase = 0
-
-        desired_ind = phase * self.simrate if not self.aslip_traj else phase
-        # phase_diff = desired_ind - math.floor(desired_ind)
-        # if phase_diff != 0:       # desired ind is an int
-        #     pos_prev = np.copy(self.trajectory.qpos[math.floor(desired_ind)])
-        #     vel_prev = np.copy(self.trajectory.qvel[math.floor(desired_ind)])
-        #     pos_next = np.copy(self.trajectory.qpos[math.ceil(desired_ind)])
-        #     vel_next = np.copy(self.trajectory.qvel[math.ceil(desired_ind)])
-        #     pos = pos_prev + phase_diff * (pos_next - pos_prev)
-        #     vel = vel_prev + phase_diff * (vel_next - vel_prev)
-        # else:
-        # print("desired ind: ", desired_ind)
-        pos = np.copy(self.trajectory.qpos[int(desired_ind)])
-        vel = np.copy(self.trajectory.qvel[int(desired_ind)])
-
-        # this is just setting the x to where it "should" be given the number
-        # of cycles
-        # pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
-        
-        # ^ should only matter for COM error calculation,
-        # gets dropped out of state variable for input reasons
-
-        ###### Setting variable speed  #########
-        if not self.aslip_traj:
-            pos[0] *= self.speed
-            pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter * self.speed
-        else:
-            pos[0] += (self.trajectory.qpos[-1, 0] - self.trajectory.qpos[0, 0]) * self.counter
-        ######                          ########
-
-        # setting lateral distance target to 0?
-        # regardless of reference trajectory?
-        pos[1] = 0
-
-        if not self.aslip_traj:
-            vel[0] *= self.speed
-
-        return pos, vel
-
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
-        qvel = np.copy(self.sim.qvel()) 
-
-        ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
+        qvel = np.copy(self.sim.qvel())
 
         # TODO: maybe convert to set subtraction for clarity
-        # {i for i in range(35)} - 
+        # {i for i in range(35)} -
         # {0, 10, 11, 12, 13, 17, 18, 19, 24, 25, 26, 27, 31, 32, 33}
 
-        # this is everything except pelvis x and qw, achilles rod quaternions, 
+        # this is everything except pelvis x and qw, achilles rod quaternions,
         # and heel spring/foot crank/plantar rod angles
         # note: x is forward dist, y is lateral dist, z is height
 
@@ -743,64 +801,57 @@ class CassieEnv_v2:
         # trajectory despite being global coord. Y is only invariant to straight
         # line trajectories.
 
-        # CLOCK BASED (NO TRAJECTORY)
-        if self.clock_based:
-            clock = [np.sin(2 * np.pi *  self.phase / self.phaselen),
-                    np.cos(2 * np.pi *  self.phase / self.phaselen)]
-            
-            ext_state = np.concatenate((clock, [self.speed]))
-
-        # ASLIP TRAJECTORY
-        elif self.aslip_traj and not self.clock_based:
-            if(self.phase == 0):
-                # ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1, offset=self.vertOffset))
-                ext_state = np.concatenate(get_ref_aslip_unaltered_state(self, self.phaselen - 1))
-            else:
-                # ext_state = np.concatenate(get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phaselen - 1, offset=self.vertOffset))
-                ext_state = np.concatenate(get_ref_aslip_unaltered_state(self, self.phase))
-
-        # OTHER TRAJECTORY
+        # command --> PHASE_BASED : clock, phase info, speed
+        if self.command_profile == "phase":
+            clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
+                    np.cos(2 * np.pi * self.phase / self.phaselen)]
+            ext_state = np.concatenate((clock, [self.swing_duration, self.stance_duration], encode_stance_mode(self.stance_mode), [self.speed, self.side_speed]))
+        # command --> CLOCK_BASED : clock, speed
+        elif self.command_profile == "clock":
+            clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
+                    np.cos(2 * np.pi * self.phase / self.phaselen)]
+            ext_state = np.concatenate((clock, [self.speed, self.side_speed]))
         else:
-            ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
+            raise NotImplementedError
 
         # Update orientation
-        new_orient = self.cassie_state.pelvis.orientation[:]
-        new_translationalVelocity = self.cassie_state.pelvis.translationalVelocity[:]
-        new_translationalAcceleleration = self.cassie_state.pelvis.translationalAcceleration[:]
-        # new_translationalVelocity[0:2] += self.com_vel_offset
-        quaternion = euler2quat(z=self.orient_add, y=0, x=0)
-        iquaternion = inverse_quaternion(quaternion)
-        new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
-        if new_orient[0] < 0:
-            new_orient = -new_orient
-        new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
-        new_translationalAcceleleration = rotate_by_quaternion(self.cassie_state.pelvis.translationalAcceleration[:], iquaternion)
-        motor_pos = self.cassie_state.motor.position[:]
-        joint_pos = self.cassie_state.joint.position[:]
+        new_orient = self.rotate_to_orient(self.cassie_state.pelvis.orientation[:])
+        new_translationalVelocity = self.rotate_to_orient(self.cassie_state.pelvis.translationalVelocity[:])
+        new_translationalAcceleleration = self.rotate_to_orient(self.cassie_state.pelvis.translationalAcceleration[:])
+        
+        # motor and joint poses
         if self.joint_rand:
-            motor_pos += self.joint_offsets[0:10]
-            joint_pos += self.joint_offsets[10:16]
-
-        # Use state estimator
-        robot_state = np.concatenate([
-            [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height], # pelvis height
-            new_orient,                                 # pelvis orientation
-            motor_pos,                                     # actuated joint positions
-
-            new_translationalVelocity,                       # pelvis translational velocity
-            self.cassie_state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
-            self.cassie_state.motor.velocity[:],                                     # actuated joint velocities
-
-            new_translationalAcceleleration,                   # pelvis translational acceleration
-            
-            joint_pos,                                     # unactuated joint positions
-            self.cassie_state.joint.velocity[:]                                      # unactuated joint velocities
-        ])
-
-        if self.state_est:
-            state = np.concatenate([robot_state, ext_state])
+            motor_pos = self.cassie_state.motor.position[:] + self.motor_encoder_noise
+            joint_pos = self.cassie_state.joint.position[:] + self.joint_encoder_noise
         else:
-            state = np.concatenate([qpos[self.pos_index], qvel[self.vel_index], ext_state])
+            motor_pos = self.cassie_state.motor.position[:]
+            joint_pos = self.cassie_state.joint.position[:]
+
+        if self.input_profile == "min":
+            robot_state = np.concatenate([
+                self.cassie_state.leftFoot.position[:],             # left foot position
+                self.cassie_state.rightFoot.position[:],            # right foot position
+                new_orient,                                         # pelvis orientation
+                self.cassie_state.pelvis.rotationalVelocity[:],     # pelvis rotational velocity
+                self.cassie_state.leftFoot.orientation[:],          # left foot orientation
+                self.cassie_state.rightFoot.orientation[:]          # right foot orientation
+            ])
+        elif self.input_profile == "full":
+            robot_state = np.concatenate([
+                [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height],  # pelvis height
+                new_orient,                                         # pelvis orientation
+                motor_pos,                                          # actuated joint positions
+                new_translationalVelocity,                          # pelvis translational velocity
+                self.cassie_state.pelvis.rotationalVelocity[:],     # pelvis rotational velocity
+                self.cassie_state.motor.velocity[:],                # actuated joint velocities
+                new_translationalAcceleleration,                    # pelvis translational acceleration
+                joint_pos,                                          # unactuated joint positions
+                self.cassie_state.joint.velocity[:]                 # unactuated joint velocities
+            ])
+        else:
+            raise NotImplementedError
+
+        state = np.concatenate([robot_state, ext_state])
 
         self.state_history.insert(0, state)
         self.state_history = self.state_history[:self.history+1]
@@ -809,47 +860,9 @@ class CassieEnv_v2:
 
     def render(self):
         if self.vis is None:
-            self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/cassie.xml")
+            self.vis = CassieVis(self.sim, self.config)
 
         return self.vis.draw(self.sim)
-    
-    def get_state_info(self):
-        # state estimator info
-        pelvis_pos = self.cassie_state.pelvis.position[:]
-        pelvis_pos[2] = pelvis_pos[2] - self.cassie_state.terrain.height
-        lf_pos = self.cassie_state.leftFoot.position[:]
-        rf_pos = self.cassie_state.rightFoot.position[:]
-        lf_pos_global = [pelvis_pos[i] + lf_pos[i] for i in range(3)]
-        rf_pos_global = [pelvis_pos[i] + rf_pos[i] for i in range(3)]
-        # robot_state_info = np.array([pelvis_pos, lf_pos, rf_pos])
-        robot_state_info = np.array([pelvis_pos, lf_pos_global, rf_pos_global])
-        
-        # mujoco info
-        qpos = self.sim.qpos()
-        actual_compos = qpos[0:3]
-        actual_lf = self.l_foot_pos
-        actual_rf = self.r_foot_pos
-        # actual_lf = self.l_foot_pos - qpos[0:3]
-        # actual_rf = self.r_foot_pos - qpos[0:3]
-        actual_state_info = np.array([actual_compos, actual_lf, actual_rf])
-
-        return robot_state_info, actual_state_info
-
-    # This is assumed to be called after env.step. hence, using self.phase - 1 
-    def get_traj_and_state_info(self):
-        # traj info used in rewards
-        traj_info = get_ref_aslip_global_state(self, self.phase-1)
-        # traj_info = get_ref_aslip_unaltered_state(self, self.phase)
-        traj_info = [traj_info[4], traj_info[2], traj_info[0]]
-        
-        # traj info going into the policy
-        # traj_cmd_info = get_ref_aslip_ext_state(self, self.cassie_state, self.last_pelvis_pos, self.phase, offset=self.vertOffset)
-        traj_cmd_info = get_ref_aslip_unaltered_state(self, self.phase-1)
-        traj_cmd_info = [traj_cmd_info[4], traj_cmd_info[2], traj_cmd_info[0]]
-        
-        robot_state_info, actual_state_info = self.get_state_info()
-
-        return traj_info, traj_cmd_info, robot_state_info, actual_state_info
 
 
 # Currently unused
@@ -858,11 +871,11 @@ class CassieEnv_v2:
 #     omniscient_state = np.hstack((full_state, self.sim.get_dof_damping(), self.sim.get_body_mass(), self.sim.get_body_ipos(), self.sim.get_ground_friction))
 #     return omniscient_state
 
-#nbody layout:
+# nbody layout:
 # 0:  worldbody (zero)
 # 1:  pelvis
 
-# 2:  left hip roll 
+# 2:  left hip roll
 # 3:  left hip yaw
 # 4:  left hip pitch
 # 5:  left achilles rod
@@ -875,7 +888,7 @@ class CassieEnv_v2:
 # 12: left plantar rod
 # 13: left foot
 
-# 14: right hip roll 
+# 14: right hip roll
 # 15: right hip yaw
 # 16: right hip pitch
 # 17: right achilles rod

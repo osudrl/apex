@@ -9,8 +9,8 @@ class WrapEnv:
     def __getattr__(self, attr):
         return getattr(self.env, attr)
 
-    def step(self, action):
-        state, reward, done, info = self.env.step(action[0])
+    def step(self, action, term_thresh=0):
+        state, reward, done, info = self.env.step(action[0], f_term=term_thresh)
         return np.array([state]), np.array([reward]), np.array([done]), np.array([info])
 
     def render(self):
