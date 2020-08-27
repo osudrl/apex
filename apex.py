@@ -14,7 +14,7 @@ if __name__ == "__main__":
     """
     # command input, state input, env attributes
     parser.add_argument("--command_profile", default="clock", type=str.lower, choices=["clock", "phase", "traj"])
-    parser.add_argument("--input_profile", default="full", type=str.lower, choices=["full", "min"])
+    parser.add_argument("--input_profile", default="full", type=str.lower, choices=["full", "min_joint", "min_foot"])
     parser.add_argument("--simrate", default=50, type=int, help="simrate of environment")
     parser.add_argument("--not_dyn_random", default=True, action='store_false', dest='dyn_random')
     parser.add_argument("--learn_gains", default=False, action='store_true', dest='learn_gains')             # learn PD gains or not
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("--ik_baseline", default=False, action='store_true', dest='ik_baseline')             # use ik as baseline for aslip + delta policies?
     # mirror loss and reward
     parser.add_argument("--not_mirror", default=True, action='store_false', dest='mirror')             # mirror actions or not
-    parser.add_argument("--reward", default=None, type=str)                                             # reward to use. this is a required argument
+    parser.add_argument("--reward", default="clock", type=str)                                             # reward to use. this is a required argument
 
     """
         General arguments for configuring the logger

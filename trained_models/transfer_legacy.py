@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
     # transfer to new input profile system
     if "Min" in run_args.env_name:
-        args.input_profile = "min"
+        args.input_profile = "min_foot"
     else:
         args.input_profile = "full"
 

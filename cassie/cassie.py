@@ -3,8 +3,9 @@
 from .cassiemujoco import pd_in_t, state_out_t, CassieSim, CassieVis
 
 from cassie.quaternion_function import *
-from cassie.phase_function import *
+from .periodicfn.probabilistic.periodic_func import Phase, vonmises_func
 from .rewards import *
+from .nn_ik.ikNet import IK_solver, get_sample_pos
 
 from math import floor
 
@@ -39,13 +40,17 @@ class CassieEnv:
         self.command_profile = command_profile
         self.input_profile = input_profile
         self.dynamics_randomization = dynamics_randomization
+        self.clock_based = True
 
         # kwargs
+        self.debug = False
         self.has_side_speed = True
         self.training = True
         for key, val in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, val)
+        # Set up the IK Solver for state resets
+        self.IK_solver = IK_solver()
 
         # Arguments for reward function
         self.reward_func = reward
@@ -83,25 +88,24 @@ class CassieEnv:
         self.phase   = 0        # portion of the phase the robot is in
         self.counter = 0        # number of phase cycles completed in episode
 
-        # NOTE: a reference trajectory represents ONE phase cycle
-
-        # should be floor(len(traj) / simrate) - 1
-        # should be VERY cautious here because wrapping around trajectory
-        # badly can cause assymetrical/bad gaits
-        self.phaselen = 32
+        # NOTE: phase_based modifies self.phaselen throughout training
+        # Cycle duration, phaselength, phase_add
+        self.cycle_duration = 0.9  # seconds a single walk cycle takes
+        self.phaselen = (2000 / simrate) * self.cycle_duration  # this is default simrate
         self.phase_add = 1
 
-        # NOTE: phase_based modifies self.phaselen throughout training
-
         # Set up phase based / load in clock based reward func
+        self.early_reward = True if "early" in self.reward_func else False
         self.have_incentive = False if "no_incentive" in self.reward_func else True
-        self.strict_relaxer = 0.1
-        self.early_reward = False
-        if self.command_profile == "phase":
-            self.set_up_phase_reward()
-        elif self.command_profile == "clock":
-            self.set_up_clock_reward(dirname)
+        
+        # Initialize gait to learn (this will change during env.reset)
+        self.coeff = [1, -1]
+        self.ratio = [0.5, 0.5]
+        self.period_shift = [0.0, 0.5]
+        self.std = [0.2, 0.2]
+        self.update_gait()
 
+        ### Constant Attributes ###
         # see include/cassiemujoco.h for meaning of these indices
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
@@ -112,21 +116,26 @@ class CassieEnv:
         # CONFIGURE OFFSET for No Delta Policies
         self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
+        # global flat foot orientation, can be useful part of reward function:
+        self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
+
+        ### Command inputs and their ranges ###
         self.max_orient_change = 0.2
 
-        self.max_simrate = self.simrate + 10
-        self.min_simrate = self.simrate - 20
-
-        self.max_speed = 4.0
+        self.max_speed = 3.0
         self.min_speed = -0.3
 
         self.max_side_speed  = 0.3
         self.min_side_speed  = -0.3
 
-        # global flat foot orientation, can be useful part of reward function:
-        self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
+        self.min_swing_ratio = 0.3
+        self.max_swing_ratio = 0.7
+
+        self.speed = 0
+        self.side_speed = 0
+        self.orient_add = 0
         
-        # various tracking variables for reward funcs
+        ### tracking variables ###
         self.stepcount = 0
         self.l_high = False  # only true if foot is above 0.2m 
         self.r_high = False
@@ -146,16 +155,26 @@ class CassieEnv:
         # TODO: should this be mujoco tracking var or use state estimator. real command interface will use state est
         # Track pelvis position as baseline for pelvis tracking command inputs
         self.last_pelvis_pos = self.sim.qpos()[0:3]
+        
+        # Keep track of actions, torques
+        self.prev_action = None
+        self.curr_action = None
+        self.prev_torque = None
 
         #### Dynamics Randomization ####
         self.dynamics_randomization = dynamics_randomization
         self.slope_rand = dynamics_randomization
+        self.simrate_rand = dynamics_randomization
         self.joint_rand = dynamics_randomization
 
         self.max_pitch_incline = 0.03
         self.max_roll_incline = 0.03
         
-        self.encoder_noise = 0.01
+        self.encoder_noise = 0.08
+
+        self.max_simrate = self.simrate + 15
+        self.min_simrate = self.simrate - 20
+        self.small_simrate_noise_mag = 2
         
         self.damping_low = 0.3
         self.damping_high = 5.0
@@ -166,11 +185,8 @@ class CassieEnv:
         self.fric_low = 0.4
         self.fric_high = 1.1
 
-        self.speed = 0
-        self.side_speed = 0
-        self.orient_add = 0
-
         # Record default dynamics parameters
+        self.default_simrate = self.simrate
         self.default_damping = self.sim.get_dof_damping()
         self.default_mass = self.sim.get_body_mass()
         self.default_ipos = self.sim.get_body_ipos()
@@ -181,76 +197,34 @@ class CassieEnv:
         self.motor_encoder_noise = np.zeros(10)
         self.joint_encoder_noise = np.zeros(6)
 
-        # Keep track of actions, torques
-        self.prev_action = None
-        self.curr_action = None
-        self.prev_torque = None
-
-        self.debug = False
-
-    # Set up phase reward for dynamic phase functions
-    def set_up_phase_reward(self):
-
-        if "early" in self.reward_func:
-            self.early_reward = True
-
-        if "library" in self.reward_func:
-            self.phase_input_mode = "library"
-        else:
-            self.phase_input_mode = None  # Vary all parts of input
-
-        if "no_speed" in self.reward_func:
-            self.reward_func = "no_speed_clock"
-        else:
-            self.reward_func = "clock"
-
-    # Set up clock reward for loaded in phase functions
-    def set_up_clock_reward(self, dirname):
-        
-        if "early" in self.reward_func:
-            self.early_reward = True
-
-        if "load" in self.reward_func:
-            self.reward_clock_func = load_reward_clock_funcs(os.path.join(dirname, "rewards", "reward_clock_funcs", self.reward_func + ".pkl"))
-            self.left_clock = self.reward_clock_func["left"]
-            self.right_clock = self.reward_clock_func["right"]
-            self.reward_func = "load_clock"
-        else:
-
-            if "grounded" in self.reward_func:
-                self.stance_mode = "grounded"
-            elif "aerial" in self.reward_func:
-                self.stance_mode = "aerial"
-            else:
-                self.stance_mode = "zero"
-
-            # Clock based rewards are organized as follows: "<approach>_<pkl-file-path>" where <approach> is either "" or "max_vel" or "switch"
-            # extract <approach> from reward string
-            if "max_vel" in self.reward_func:    
-                self.reward_func = "max_vel_clock"
-            elif "switch" in self.reward_func:
-                # switch from walking to running, where walking path is specified
-                self.switch_speed = 1.8
-                self.reward_func = "clock"
-            else:
-                # match commanded speed input. maybe constrained to walking or running or figuring out based on specified path
-                # approach = ""
-                self.reward_func = "clock"
-
     def set_up_state_space(self, command_profile, input_profile):
 
         full_state_est_size = 46
-        min_state_est_size = 21
-        speed_size     = 2 if self.has_side_speed else 1      # x speed, y speed
+        min_joint_state_est_size = 35
+        min_foot_state_est_size = 21
+        speed_size     = 2      # x speed, y speed
         clock_size     = 2      # sin, cos
-        phase_size     = 5      # swing duration, stance duration, one-hot encoding of stance mode
+        phase_size     = 6      # ratio, coeff, shift for each phase (2 phases)
 
         # input --> FULL
         if input_profile == "full":
             base_mir_obs = np.array([0.1, 1, -2, 3, -4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, -16, 17, -18, 19, -20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, -32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42])
             obs_size = full_state_est_size
-        # input --> MIN
-        elif input_profile == "min":
+        # input --> MIN (joint encoders)
+        elif input_profile == "min_joint":
+            base_mir_obs = np.array([
+                0.01, 1, 2, 3,          # pelvis orientation
+                -4, 5, -6,              # rotational vel
+                -12, -13, 14, 15, 16,   # left motor pos
+                -7, -8, 9, 10, 11,      # right motor pos
+                -22, -23, 24, 25, 26,   # left motor vel
+                -17, -18, 19, 20, 21,   # right motor vel
+                29, 30, 27, 28,         # joint pos
+                33, 34, 31, 32          # joint vel
+            ])
+            obs_size = min_joint_state_est_size
+        # input --> MIN (measured foot placements)
+        elif input_profile == "min_foot":
             base_mir_obs = np.array([
                 3, 4, 5,            # L foot relative pos
                 0.1, 1, 2,          # R foot relative pos
@@ -259,7 +233,7 @@ class CassieEnv:
                 17, -18, 19, -20,   # L foot orient
                 13, -14, 15, -16    # R foot orient
             ])
-            obs_size = min_state_est_size
+            obs_size = min_foot_state_est_size
         else:
             raise NotImplementedError
 
@@ -282,6 +256,12 @@ class CassieEnv:
         mirrored_obs = mirrored_obs.tolist()
 
         return observation_space, clock_inds, mirrored_obs
+
+    def update_gait(self):
+        self.gait = [
+            Phase(start=0.0, end=self.ratio[0], std=self.std[0], coeff=self.coeff[0]),
+            Phase(start=self.ratio[0], end=self.ratio[0]+self.ratio[1], std=self.std[1], coeff=self.coeff[1]),
+        ]
 
     def rotate_to_orient(self, vec):
         quaternion  = euler2quat(z=self.orient_add, y=0, x=0)
@@ -394,10 +374,10 @@ class CassieEnv:
 
     def step(self, action, return_omniscient_state=False, f_term=0):
         
-        if self.dynamics_randomization:
-            simrate = np.random.uniform(self.max_simrate, self.min_simrate)
+        if self.simrate_rand:
+            self.simrate = int(floor(self.default_simrate + np.random.uniform(-self.small_simrate_noise_mag, self.small_simrate_noise_mag)))
         else:
-            simrate = self.simrate
+            self.simrate = self.default_simrate
 
         # reset mujoco tracking variables
         self.l_foot_frc = 0
@@ -488,15 +468,27 @@ class CassieEnv:
 
         if self.training:
 
-            if np.random.randint(300) == 0:  # random changes to orientation
+            # random changes to orientation
+            if np.random.randint(300) == 0:
                 self.orient_add += np.random.uniform(-self.max_orient_change, self.max_orient_change)
 
-            if np.random.randint(100) == 0:  # random changes to speed
+            # random changes to speed
+            if np.random.randint(100) == 0:
                 self.speed = np.random.uniform(self.min_speed, self.max_speed)
-                self.speed = np.clip(self.speed, self.min_speed, self.max_speed)
-            
-            if np.random.randint(300) == 0:  # random changes to sidespeed
+                self.update_speed(self.speed)
+
+            # random changes to sidespeed
+            if np.random.randint(300) == 0:
                 self.side_speed = np.random.uniform(self.min_side_speed, self.max_side_speed)
+
+            # if in phase cmd mode then random changes to commanded gait
+            if (np.random.randint(300) == 0) and (self.command_profile == "phase"):
+                swing_ratio = np.random.uniform(self.min_swing_ratio, self.max_swing_ratio)
+                # self.coeff = random.choice([[1, -1], [-1, 1]])
+                self.coeff = [1, -1]  # 1: swing  -1: stance
+                self.ratio = [swing_ratio, 1-swing_ratio]
+                self.period_shift = random.choice([[0.0, 0.5], [0.5, 0.0], [0.0, 0.0]])
+                self.update_gait()
 
         if return_omniscient_state:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
@@ -505,6 +497,11 @@ class CassieEnv:
 
     # More basic, faster version of step
     def step_basic(self, action, return_omniscient_state=False):
+
+        if self.simrate_rand:
+            self.simrate = int(floor(self.default_simrate + np.random.uniform(-self.small_simrate_noise_mag, self.small_simrate_noise_mag)))
+        else:
+            self.simrate = self.default_simrate
 
         if self.learn_gains:
             action, learned_gains = action[0:10], action[10:]
@@ -535,36 +532,30 @@ class CassieEnv:
 
         # Set up phase based
         if self.command_profile == "phase":
-            if self.phase_input_mode == "library":
-                # constrain speed a bit further
-                self.speed = (random.randint(0, 30)) / 10
-                # library input -- pick total duration and swing/stance phase based on that. also randomize grounded vs aerial vs zero
-                total_duration = random.randint(3, 6) / 10  # this if for one swing and stance, so 2 * total_duration = walk cycle time
-                ratio = random.randint(2, 8) / 10
-                self.swing_duration = total_duration * ratio
-                self.stance_duration = total_duration - self.swing_duration
-                # also change stance mode
-                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
-            else:
-                # random everything
-                self.swing_duration = random.randint(1, 50) / 100
-                self.stance_duration = random.randint(1, 30) / 100
-                self.stance_mode = np.random.choice(["grounded", "aerial", "zero"])
-            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+            # randomizing coeff, FIXING ratio/phaselen (for now), period_shift
+            self.cycle_duration = 0.85
+            swing_ratio = np.random.uniform(self.min_swing_ratio, self.max_swing_ratio)
+            self.phaselen = self.cycle_duration * (2000 / self.default_simrate)
+            # self.coeff = random.choice([[1, -1], [-1, 1]])
+            self.coeff = [1, -1]  # 1: swing  -1: stance
+            self.ratio = [0.5, 0.5]
+            self.period_shift = random.choice([[0.0, 0.5], [0.5, 0.0], [0.0, 0.0]])
+            self.update_gait()
+
         # ELSE load in clock based reward func
-        elif self.reward_func == "load_clock":
-            pass
-        # ELSE use simple relationship to define swing and stance duration
-        else:
-            if self.reward_func == "switch_clock":
-                if self.speed < self.switch_speed:
-                    self.stance_mode = "grounded"
-                else:
-                    self.stance_mode = "aerial"
-            total_duration = (0.9 - 0.25 / 3.0 * abs(self.speed)) / 2
-            self.swing_duration = (0.30 + ((0.70 - 0.30) / 3) * abs(self.speed)) * total_duration
-            self.stance_duration = (0.70 - ((0.70 - 0.30) / 3) * abs(self.speed)) * total_duration
-            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+        elif self.command_profile == "clock":
+            # choose ratio/phaselen based on speed, everything else constant
+            total_duration = (0.9 - 0.2 / self.max_speed * abs(self.speed)) / 2  # 0.9s at 0.0 m/s, 0.7s at max abs(speed)
+            swing_ratio = (0.30 + ((0.70 - 0.30) / self.max_speed) * abs(self.speed))  # 0.3 at 0.0 m/s, 0.7 at max abs(speed)
+            self.phaselen = self.cycle_duration * (2000 / self.default_simrate) 
+            self.coeff = [1, -1]  # 1: swing  -1: stance
+            self.ratio = [swing_ratio, 1-swing_ratio]
+            self.update_gait()
+
+        self.clock1 = vonmises_func(np.arange(0, self.phaselen+self.phase_add) / self.phaselen, self.gait, shift=self.period_shift[0])
+        self.clock2 = vonmises_func(np.arange(0, self.phaselen+self.phase_add) / self.phaselen, self.gait, shift=self.period_shift[1])
+        # self.clock1 = vonmises_func(np.linspace(0, 1, num=floor(self.phaselen)+1), self.gait, shift=self.period_shift[0])
+        # self.clock2 = vonmises_func(np.linspace(0, 1, num=floor(self.phaselen)+1), self.gait, shift=self.period_shift[1])
 
         self.phase = random.randint(0, floor(self.phaselen))
         self.time = 0
@@ -657,6 +648,9 @@ class CassieEnv:
         else:
             self.sim.set_geom_quat(self.default_quat)
 
+        if self.simrate_rand:
+            self.simrate = np.random.uniform(self.min_simrate, self.max_simrate)
+
         if self.joint_rand:
             self.motor_encoder_noise = np.random.uniform(-self.encoder_noise, self.encoder_noise, size=10)
             self.joint_encoder_noise = np.random.uniform(-self.encoder_noise, self.encoder_noise, size=6)
@@ -666,6 +660,9 @@ class CassieEnv:
 
         # apply dynamics
         self.sim.set_const()
+
+        ## Reset to starting position via IK
+        self.sim.set_qpos(self.IK_solver(*get_sample_pos()))
 
         self.last_pelvis_pos = self.sim.qpos()[0:3]
 
@@ -697,17 +694,16 @@ class CassieEnv:
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
         self.speed = 0
+        self.coeff = [1, -1]
+        self.ratio = [0.5, 0.5]
+        self.period_shift = [0.0, 0.5]
+        self.std = [0.2, 0.2]
+        self.update_gait()
 
-        # load in clock based reward func
-        if self.reward_func == "load_clock":
-            pass
-        # ELSE use simple relationship to define swing and stance duration
-        else:
-            # variable inputs
-            self.swing_duration = 0.15
-            self.stance_duration = 0.25
-            self.stance_mode = "grounded"
-            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
+        self.clock1 = vonmises_func(np.arange(0, self.phaselen+self.phase_add) / self.phaselen, self.gait, shift=self.period_shift[0])
+        self.clock2 = vonmises_func(np.arange(0, self.phaselen+self.phase_add) / self.phaselen, self.gait, shift=self.period_shift[1])
+        # self.clock1 = vonmises_func(np.linspace(0, 1, num=floor(self.phaselen)+1), self.gait, shift=self.period_shift[0])
+        # self.clock2 = vonmises_func(np.linspace(0, 1, num=floor(self.phaselen)+1), self.gait, shift=self.period_shift[1])
 
         if not full_reset:
 
@@ -756,28 +752,25 @@ class CassieEnv:
     # Helper function for updating the speed, used in visualization tests
     # not needed in training cause we don't change speeds in middle of rollout, and
     # we randomize the starting phase of each rollout
-    def update_speed(self, new_speed, new_side_speed=0.0):
+    def update_speed(self, new_speed, new_side_speed=None):
 
         self.speed = np.clip(new_speed, self.min_speed, self.max_speed)
-        self.side_speed = np.clip(new_side_speed, self.min_side_speed, self.max_side_speed)
+        if new_side_speed is not None:
+            self.side_speed = np.clip(new_side_speed, self.min_side_speed, self.max_side_speed)
         
-        if self.command_profile == "phase":
-            self.swing_duration = max(0.01, self.swing_duration)
-            self.stance_duration = max(0.01, self.stance_duration)
-            old_phaselen = self.phaselen
-            self.set_up_phase_reward()
-            self.phase = int(self.phaselen * self.phase / old_phaselen)
+        if self.command_profile == "clock":
+            # choose ratio/phaselen based on speed
+            total_duration = (0.9 - 0.2 / self.max_speed * abs(self.speed)) / 2  # 0.9s at 0.0 m/s, 0.7s at max abs(speed)
+            swing_ratio = (0.30 + ((0.70 - 0.30) / self.max_speed) * abs(self.speed))  # 0.3 at 0.0 m/s, 0.7 at max abs(speed)
+            self.phaselen = total_duration * (2000 / self.default_simrate)
+            self.ratio = [swing_ratio, 1-swing_ratio]
+            self.update_gait()
         else:
-            total_duration = (0.9 - 0.25 / 3.0 * self.speed) / 2
-            self.swing_duration = (0.30 + ((0.70 - 0.30) / 3) * self.speed) * total_duration
-            self.stance_duration = (0.70 - ((0.70 - 0.30) / 3) * self.speed) * total_duration
-            old_phaselen = self.phaselen
-            self.left_clock, self.right_clock, self.phaselen = create_phase_reward(self.swing_duration, self.stance_duration, self.strict_relaxer, self.stance_mode, self.have_incentive, FREQ=2000//self.simrate)
-            self.phase = int(self.phaselen * self.phase / old_phaselen)
+            pass
 
     def compute_reward(self, action):
 
-        if self.reward_func == "clock" or self.reward_func == "load_clock" or self.reward_func == "switch_clock":
+        if self.reward_func == "clock":
             self.early_term_cutoff = -99.
             if self.early_reward:
                 return early_clock_reward(self, action)
@@ -815,7 +808,7 @@ class CassieEnv:
         if self.command_profile == "phase":
             clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
                     np.cos(2 * np.pi * self.phase / self.phaselen)]
-            ext_state = np.concatenate((clock, [self.swing_duration, self.stance_duration], encode_stance_mode(self.stance_mode), speed_input))
+            ext_state = np.concatenate(([*self.coeff, *self.ratio, *self.period_shift, *speed_input], clock))
         # command --> CLOCK_BASED : clock, speed
         elif self.command_profile == "clock":
             clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
@@ -826,9 +819,11 @@ class CassieEnv:
 
         # Update orientation
         new_orient = self.rotate_to_orient(self.cassie_state.pelvis.orientation[:])
-        new_translationalVelocity = self.rotate_to_orient(self.cassie_state.pelvis.translationalVelocity[:])
-        new_translationalAcceleleration = self.rotate_to_orient(self.cassie_state.pelvis.translationalAcceleration[:])
-        
+        pelvis_height = [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height]
+        pelvis_vel = self.rotate_to_orient(self.cassie_state.pelvis.translationalVelocity[:])
+        pelvis_rvel = self.cassie_state.pelvis.rotationalVelocity[:]
+        pelvis_accel = self.rotate_to_orient(self.cassie_state.pelvis.translationalAcceleration[:])
+
         # motor and joint poses
         if self.joint_rand:
             motor_pos = self.cassie_state.motor.position[:] + self.motor_encoder_noise
@@ -837,26 +832,41 @@ class CassieEnv:
             motor_pos = self.cassie_state.motor.position[:]
             joint_pos = self.cassie_state.joint.position[:]
 
-        if self.input_profile == "min":
+        motor_vel = self.cassie_state.motor.velocity[:]
+        joint_vel = self.cassie_state.joint.velocity[:]
+
+        if self.input_profile == "min_foot":
             robot_state = np.concatenate([
                 self.cassie_state.leftFoot.position[:],             # left foot position
                 self.cassie_state.rightFoot.position[:],            # right foot position
-                new_orient,                                         # pelvis orientation
-                self.cassie_state.pelvis.rotationalVelocity[:],     # pelvis rotational velocity
+                new_orient[:],                                      # pelvis orientation
+                pelvis_rvel,                                        # pelvis rotational velocity
                 self.cassie_state.leftFoot.orientation[:],          # left foot orientation
                 self.cassie_state.rightFoot.orientation[:]          # right foot orientation
             ])
+        elif self.input_profile == "min_joint":
+            # remove double-counted joint/motor positions
+            joint_pos = np.concatenate([joint_pos[:2], joint_pos[3:5]])
+            joint_vel = np.concatenate([joint_vel[:2], joint_vel[3:5]])
+            robot_state = np.concatenate([
+                new_orient[:],   # pelvis orientation
+                pelvis_rvel,     # pelvis rotational velocity
+                motor_pos,       # actuated joint positions
+                motor_vel,       # actuated joint velocities
+                joint_pos,       # unactuated joint positions
+                joint_vel        # unactuated joint velocities
+            ])
         elif self.input_profile == "full":
             robot_state = np.concatenate([
-                [self.cassie_state.pelvis.position[2] - self.cassie_state.terrain.height],  # pelvis height
-                new_orient,                                         # pelvis orientation
-                motor_pos,                                          # actuated joint positions
-                new_translationalVelocity,                          # pelvis translational velocity
-                self.cassie_state.pelvis.rotationalVelocity[:],     # pelvis rotational velocity
-                self.cassie_state.motor.velocity[:],                # actuated joint velocities
-                new_translationalAcceleleration,                    # pelvis translational acceleration
-                joint_pos,                                          # unactuated joint positions
-                self.cassie_state.joint.velocity[:]                 # unactuated joint velocities
+                pelvis_height,  # pelvis height
+                new_orient[:],   # pelvis orientation
+                motor_pos,       # actuated joint positions
+                pelvis_vel,      # pelvis translational velocity
+                pelvis_rvel,     # pelvis rotational velocity
+                motor_vel,       # actuated joint velocities
+                pelvis_accel,    # pelvis translational acceleration
+                joint_pos,       # unactuated joint positions
+                joint_vel        # unactuated joint velocities
             ])
         else:
             raise NotImplementedError

@@ -2,32 +2,8 @@ import numpy as np
 import pickle, os
 
 import torch
-import torch.nn as nn
-import torch.functional as F
 
-class IKNet(nn.Module):
-    def __init__(self, input_size, output_size, hidden_layer_sizes):
-        super(IKNet, self).__init__()
-
-        self.layers = nn.ModuleList()
-        
-        self.layers += [nn.Linear(input_size, hidden_layer_sizes[0])]
-        
-        for i in range(len(hidden_layer_sizes)-1):
-            self.layers += [nn.Linear(hidden_layer_sizes[i], hidden_layer_sizes[i+1])]
-        
-        self.nonlinearity = torch.relu
-        
-        self.out = nn.Linear(hidden_layer_sizes[-1], output_size)
-
-        # print("# of params: ", sum(p.numel() for p in self.parameters()))
-    
-    def forward(self, inputs):
-        x = inputs
-        for layer in self.layers:
-            x = self.nonlinearity(layer(x))
-        x = self.out(x)
-        return x
+from cassie.nn_ik.ikNet import IK_solver
 
 """
 Aslip-IK trajectories, for several speeds
@@ -44,8 +20,7 @@ def getAllTrajectories(speeds):
 
     dirname = os.path.dirname(__file__)
 
-    model = IKNet(9, 35, (15, 15))
-    model.load_state_dict(torch.load(os.path.join(dirname, "ikNet_state_dict.pt")))
+    solver = IK_solver()
 
     for i, speed in enumerate(speeds):
         dirname = os.path.dirname(__file__)
@@ -53,7 +28,7 @@ def getAllTrajectories(speeds):
         trajectory = CassieAslipTrajectory(traj_path)
         time = np.linspace(0, trajectory.time[-1], num=50*trajectory.length)
         x = trajectory.pos_f_interp(time).T
-        ik_pos = model(torch.Tensor(x)).detach().numpy()
+        ik_pos = solver.combined_forward(x)
         trajectory.ik_pos = ik_pos
         trajectories.append(trajectory)
 
@@ -73,8 +48,6 @@ def getAllTrajectories(speeds):
 #         pos_f_interp = trajectory.pos_f_interp
 #         trajectory_curves.append(pos_f_interp)
 #     return trajectory_curves
-
-
 
 class CassieAslipTrajectory:
     def __init__(self, filepath):

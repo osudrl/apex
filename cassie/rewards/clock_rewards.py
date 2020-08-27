@@ -51,10 +51,10 @@ def clock_reward(self, action):
     # force/vel clock errors
 
     # These values represent if we want to allow foot foot forces / vels (1 -> good if forces/vels exist), or (-1 -> bad if forces/vels exist)
-    left_frc_clock = self.left_clock[0](self.phase)
-    right_frc_clock = self.right_clock[0](self.phase)
-    left_vel_clock = self.left_clock[1](self.phase)
-    right_vel_clock = self.right_clock[1](self.phase)
+    left_frc_clock  = self.clock1[self.phase]
+    right_frc_clock = self.clock2[self.phase]
+    left_vel_clock  = -left_frc_clock
+    right_vel_clock = -right_frc_clock
 
     # scaled force/vel reward
     # left_frc_score = np.tanh(left_frc_clock * normed_left_frc)
@@ -164,10 +164,10 @@ def early_clock_reward(self, action):
     # force/vel clock errors
 
     # These values represent if we want to allow foot foot forces / vels (1 -> good if forces/vels exist), or (-1 -> bad if forces/vels exist)
-    left_frc_clock = self.left_clock[0](self.phase)
-    right_frc_clock = self.right_clock[0](self.phase)
-    left_vel_clock = self.left_clock[1](self.phase)
-    right_vel_clock = self.right_clock[1](self.phase)
+    left_frc_clock  = self.clock1[self.phase]
+    right_frc_clock = self.clock2[self.phase]
+    left_vel_clock  = -left_frc_clock
+    right_vel_clock = -right_frc_clock
 
     # scaled force/vel reward
     left_frc_score = np.tanh(left_frc_clock * normed_left_frc)
@@ -270,10 +270,10 @@ def no_speed_clock_reward(self, action):
     # force/vel clock errors
 
     # These values represent if we want to allow foot foot forces / vels (1 -> good if forces/vels exist), or (-1 -> bad if forces/vels exist)
-    left_frc_clock = self.left_clock[0](self.phase)
-    right_frc_clock = self.right_clock[0](self.phase)
-    left_vel_clock = self.left_clock[1](self.phase)
-    right_vel_clock = self.right_clock[1](self.phase)
+    left_frc_clock  = self.clock1[self.phase]
+    right_frc_clock = self.clock2[self.phase]
+    left_vel_clock  = -left_frc_clock
+    right_vel_clock = -right_frc_clock
 
     # scaled force/vel reward
     # left_frc_score = np.tanh(left_frc_clock * normed_left_frc)
@@ -374,11 +374,11 @@ def aslip_clock_reward(self, action):
         height_diff = 0
     straight_diff += height_diff
 
-    # force/vel clock errors
-    left_frc_clock = self.left_clock[0][0](self.phase)
-    right_frc_clock = self.right_clock[0][0](self.phase)
-    left_vel_clock = self.left_clock[0][1](self.phase)
-    right_vel_clock = self.right_clock[0][1](self.phase)
+    # These values represent if we want to allow foot foot forces / vels (1 -> good if forces/vels exist), or (-1 -> bad if forces/vels exist)
+    left_frc_clock  = self.clock1[self.phase]
+    right_frc_clock = self.clock2[self.phase]
+    left_vel_clock  = -left_frc_clock
+    right_vel_clock = -right_frc_clock
 
     left_frc_score = np.tanh(left_frc_clock * normed_left_frc)
     left_vel_score = np.tanh(left_vel_clock * normed_left_vel)
@@ -459,11 +459,11 @@ def max_vel_clock_reward(self, action):
 
     # force/vel clock errors
 
-    # These values represent if we want to allow foot foot forces / vels (0 -> don't penalize), or penalize them (1 -> don't allow)
-    left_frc_clock = self.left_clock[0](self.phase)
-    right_frc_clock = self.right_clock[0](self.phase)
-    left_vel_clock = self.left_clock[1](self.phase)
-    right_vel_clock = self.right_clock[1](self.phase)
+    # These values represent if we want to allow foot foot forces / vels (1 -> good if forces/vels exist), or (-1 -> bad if forces/vels exist)
+    left_frc_clock  = self.clock1[self.phase]
+    right_frc_clock = self.clock2[self.phase]
+    left_vel_clock  = -left_frc_clock
+    right_vel_clock = -right_frc_clock
     
     left_frc_penalty = np.tanh(left_frc_clock * normed_left_frc)
     left_vel_penalty = np.tanh(left_vel_clock * normed_left_vel)
