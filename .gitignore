@@ -134,4 +134,5 @@ ref_qposes.png
 *.sh.e*
 *.sh.o*
 
-
+# Sphinx Doc output
+docs/build
