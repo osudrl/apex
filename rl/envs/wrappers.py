@@ -66,6 +66,23 @@ class SymmetricEnv:
             mirror_obs[:, clock_inds[i]] = np.sin(np.arcsin(clock[:, i]) + np.pi)
         return mirror_obs
 
+    # To be used when there is a clock in the observation. In this case, the mirrored_obs vector inputted
+    # when the SymmeticEnv is created should not move the clock input order. The indices of the obs vector
+    # where the clocks are located need to be inputted.
+    def mirror_phase_observation(self, obs, clock_inds, phase_shift_inds):
+        # print("obs.shape = ", obs.shape)
+        # print("obs_mirror_matrix.shape = ", self.obs_mirror_matrix.shape)
+        mirror_obs = obs @ self.obs_mirror_matrix
+        clock = mirror_obs[:, self.clock_inds]
+        # print("clock: ", clock)
+        for i in range(np.shape(clock)[1]):
+            mirror_obs[:, clock_inds[i]] = np.sin(np.arcsin(clock[:, i]) + np.pi)
+        # additionally swap period shift
+        temp = mirror_obs[:, self.phase_shift_inds[0]]
+        mirror_obs[:, self.phase_shift_inds[0]] = mirror_obs[:, self.phase_shift_inds[1]]
+        mirror_obs[:, self.phase_shift_inds[1]] = temp
+        return mirror_obs
+
 
 def _get_symmetry_matrix(mirrored):
     numel = len(mirrored)

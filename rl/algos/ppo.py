@@ -365,6 +365,8 @@ class PPO:
         if hasattr(env, 'mirror_observation'):
             if env.clock_based:
                 obs_mirr = env.mirror_clock_observation
+            elif env.phase_based:
+                obs_mirr = env.mirror_phase_observation
             else:
                 obs_mirr = env.mirror_observation
 

@@ -263,9 +263,10 @@ if __name__ == "__main__":
         parser.add_argument("--history", default=0, type=int)                                    # number of previous states to use as input
         parser.add_argument("--mission", default="default", type=str)                            # only used by playground environment
         parser.add_argument("--terrain", default=None, type=str)                                 # hfield file name (terrain to use)
-        parser.add_argument("--debug", default=False, action='store_true')
-        parser.add_argument("--no_stats", dest="stats", default=True, action='store_false')
-        parser.add_argument("--no_viz", default=False, action='store_true')
+        parser.add_argument("--early_term", default=False, action='store_true')                       # Reset on reward termination
+        parser.add_argument("--debug", default=False, action='store_true')                       # Set env's debug attribute to True
+        parser.add_argument("--no_stats", dest="stats", default=True, action='store_false')      # Stats on robot vel and command info
+        parser.add_argument("--no_viz", default=False, action='store_true')                      # Visualize robot simulation or not
 
         args = parser.parse_args()
 

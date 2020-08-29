@@ -57,7 +57,7 @@ class CassieEnv:
         self.early_term_cutoff = 0.3
 
         # State space
-        self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space(self.command_profile, self.input_profile)
+        self.observation_space, self.clock_inds, self.mirrored_obs, self.phase_shift_inds = self.set_up_state_space(self.command_profile, self.input_profile)
 
         # Adds option for state history for FF nets
         self._obs = len(self.observation_space)
@@ -65,7 +65,7 @@ class CassieEnv:
 
         self.observation_space = np.zeros(self._obs + self._obs * self.history)
 
-        self.P = np.array([100,  100,  88,  96,  50]) 
+        self.P = np.array([100,  100,  88,  96,  50])
         self.D = np.array([10.0, 10.0, 8.0, 9.6, 5.0])
 
         # learn gains means there is a delta on the default PD gains ***FOR EACH LEG***
@@ -206,6 +206,8 @@ class CassieEnv:
         clock_size     = 2      # sin, cos
         phase_size     = 6      # ratio, coeff, shift for each phase (2 phases)
 
+        phase_shift_inds = None
+
         # input --> FULL
         if input_profile == "full":
             base_mir_obs = np.array([0.1, 1, -2, 3, -4, -10, -11, 12, 13, 14, -5, -6, 7, 8, 9, 15, -16, 17, -18, 19, -20, -26, -27, 28, 29, 30, -21, -22, 23, 24, 25, 31, -32, 33, 37, 38, 39, 34, 35, 36, 43, 44, 45, 40, 41, 42])
@@ -243,11 +245,15 @@ class CassieEnv:
             mirrored_obs = np.concatenate([base_mir_obs, append_obs])
             clock_inds = append_obs[0:clock_size].tolist()
             obs_size += clock_size + speed_size
+            self.phase_based = False
         # command --> PHASE_BASED : clock, phase info, speed
         elif command_profile == "phase":
             append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+phase_size+speed_size)])
             mirrored_obs = np.concatenate([base_mir_obs, append_obs])
             clock_inds = append_obs[0:clock_size].tolist()
+            # NOTE: within phase info, we must flip the elements of period_shift
+            phase_shift_inds = append_obs[-2:-4:-1].tolist()
+            self.phase_based = True
             obs_size += clock_size + phase_size + speed_size
         else:
             raise NotImplementedError
@@ -255,7 +261,7 @@ class CassieEnv:
         observation_space = np.zeros(obs_size)
         mirrored_obs = mirrored_obs.tolist()
 
-        return observation_space, clock_inds, mirrored_obs
+        return observation_space, clock_inds, mirrored_obs, phase_shift_inds
 
     def update_gait(self):
         self.gait = [
@@ -545,9 +551,12 @@ class CassieEnv:
         # ELSE load in clock based reward func
         elif self.command_profile == "clock":
             # choose ratio/phaselen based on speed, everything else constant
-            total_duration = (0.9 - 0.2 / self.max_speed * abs(self.speed)) / 2  # 0.9s at 0.0 m/s, 0.7s at max abs(speed)
+            self.cycle_duration = (0.9 - 0.2 / self.max_speed * abs(self.speed))  # 0.9s at 0.0 m/s, 0.7s at max abs(speed)
             swing_ratio = (0.30 + ((0.70 - 0.30) / self.max_speed) * abs(self.speed))  # 0.3 at 0.0 m/s, 0.7 at max abs(speed)
-            self.phaselen = self.cycle_duration * (2000 / self.default_simrate) 
+            print(swing_ratio)
+            print(self.cycle_duration)
+            self.phaselen = self.cycle_duration * (2000 / self.default_simrate)
+            print(self.phaselen)
             self.coeff = [1, -1]  # 1: swing  -1: stance
             self.ratio = [swing_ratio, 1-swing_ratio]
             self.update_gait()
@@ -760,9 +769,9 @@ class CassieEnv:
         
         if self.command_profile == "clock":
             # choose ratio/phaselen based on speed
-            total_duration = (0.9 - 0.2 / self.max_speed * abs(self.speed)) / 2  # 0.9s at 0.0 m/s, 0.7s at max abs(speed)
+            self.cycle_duration = (0.9 - 0.2 / self.max_speed * abs(self.speed))  # 0.9s at 0.0 m/s, 0.7s at max abs(speed)
             swing_ratio = (0.30 + ((0.70 - 0.30) / self.max_speed) * abs(self.speed))  # 0.3 at 0.0 m/s, 0.7 at max abs(speed)
-            self.phaselen = total_duration * (2000 / self.default_simrate)
+            self.phaselen = self.cycle_duration * (2000 / self.default_simrate)
             self.ratio = [swing_ratio, 1-swing_ratio]
             self.update_gait()
         else:
@@ -808,7 +817,7 @@ class CassieEnv:
         if self.command_profile == "phase":
             clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
                     np.cos(2 * np.pi * self.phase / self.phaselen)]
-            ext_state = np.concatenate(([*self.coeff, *self.ratio, *self.period_shift, *speed_input], clock))
+            ext_state = np.concatenate((clock, [*self.coeff, *self.ratio, *self.period_shift, *speed_input]))
         # command --> CLOCK_BASED : clock, speed
         elif self.command_profile == "clock":
             clock = [np.sin(2 * np.pi * self.phase / self.phaselen),
