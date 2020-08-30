@@ -7,7 +7,7 @@ import multiprocessing as mp
 from cassie.periodicfn.probabilistic.vonmises_clock import LivePlot
 import matplotlib.pyplot as plt
 
-from cassie.cassiemujoco import CassieSim
+# from cassie.cassiemujoco import CassieSim
 
 import tty
 import termios
@@ -80,11 +80,10 @@ class EvalProcessClass():
         if self.live_plot:
             send((env.gait, env.period_shift))
 
-        if args.terrain is not None and ".npy" in args.terrain:
-            print("HJERE")
-            env.sim = CassieSim("cassie_hfield.xml")
-            hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
-            env.sim.set_hfield_data(hfield_data.flatten())
+        # if args.terrain is not None and ".npy" in args.terrain:
+        #     env.sim = CassieSim("cassie_hfield.xml")
+        #     hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
+        #     env.sim.set_hfield_data(hfield_data.flatten())
 
         if hasattr(policy, 'init_hidden_state'):
             policy.init_hidden_state()
@@ -94,8 +93,10 @@ class EvalProcessClass():
         slowmo = False
 
         if visualize:
+            print(env.vis)
             env.render()
         render_state = True
+
         try:
             tty.setcbreak(sys.stdin.fileno())
 
@@ -105,7 +106,6 @@ class EvalProcessClass():
             eval_reward = 0
             speed = 0.0
             side_speed = 0.0
-
             env.update_speed(speed, side_speed)
 
             while render_state:
@@ -173,7 +173,7 @@ class EvalProcessClass():
                             policy.init_hidden_state()
                         print("Resetting environment via env.reset()")
                     elif c == 'p':
-                        push = 100
+                        push = 200
                         push_dir = 2
                         force_arr = np.zeros(6)
                         force_arr[push_dir] = push
@@ -206,6 +206,16 @@ class EvalProcessClass():
                     
                     eval_reward += reward
                     timesteps += 1
+
+                    # If early termination set, 
+                    if done and args.early_term:
+                        state = env.reset_for_test()
+                        done = False
+                        timesteps = 0
+                        eval_reward = 0
+                        speed = 0.0
+                        side_speed = 0.0
+                        env.update_speed(speed, side_speed)
 
                 if visualize:
                     render_state = env.render()

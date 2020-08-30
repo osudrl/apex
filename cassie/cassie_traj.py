@@ -1065,6 +1065,7 @@ class CassieTrajEnv:
     def render(self):
         if self.vis is None:
             self.vis = CassieVis(self.sim, self.config)
+            input()
 
         return self.vis.draw(self.sim)
 
