@@ -136,6 +136,16 @@ class PPO:
         torch.save(policy, os.path.join(self.save_path, "actor" + filetype))
         torch.save(critic, os.path.join(self.save_path, "critic" + filetype))
 
+    def save_cutoff(self, policy, critic, cutoff):
+
+        try:
+            os.makedirs(self.save_path)
+        except OSError:
+            pass
+        filetype = ".pt" # pytorch model
+        torch.save(policy, os.path.join(self.save_path, "actor_{}".format(cutoff) + filetype))
+        torch.save(critic, os.path.join(self.save_path, "critic_{}".format(cutoff) + filetype))
+
     @ray.remote
     @torch.no_grad()
     def sample(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0, term_thresh=0):
@@ -376,14 +386,16 @@ class PPO:
         start_itr = 0
         ep_counter = 0
         do_term = False
+        rew_thresh = [50, 100, 150, 200, 250, 300]
         for itr in range(n_itr):
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
             if self.highest_reward > (2/3)*self.max_traj_len and curr_anneal > 0.5:
                 curr_anneal *= anneal_rate
-            if do_term and curr_thresh < 0.35:
-                curr_thresh = .1 * 1.0006**(itr-start_itr)
+            if do_term and curr_thresh < 0.5:
+                # break
+                curr_thresh += (0.5) / 8000#.1 * 1.0006**(itr-start_itr)
             batch = self.sample_parallel(env_fn, self.policy, self.critic, self.num_steps, self.max_traj_len, anneal=curr_anneal, term_thresh=curr_thresh)
 
             print("time elapsed: {:.2f} s".format(time.time() - start_time))
@@ -453,11 +465,16 @@ class PPO:
             opt_time = time.time() - optimizer_start
             print("optimizer time elapsed: {:.2f} s".format(opt_time))
 
-            if np.mean(batch.ep_lens) >= self.max_traj_len * 0.75:
+            # if np.mean(batch.ep_lens) >= self.max_traj_len * 0.5:
+            if np.mean(batch.ep_returns) >= rew_thresh[start_itr]:
                 ep_counter += 1
-            if do_term == False and ep_counter > 50:
-                do_term = True
-                start_itr = itr
+            # if do_term == False and ep_counter > 20:
+            #     # do_term = True
+            #     # start_itr = itr
+            #     self.save_cutoff(policy, critic, rew_thresh[start_itr])
+            #     start_itr += 1
+            #     start_itr = min(start_itr, len(rew_thresh))
+            #     ep_counter = 0
 
             if logger is not None:
                 evaluate_start = time.time()

@@ -76,13 +76,15 @@ def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based
         elif path == "CassieNovelFootDist":
             env_fn = partial(CassieEnv_novel_footdist, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == "CassieMinInput":
-            env_fn = partial(CassieEnv_mininput, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
-
+            env_fn = partial(CassieEnv_mininput, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, reward=reward, history=history)
 
         # TODO for Yesh: make mirrored_obs an attribute of environment, configured based on setup parameters
         if mirror:
             from rl.envs.wrappers import SymmetricEnv
-            env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=env_fn().mirrored_obs, mirrored_act=[-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4])
+            mirror_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4]
+            if learn_gains:
+                mirror_act = [-5, -6, 7, 8, 9, -0.1, -1, 2, 3, 4, 15, 16, 17, 18, 19, 10, 11, 12, 13, 14, 25, 26, 27, 28, 29, 20, 21, 22, 23, 24]
+            env_fn = partial(SymmetricEnv, env_fn, mirrored_obs=env_fn().mirrored_obs, mirrored_act=mirror_act)
 
         return env_fn
 
