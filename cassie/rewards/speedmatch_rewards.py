@@ -302,6 +302,37 @@ def speedmatch_footheightsmooth_footorient_hiprollyawvelact_reward(self):
 
     return reward
 
+def speedmatch_footheightsmooth_footorient_hiprollyawvelact_orientchange_reward(self):
+    qpos = np.copy(self.sim.qpos())
+    qvel = np.copy(self.sim.qvel())
+    quaternion = euler2quat(z=self.orient_add, y=0, x=0)
+    iquaternion = inverse_quaternion(quaternion)
+
+    orient_targ = np.array([1, 0, 0, 0])
+    actual_orient = quaternion_product(iquaternion, qpos[3:7])
+    speed_targ = rotate_by_quaternion(np.array([self.speed, 0, 0]), iquaternion)
+    forward_diff = np.abs(qvel[0] - speed_targ[0])
+    orient_diff = 1 - np.inner(orient_targ, actual_orient) ** 2
+
+    y_vel = np.abs(qvel[1] - speed_targ[1])
+    if forward_diff < 0.05:
+        forward_diff = 0
+    if y_vel < 0.05:
+        y_vel = 0
+    if orient_diff < 5e-3:
+        orient_diff = 0
+    else:
+        orient_diff *= 30
+
+    reward = .2*np.exp(-forward_diff) + .1*np.exp(-orient_diff) \
+                + .1*np.exp(-y_vel) \
+                + .15*np.exp(-self.l_foot_cost_smooth) + .15*np.exp(-self.r_foot_cost_smooth) \
+                + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
+                + .05*np.exp(-self.hiproll_cost) + 0.05*np.exp(-self.hiproll_act) \
+                + .05*np.exp(-self.hipyaw_vel) + 0.05*np.exp(-self.hipyaw_act)
+
+    return reward
+
 def speedmatch_footheightsmooth_footorient_hiprollyawphasetorque_reward(self):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())
