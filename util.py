@@ -420,7 +420,7 @@ class EvalProcessClass():
         elif env_name == "CassieNovelFootDist":
             env = CassieEnv_novel_footdist(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
         elif env_name == "CassieMinInput":
-            env = CassieEnv_mininput(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
+            env = CassieEnv_mininput(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, learn_gains=run_args.learn_gains, reward=args.reward, history=run_args.history)
         else:
             env = CassieStandingEnv(state_est=run_args.state_est)
         
