@@ -116,6 +116,7 @@ class PPO:
 
         self.total_steps = 0
         self.highest_reward = -1
+        self.past500_reward = -1
         self.limit_cores = 0
 
         self.save_path = save_path
@@ -325,7 +326,7 @@ class PPO:
                 else:
                     mirror_actions = policy(mirror_observation(obs_batch))
             mirror_actions = mirror_action(mirror_actions)
-            mirror_loss = 0.4 * (deterministic_actions - mirror_actions).pow(2).mean()
+            mirror_loss = 2 * (deterministic_actions - mirror_actions).pow(2).mean()
         else:
             mirror_loss = 0
 
@@ -388,6 +389,9 @@ class PPO:
         do_term = False
         rew_thresh = [50, 100, 150, 200, 250, 300]
         for itr in range(n_itr):
+            if itr % 500 == 0:
+                self.past500_reward = -1
+
             print("********** Iteration {} ************".format(itr))
 
             sample_start = time.time()
@@ -519,6 +523,10 @@ class PPO:
             # TODO: add option for how often to save model
             if self.highest_reward < avg_eval_reward:
                 self.highest_reward = avg_eval_reward
+                self.save_cutoff(policy, critic, "highest")
+
+            if self.past500_reward < avg_eval_reward:
+                self.past500_reward = avg_eval_reward
                 self.save(policy, critic)
 
 def run_experiment(args):
