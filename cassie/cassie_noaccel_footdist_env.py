@@ -78,7 +78,7 @@ class CassieEnv_noaccel_footdist:
         self.counter = 0 # number of phase cycles completed in episode
 
         # NOTE: a reference trajectory represents ONE phase cycle
-        self.var_clock = True
+        self.var_clock = False
         self.phase_based = False
 
         # should be floor(len(traj) / simrate) - 1
@@ -199,6 +199,8 @@ class CassieEnv_noaccel_footdist:
         self.orient_add = 0
         self.orient_command = 0
         self.orient_time = 1000 
+        self.orient_dur = 40
+        self.speed_time = 500
 
 
         # Keep track of actions, torques
@@ -678,8 +680,11 @@ class CassieEnv_noaccel_footdist:
         # update previous action
         self.prev_action = action
         # self.update_speed(self.speed_schedule[min(int(np.floor(self.time/self.speed_time)), 2)])
-        # if self.time > self.orient_time:
-        #     self.orient_add = self.orient_command
+        if self.time != 0 and self.time % self.speed_time == 0:
+            self.update_speed(max(0.0, min(3.0, self.speed + self.speed_schedule[min(int(np.floor(self.time/self.speed_time)), 2)])))
+            # print("update speed: ", self.speed)
+        if self.orient_time <= self.time <= self.orient_time + self.orient_dur:
+            self.orient_add = self.orient_command * (self.time - self.orient_time) / self.orient_dur
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.3:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
@@ -771,9 +776,10 @@ class CassieEnv_noaccel_footdist:
         else:
             self.speed = (random.randint(0, 30)) / 10
             # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
+            # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
             self.speed_schedule = self.speed*np.ones(3)
-            self.speed_time = 0#100 - np.random.randint(-20, 20)
-            self.speed = self.speed_schedule[0]
+            self.speed_time = 500#100 - np.random.randint(-20, 20)
+            # self.speed = self.speed_schedule[0]
         # Make sure that if speed is above 2, freq is at least 1.2
         if self.speed > 1.5 or np.any(self.speed_schedule > 1.5):
             self.phase_add = 1.3 + 0.7*random.random()
@@ -783,8 +789,8 @@ class CassieEnv_noaccel_footdist:
         self.update_speed(self.speed)
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
-        self.orient_command = 0#random.randint(-10, 10) * np.pi / 25
-        self.orient_time = 500#random.randint(50, 200) 
+        self.orient_command = 0#random.randint(-10, 10) * np.pi / 30
+        self.orient_time = 500#random.randint(25, 125) 
 
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
@@ -977,10 +983,6 @@ class CassieEnv_noaccel_footdist:
                     self.swing_ratio = 0.4 
 
     def compute_reward(self, action):
-        # qpos = np.copy(self.sim.qpos())
-        # qvel = np.copy(self.sim.qvel())
-
-        # ref_pos, ref_vel = self.get_ref_state(self.phase)
         return globals()[self.reward_func](self)
 
         # if self.reward_func == "jonah_RNN":
@@ -1076,6 +1078,22 @@ class CassieEnv_noaccel_footdist:
             vel[0] *= self.speed
 
         return pos, vel
+
+    # get the corresponding state from the reference trajectory for the current phase
+    def get_ref_foot_state(self, phase=None):
+        if phase is None:
+            phase = self.phase
+
+        if phase > self.phaselen:
+            phase = 0
+
+        desired_ind = phase * self.simrate if not self.aslip_traj else phase
+       
+        l_foot = np.copy(self.trajectory.left_foot_pos_abs[int(desired_ind)])
+        r_foot = np.copy(self.trajectory.right_foot_pos_abs[int(desired_ind)])
+
+        return l_foot, r_foot
+
 
     def get_full_state(self):
         qpos = np.copy(self.sim.qpos())
