@@ -392,6 +392,18 @@ def speedmatch_footvarclock_footorient_hiprollyawvelact_reward(self):
 
     return reward
 
+def speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward(self):
+
+    reward = .2*np.exp(-self.forward_cost) + .1*np.exp(-self.orient_cost) \
+                + .05*np.exp(-self.straight_cost) + .05*np.exp(-self.yvel_cost) \
+                + .15*np.exp(-self.l_foot_cost_var) + .15*np.exp(-self.r_foot_cost_var) \
+                + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
+                + .05*np.exp(-self.hiproll_cost) + .05*np.exp(-self.hipyaw_vel) \
+                + .025*np.exp(-self.pel_transacc) + .025*np.exp(-self.pel_rotacc) \
+                + .025*np.exp(-self.act_cost) + 0.025*np.exp(-self.torque_penalty)
+
+    return reward
+
 def speedmatch_footheightsmooth_footorient_stablepel_reward(self):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())

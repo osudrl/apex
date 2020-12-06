@@ -78,15 +78,15 @@ class CassieEnv_noaccel_footdist:
         self.counter = 0 # number of phase cycles completed in episode
 
         # NOTE: a reference trajectory represents ONE phase cycle
-        self.var_clock = False
+        self.var_clock = True
         self.phase_based = False
 
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
         self.phaselen = floor(len(self.trajectory) / self.simrate) - 1 if not self.aslip_traj else self.trajectory.length - 1
-        if self.var_clock: 
-            self.phaselen = floor((.9*2000 / self.simrate) - 1)
+        # if self.var_clock: 
+            # self.phaselen = floor((.9*2000 / self.simrate) - 1)
 
         self.load_clock = False
         if self.load_clock:
@@ -472,7 +472,10 @@ class CassieEnv_noaccel_footdist:
             o2o_linclock = (self.phase-(2*flat_time+trans_time)) / trans_time
 
         if self.var_clock:
-            one2one_var, zero2zero_var = self.clock_fn(self.swing_ratio, self.phase, self.phaselen+1)
+            # one2one_var, zero2zero_var = self.clock_fn(self.swing_ratio, self.phase, self.phaselen+1)
+            l_swing, r_swing = self.lin_clock_fn(self.swing_ratio, self.phase)
+            l_stance = -l_swing + 1
+            r_stance = -r_swing + 1
         for _ in range(self.simrate):
             self.step_simulation(action)
             qpos = np.copy(self.sim.qpos())
@@ -564,8 +567,10 @@ class CassieEnv_noaccel_footdist:
             self.l_foot_cost_noheight += zero2zero_clock*(l_force_cost) + one2one_clock*l_ground_cost
             self.r_foot_cost_noheight += one2one_clock*(r_force_cost) + zero2zero_clock*r_ground_cost
 
-            self.l_foot_cost_var += zero2zero_var*l_height_cost + one2one_var*l_ground_cost
-            self.r_foot_cost_var += one2one_var*r_height_cost + zero2zero_var*r_ground_cost
+            # self.l_foot_cost_var += zero2zero_var*l_height_cost + one2one_var*l_ground_cost
+            # self.r_foot_cost_var += one2one_var*r_height_cost + zero2zero_var*r_ground_cost
+            self.l_foot_cost_var += l_swing*(l_height_cost+l_force_cost) + l_stance*l_vel_cost
+            self.r_foot_cost_var += r_swing*(r_height_cost+r_force_cost) + r_stance*r_vel_cost
 
             self.l_foot_cost_linclock += z2z_linclock*(l_height_cost+l_force_cost) + o2o_linclock*l_vel_cost
             self.r_foot_cost_linclock += o2o_linclock*(r_height_cost+r_force_cost) + z2z_linclock*r_vel_cost
@@ -687,7 +692,7 @@ class CassieEnv_noaccel_footdist:
             self.orient_add = self.orient_command * (self.time - self.orient_time) / self.orient_dur
 
         # TODO: make 0.3 a variable/more transparent
-        if reward < 0.3:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
+        if reward < 0.4:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
             done = True
 
         if return_omniscient_state:
@@ -722,6 +727,33 @@ class CassieEnv_noaccel_footdist:
             l_stance = 0
 
         return l_swing, l_stance
+
+    def lin_clock_fn(self, swing_ratio, phase):
+        percent_trans = .2
+        swing_time = (self.phaselen+1)*(1-percent_trans)*swing_ratio
+        stance_time = (self.phaselen+1)*(1-percent_trans)*(1-swing_ratio)
+        trans_time = (self.phaselen+1)*((percent_trans)/2)
+        l_swing_linclock = 1
+        if phase < swing_time:
+            l_swing_linclock = 1
+        elif swing_time <= phase < swing_time+trans_time:
+            l_swing_linclock = 1 - (phase-swing_time) / trans_time
+        elif swing_time+trans_time <= phase < swing_time+trans_time+stance_time:
+            l_swing_linclock = 0
+        elif swing_time+trans_time+stance_time <= phase < self.phaselen:
+            l_swing_linclock = (phase-(swing_time+trans_time+stance_time)) / trans_time
+        r_swing_linclock = 0
+        if phase < stance_time:
+            r_swing_linclock = 0
+        elif stance_time <= phase < stance_time+trans_time:
+            r_swing_linclock = (phase-stance_time) / trans_time
+        elif stance_time+trans_time <= phase < swing_time+trans_time+stance_time:
+            r_swing_linclock = 1
+        elif swing_time+trans_time+stance_time <= phase < self.phaselen:
+            r_swing_linclock = 1 - (phase-(swing_time+trans_time+stance_time)) / trans_time
+
+
+        return l_swing_linclock, r_swing_linclock
 
     def step_basic(self, action, return_omniscient_state=False):
 
@@ -774,17 +806,17 @@ class CassieEnv_noaccel_footdist:
             self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
-            self.speed = (random.randint(0, 30)) / 10
+            self.speed = (random.randint(0, 40)) / 10
             # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
             # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
             self.speed_schedule = self.speed*np.ones(3)
             self.speed_time = 500#100 - np.random.randint(-20, 20)
             # self.speed = self.speed_schedule[0]
         # Make sure that if speed is above 2, freq is at least 1.2
-        if self.speed > 1.5 or np.any(self.speed_schedule > 1.5):
-            self.phase_add = 1.3 + 0.7*random.random()
-        else:
-            self.phase_add = 1 + random.random()
+        # if self.speed > 1.5 or np.any(self.speed_schedule > 1.5):
+        #     self.phase_add = 1.3 + 0.7*random.random()
+        # else:
+        #     self.phase_add = 1 + random.random()
         # self.phase_add = 1
         self.update_speed(self.speed)
 
@@ -975,12 +1007,16 @@ class CassieEnv_noaccel_footdist:
         else:
             self.speed = new_speed
             if self.var_clock:
-                total_duration = (0.9 - 0.2 / 3.0 * self.speed)
-                self.phaselen = floor((total_duration * 2000 / self.simrate) - 1)
+                # total_duration = (0.9 - 0.2 / 3.0 * self.speed)
+                # self.phaselen = floor((total_duration * 2000 / self.simrate) - 1)
                 if new_speed > 1:
-                    self.swing_ratio = 0.4 + .3*(new_speed - 1)/2
+                    self.swing_ratio = 0.4 + .4*(new_speed - 1)/3
+                    self.phase_add = 1 + 0.5*(new_speed - 1)/2
                 else:
                     self.swing_ratio = 0.4 
+                if new_speed > 3:
+                    self.phase_add = 1.5
+                
 
     def compute_reward(self, action):
         return globals()[self.reward_func](self)
