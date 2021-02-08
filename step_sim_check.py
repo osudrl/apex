@@ -75,8 +75,8 @@ def process_data(policy, env_fn, num_steps):
                 outside_sim.u.leftLeg.motorPd.torque[k]  = 0 # Feedforward torque
                 outside_sim.u.rightLeg.motorPd.torque[k] = 0 
 
-                outside_sim.u.leftLeg.motorPd.pTarget[k]  = outside_action[k] + outside_sim.offset[k]
-                outside_sim.u.rightLeg.motorPd.pTarget[k] = outside_action[k + 5] + outside_sim.offset[k + 5]
+                outside_sim.u.leftLeg.motorPd.pTarget[k]  = target[k]
+                outside_sim.u.rightLeg.motorPd.pTarget[k] = target[k+5]
 
                 outside_sim.u.leftLeg.motorPd.dTarget[k]  = 0
                 outside_sim.u.rightLeg.motorPd.dTarget[k] = 0
