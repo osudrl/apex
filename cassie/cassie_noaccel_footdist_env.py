@@ -84,7 +84,7 @@ class CassieEnv_noaccel_footdist:
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(len(self.trajectory) / self.simrate) - 1 if not self.aslip_traj else self.trajectory.length - 1
+        self.phaselen = floor(len(self.trajectory) / self.simrate) if not self.aslip_traj else self.trajectory.length - 1
         # if self.var_clock: 
             # self.phaselen = floor((.9*2000 / self.simrate) - 1)
 
@@ -449,8 +449,8 @@ class CassieEnv_noaccel_footdist:
         self.yvel_cost                  = 0
 
         # Reward clocks
-        one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen+1)*self.phase) + 1)
-        zero2zero_clock = 0.5*(np.cos(2*np.pi/(self.phaselen+1)*(self.phase-(self.phaselen+1)/2)) + 1)
+        one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
+        zero2zero_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*(self.phase-(self.phaselen)/2)) + 1)
         one2one_var, zero2zero_var = 1, 0
 
         percent_trans = .7
@@ -473,7 +473,8 @@ class CassieEnv_noaccel_footdist:
 
         if self.var_clock:
             # one2one_var, zero2zero_var = self.clock_fn(self.swing_ratio, self.phase, self.phaselen+1)
-            l_swing, r_swing = self.lin_clock_fn(self.swing_ratio, self.phase)
+            # l_swing, r_swing = self.lin_clock_fn(self.swing_ratio, self.phase)
+            l_swing, r_swing = self.lin_clock3(self.swing_ratio, self.phase)
             l_stance = -l_swing + 1
             r_stance = -r_swing + 1
         for _ in range(self.simrate):
@@ -668,7 +669,7 @@ class CassieEnv_noaccel_footdist:
         self.time  += 1
         self.phase += self.phase_add
 
-        if (self.aslip_traj and self.phase >= self.phaselen) or self.phase > self.phaselen:
+        if (self.aslip_traj and self.phase >= self.phaselen) or self.phase >= self.phaselen:
             # self.phase = 0
             self.phase -= self.phaselen
             self.counter += 1
@@ -692,7 +693,7 @@ class CassieEnv_noaccel_footdist:
             self.orient_add = self.orient_command * (self.time - self.orient_time) / self.orient_dur
 
         # TODO: make 0.3 a variable/more transparent
-        if reward < 0.4:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
+        if reward < 0.3:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
             done = True
 
         if return_omniscient_state:
@@ -730,8 +731,12 @@ class CassieEnv_noaccel_footdist:
 
     def lin_clock_fn(self, swing_ratio, phase):
         percent_trans = .2
-        swing_time = (self.phaselen+1)*(1-percent_trans)*swing_ratio
-        stance_time = (self.phaselen+1)*(1-percent_trans)*(1-swing_ratio)
+        swing_time = (self.phaselen+1) * swing_ratio
+        stance_time = (self.phaselen+1) * (1-swing_ratio)
+        swing_time -= (self.phaselen+1)*percent_trans/2
+        stance_time -= (self.phaselen+1)*percent_trans/2
+        # swing_time = (self.phaselen+1)*(1-percent_trans)*swing_ratio
+        # stance_time = (self.phaselen+1)*(1-percent_trans)*(1-swing_ratio)
         trans_time = (self.phaselen+1)*((percent_trans)/2)
         l_swing_linclock = 1
         if phase < swing_time:
@@ -752,6 +757,39 @@ class CassieEnv_noaccel_footdist:
         elif swing_time+trans_time+stance_time <= phase < self.phaselen:
             r_swing_linclock = 1 - (phase-(swing_time+trans_time+stance_time)) / trans_time
 
+
+        return l_swing_linclock, r_swing_linclock
+
+    def lin_clock3(self, swing_ratio, phase):
+        percent_trans = .2
+        swing_time = (self.phaselen) * swing_ratio
+        stance_time = (self.phaselen) * (1-swing_ratio)
+        trans_time = (self.phaselen)*((percent_trans)/2)
+        swing_time -= trans_time
+        stance_time -= trans_time
+
+        phase_offset = (swing_time - stance_time) / 2
+        r_phase = phase - phase_offset
+        if r_phase < 0:
+            r_phase += self.phaselen
+        l_swing_linclock = 1
+        if phase < swing_time:
+            l_swing_linclock = 1
+        elif swing_time <= phase < swing_time+trans_time:
+            l_swing_linclock = 1 - (phase-swing_time) / trans_time
+        elif swing_time+trans_time <= phase < swing_time+trans_time+stance_time:
+            l_swing_linclock = 0
+        elif swing_time+trans_time+stance_time <= phase < self.phaselen:
+            l_swing_linclock = (phase-(swing_time+trans_time+stance_time)) / trans_time
+        r_swing_linclock = 0
+        if r_phase < stance_time:
+            r_swing_linclock = 0
+        elif stance_time <= r_phase < stance_time+trans_time:
+            r_swing_linclock = (r_phase-stance_time) / trans_time
+        elif stance_time+trans_time <= r_phase < swing_time+trans_time+stance_time:
+            r_swing_linclock = 1
+        elif swing_time+trans_time+stance_time <= r_phase < self.phaselen:
+            r_swing_linclock = 1 - (r_phase-(swing_time+trans_time+stance_time)) / trans_time
 
         return l_swing_linclock, r_swing_linclock
 
@@ -1010,7 +1048,7 @@ class CassieEnv_noaccel_footdist:
                 # total_duration = (0.9 - 0.2 / 3.0 * self.speed)
                 # self.phaselen = floor((total_duration * 2000 / self.simrate) - 1)
                 if new_speed > 1:
-                    self.swing_ratio = 0.4 + .4*(new_speed - 1)/3
+                    self.swing_ratio = 0.4 + .8*(new_speed - 1)/3
                     self.phase_add = 1 + 0.5*(new_speed - 1)/2
                 else:
                     self.swing_ratio = 0.4 
@@ -1153,8 +1191,8 @@ class CassieEnv_noaccel_footdist:
 
         # CLOCK BASED (NO TRAJECTORY)
         if self.clock_based:
-            clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen+1)),
-                    np.cos(2 * np.pi *  self.phase / (self.phaselen+1))]
+            clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
+                    np.cos(2 * np.pi *  self.phase / (self.phaselen))]
             
             ext_state = np.concatenate((clock, [self.speed]))
 
