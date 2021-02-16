@@ -16,7 +16,7 @@ import copy
 
 import pickle
 
-class CassieEnv_noaccel_footdist:
+class CassieEnv_turn:
     def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -278,7 +278,7 @@ class CassieEnv_noaccel_footdist:
         mjstate_size   = 40
         state_est_size = 44
 
-        speed_size     = 1
+        command_size     = 4
 
         clock_size    = 2
         
@@ -304,10 +304,10 @@ class CassieEnv_noaccel_footdist:
             base_mir_obs = np.array([0.1, 1, 2, -3, 4, -5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, -21, 22, -23, 24, -25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
             obs_size = mjstate_size
         if self.clock_based:
-            append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+speed_size)])
+            append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+command_size)])
             mirrored_obs = np.concatenate([base_mir_obs, append_obs])
             clock_inds = append_obs[0:clock_size].tolist()
-            obs_size += clock_size + speed_size
+            obs_size += clock_size + command_size
         else:
             mirrored_traj_sign = np.multiply(np.sign(mirrored_traj), obs_size+np.floor(np.abs(mirrored_traj)))
             mirrored_obs = np.concatenate([base_mir_obs, mirrored_traj_sign])
