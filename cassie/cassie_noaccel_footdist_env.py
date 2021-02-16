@@ -6,12 +6,13 @@ from .trajectory import CassieTrajectory, getAllTrajectories
 from cassie.quaternion_function import *
 from .rewards import *
 
-from math import floor
+from math import floor, ceil
 
 import numpy as np 
 import os
 import random
 import copy
+
 
 import pickle
 
@@ -84,7 +85,9 @@ class CassieEnv_noaccel_footdist:
         # should be floor(len(traj) / simrate) - 1
         # should be VERY cautious here because wrapping around trajectory
         # badly can cause assymetrical/bad gaits
-        self.phaselen = floor(len(self.trajectory) / self.simrate) if not self.aslip_traj else self.trajectory.length - 1
+        cycle_time = 1
+        self.phaselen = cycle_time / (self.simrate * 0.0005)
+        # self.phaselen = floor(len(self.trajectory) / self.simrate) if not self.aslip_traj else self.trajectory.length - 1
         # if self.var_clock: 
             # self.phaselen = floor((.9*2000 / self.simrate) - 1)
 
@@ -212,6 +215,7 @@ class CassieEnv_noaccel_footdist:
         self.critic_state = None
 
         # Reward terms
+        self.des_foot_height = 0.10
         self.l_foot_orient = 0
         self.r_foot_orient = 0
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
@@ -229,6 +233,14 @@ class CassieEnv_noaccel_footdist:
         self.r_foot_cost_var = 0
         self.l_foot_cost_clock = 0
         self.r_foot_cost_clock = 0
+        self.l_foot_cost_force = 0
+        self.r_foot_cost_force = 0
+        self.l_foot_cost_speedpos = 0
+        self.r_foot_cost_speedpos = 0
+        self.l_foot_cost_pos = 0
+        self.r_foot_cost_pos = 0
+        self.l_foot_cost_forcevel = 0
+        self.r_foot_cost_forcevel = 0
         self.smooth_cost = 0
         self.torque_cost = 0
         self.hiproll_cost = 0
@@ -251,6 +263,7 @@ class CassieEnv_noaccel_footdist:
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
+        self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
 
@@ -423,6 +436,14 @@ class CassieEnv_noaccel_footdist:
         self.r_foot_cost_var = 0
         self.l_foot_cost_clock = 0
         self.r_foot_cost_clock = 0
+        self.l_foot_cost_force = 0
+        self.r_foot_cost_force = 0
+        self.l_foot_cost_speedpos = 0
+        self.r_foot_cost_speedpos = 0
+        self.l_foot_cost_pos = 0
+        self.r_foot_cost_pos = 0
+        self.l_foot_cost_forcevel = 0
+        self.r_foot_cost_forcevel = 0
         self.torque_cost = 0
         self.hiproll_cost = 0
         self.hiproll_act = 0
@@ -445,6 +466,7 @@ class CassieEnv_noaccel_footdist:
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
+        self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
 
@@ -474,9 +496,14 @@ class CassieEnv_noaccel_footdist:
         if self.var_clock:
             # one2one_var, zero2zero_var = self.clock_fn(self.swing_ratio, self.phase, self.phaselen+1)
             # l_swing, r_swing = self.lin_clock_fn(self.swing_ratio, self.phase)
-            l_swing, r_swing = self.lin_clock3(self.swing_ratio, self.phase)
-            l_stance = -l_swing + 1
-            r_stance = -r_swing + 1
+            l_swing, r_swing = self.lin_clock5(self.swing_ratio, self.phase, percent_trans=.7)
+            # l_stance = -l_swing + 1
+            # r_stance = -r_swing + 1
+            l_force, r_force = self.lin_clock5(self.swing_ratio, self.phase, percent_trans=.2)
+            l_stance = -l_force + 1
+            r_stance = -r_force + 1
+            # l_force = ceil(l_swing)
+            # r_force = ceil(r_swing)
         for _ in range(self.simrate):
             self.step_simulation(action)
             qpos = np.copy(self.sim.qpos())
@@ -500,7 +527,7 @@ class CassieEnv_noaccel_footdist:
             self.pel_stable += 0.05*(np.abs(self.cassie_state.pelvis.rotationalVelocity[:]).sum() + np.abs(self.cassie_state.pelvis.translationalAcceleration[:]).sum())
 
             # Foot height cost
-            des_height = 0.10
+            des_height = self.des_foot_height
             self.sim.foot_pos(foot_pos)
             foot_forces = self.sim.get_foot_forces()
             r_ground_cost = foot_pos[5]**2 +  np.linalg.norm(self.rfoot_vel)
@@ -572,6 +599,17 @@ class CassieEnv_noaccel_footdist:
             # self.r_foot_cost_var += one2one_var*r_height_cost + zero2zero_var*r_ground_cost
             self.l_foot_cost_var += l_swing*(l_height_cost+l_force_cost) + l_stance*l_vel_cost
             self.r_foot_cost_var += r_swing*(r_height_cost+r_force_cost) + r_stance*r_vel_cost
+            self.l_foot_cost_force += l_force*l_force_cost
+            self.r_foot_cost_force += r_force*r_force_cost
+            self.l_foot_cost_speedpos += l_swing*(l_height_cost) + l_stance*l_vel_cost
+            self.r_foot_cost_speedpos += r_swing*(r_height_cost) + r_stance*r_vel_cost
+            self.l_foot_cost_pos += l_swing*(l_height_cost)
+            self.r_foot_cost_pos += r_swing*(r_height_cost)
+            self.l_foot_cost_forcevel += l_force*(l_force_cost) + l_stance*l_vel_cost
+            self.r_foot_cost_forcevel += r_force*(r_force_cost) + r_stance*r_vel_cost
+            # if (l_swing == 1 and r_swing == 1) or (l_stance == 1 and r_stance == 1):
+            #     self.l_foot_cost_var += 0
+            #     self.r_foot_cost_var += 0
 
             self.l_foot_cost_linclock += z2z_linclock*(l_height_cost+l_force_cost) + o2o_linclock*l_vel_cost
             self.r_foot_cost_linclock += o2o_linclock*(r_height_cost+r_force_cost) + z2z_linclock*r_vel_cost
@@ -604,6 +642,8 @@ class CassieEnv_noaccel_footdist:
             # Speedmatching costs
             forward_diff = np.abs(qvel[0] - self.speed)
             orient_diff = 1 - np.inner(np.array([1, 0, 0, 0]), qpos[3:7]) ** 2
+            euler = quaternion2euler(qpos[3:7])
+            orient_rollyaw = 2 * np.linalg.norm(euler[[0,2]])
             y_vel = np.abs(qvel[1])
             straight_diff = 8*np.abs(qpos[1])
             if forward_diff < 0.05:
@@ -618,6 +658,7 @@ class CassieEnv_noaccel_footdist:
                 orient_diff *= 30
             self.forward_cost += forward_diff
             self.orient_cost += orient_diff
+            self.orient_rollyaw_cost += orient_rollyaw
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
         
@@ -635,6 +676,14 @@ class CassieEnv_noaccel_footdist:
         self.r_foot_cost_var            /= self.simrate
         self.l_foot_cost_clock          /= self.simrate
         self.r_foot_cost_clock          /= self.simrate
+        self.l_foot_cost_force          /= self.simrate
+        self.r_foot_cost_force          /= self.simrate
+        self.l_foot_cost_speedpos       /= self.simrate
+        self.r_foot_cost_speedpos       /= self.simrate
+        self.l_foot_cost_pos            /= self.simrate
+        self.r_foot_cost_pos            /= self.simrate
+        self.l_foot_cost_forcevel       /= self.simrate
+        self.r_foot_cost_forcevel       /= self.simrate
         self.smooth_cost                /= self.simrate
         self.torque_cost                /= self.simrate
         self.hiproll_cost               /= self.simrate
@@ -656,6 +705,7 @@ class CassieEnv_noaccel_footdist:
         self.pel_rotacc                 /= self.simrate
         self.forward_cost               /= self.simrate
         self.orient_cost                /= self.simrate
+        self.orient_rollyaw_cost        /= self.simrate
         self.straight_cost              /= self.simrate
         self.yvel_cost                  /= self.simrate
 
@@ -793,6 +843,65 @@ class CassieEnv_noaccel_footdist:
 
         return l_swing_linclock, r_swing_linclock
 
+    def lin_clock4(self, swing_ratio, phase):
+        percent_trans = 0#.2  # percent of stance time to use as transition
+        swing_time = self.phaselen * swing_ratio
+        stance_time = self.phaselen * (1-swing_ratio)
+        trans_time = stance_time * percent_trans
+        phase_offset = (swing_time - stance_time) / 2
+        stance_time -= trans_time
+        r_phase = phase - phase_offset
+        if r_phase < 0:
+            r_phase += self.phaselen
+        l_swing_linclock = 0
+        if phase < (swing_time + trans_time)/2:
+            l_swing_linclock = phase / ((swing_time+trans_time)/2)
+        elif (swing_time + trans_time)/2 <= phase < swing_time + trans_time:
+            l_swing_linclock = 1 - (phase-(swing_time + trans_time)/2) / ((swing_time+trans_time)/2)
+        elif swing_time+trans_time <= phase < self.phaselen:#swing_time+trans_time+stance_time:
+            l_swing_linclock = 0
+        r_swing_linclock = 0
+        if r_phase < stance_time:
+            r_swing_linclock = 0
+        elif stance_time <= r_phase < stance_time + (swing_time+trans_time)/2:
+            r_swing_linclock = (r_phase-stance_time) / ((swing_time+trans_time)/2)
+        elif stance_time+(swing_time+trans_time)/2 <= r_phase < self.phaselen:
+            r_swing_linclock = 1 - (r_phase-(stance_time+(swing_time+trans_time)/2)) / ((swing_time+trans_time)/2)
+
+        return l_swing_linclock, r_swing_linclock
+
+    def lin_clock5(self, swing_ratio, phase, percent_trans=.4):
+
+        # percent_trans = .4  # percent of swing time to use as transition
+        swing_time = self.phaselen * swing_ratio
+        stance_time = self.phaselen * (1-swing_ratio)
+        trans_time = swing_time * percent_trans
+        phase_offset = (swing_time - stance_time) / 2
+        swing_time -= trans_time
+        r_phase = phase - phase_offset
+        if r_phase < 0:
+            r_phase += self.phaselen
+        l_swing_linclock = 0
+        if phase < trans_time / 2:
+            l_swing_linclock = phase / (trans_time / 2)
+        elif trans_time / 2 < phase <= swing_time + trans_time / 2:
+            l_swing_linclock = 1
+        elif swing_time + trans_time / 2 < phase <= swing_time + trans_time:
+            l_swing_linclock = 1 - (phase-(swing_time+trans_time/2)) / (trans_time/2)
+        elif swing_time+trans_time <= phase < self.phaselen:#swing_time+trans_time+stance_time:
+            l_swing_linclock = 0
+        r_swing_linclock = 0
+        if r_phase < stance_time:
+            r_swing_linclock = 0
+        elif stance_time < r_phase <= stance_time + (trans_time)/2:
+            r_swing_linclock = (r_phase-stance_time) / (trans_time/2)
+        elif stance_time+trans_time/2 < r_phase <= stance_time+trans_time/2+swing_time:
+            r_swing_linclock = 1
+        elif stance_time+trans_time/2+swing_time < r_phase <= stance_time+swing_time+trans_time:
+            r_swing_linclock = 1 - (r_phase-(stance_time+trans_time/2+swing_time)) / (trans_time/2)
+
+        return l_swing_linclock, r_swing_linclock
+
     def step_basic(self, action, return_omniscient_state=False):
 
         for _ in range(self.simrate):
@@ -820,7 +929,16 @@ class CassieEnv_noaccel_footdist:
 
         rand_traj_phase = random.randint(0, floor(len(self.trajectory) / self.simrate) - 1)
         # qpos, qvel = self.get_ref_state(self.phase)
-        qpos, qvel = self.get_ref_state(rand_traj_phase)
+        # qpos, qvel = self.get_ref_state(rand_traj_phase)
+        rand_ind = random.randint(0, len(self.trajectory)-1)
+        qpos = np.copy(self.trajectory.qpos[rand_ind])
+        qvel = np.copy(self.trajectory.qvel[rand_ind])
+        # qpos = np.array([0, 0, 1.01, 1, 0, 0, 0,
+        # 0.0045, 0, 0.4973, 0.9785, -0.0164, 0.01787, -0.2049,
+        # -1.1997, 0, 1.4267, 0, -1.5244, 1.5244, -1.5968,
+        # -0.0045, 0, 0.4973, 0.9786, 0.00386, -0.01524, -0.2051,
+        # -1.1997, 0, 1.4267, 0, -1.5244, 1.5244, -1.5968])
+        # qvel = np.zeros(32)
         x_size = 0.3
         y_size = 0.2
         qvel[0] += np.random.random() * 2 * x_size - x_size
@@ -855,7 +973,7 @@ class CassieEnv_noaccel_footdist:
         #     self.phase_add = 1.3 + 0.7*random.random()
         # else:
         #     self.phase_add = 1 + random.random()
-        # self.phase_add = 1
+        # self.phase_add = 1 + 0.5*random.random()
         self.update_speed(self.speed)
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
@@ -903,6 +1021,14 @@ class CassieEnv_noaccel_footdist:
         self.r_foot_cost_var = 0
         self.l_foot_cost_clock = 0
         self.r_foot_cost_clock = 0
+        self.l_foot_cost_force = 0
+        self.r_foot_cost_force = 0
+        self.l_foot_cost_speedpos = 0
+        self.r_foot_cost_speedpos = 0
+        self.l_foot_cost_pos = 0
+        self.r_foot_cost_pos = 0
+        self.l_foot_cost_forcevel = 0
+        self.r_foot_cost_forcevel = 0
         self.smooth_cost = 0
         self.torque_cost = 0
         self.hiproll_cost = 0
@@ -925,6 +1051,7 @@ class CassieEnv_noaccel_footdist:
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
+        self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
 
@@ -990,6 +1117,14 @@ class CassieEnv_noaccel_footdist:
         self.r_foot_cost_var = 0
         self.l_foot_cost_clock = 0
         self.r_foot_cost_clock = 0
+        self.l_foot_cost_force = 0
+        self.r_foot_cost_force = 0
+        self.l_foot_cost_speedpos = 0
+        self.r_foot_cost_speedpos = 0
+        self.l_foot_cost_pos = 0
+        self.r_foot_cost_pos = 0
+        self.l_foot_cost_forcevel = 0
+        self.r_foot_cost_forcevel = 0
         self.smooth_cost = 0
         self.torque_cost = 0
         self.hiproll_cost = 0
@@ -1012,6 +1147,7 @@ class CassieEnv_noaccel_footdist:
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
+        self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
 
@@ -1048,67 +1184,20 @@ class CassieEnv_noaccel_footdist:
                 # total_duration = (0.9 - 0.2 / 3.0 * self.speed)
                 # self.phaselen = floor((total_duration * 2000 / self.simrate) - 1)
                 if new_speed > 1:
-                    self.swing_ratio = 0.4 + .8*(new_speed - 1)/3
+                    self.swing_ratio = 0.4 + .4*(new_speed - 1)/3
                     self.phase_add = 1 + 0.5*(new_speed - 1)/2
+                    self.des_foot_height = .1 + 0.2*(new_speed - 1)/2
                 else:
                     self.swing_ratio = 0.4 
+                    self.des_foot_height = .10
                 if new_speed > 3:
                     self.phase_add = 1.5
+                    self.des_foot_height = 0.30
+                # print("speed: {}, swing: {}, phase: {}, foot_height: {}".format(new_speed, self.swing_ratio, self.phase_add, self.des_foot_height))
                 
 
     def compute_reward(self, action):
         return globals()[self.reward_func](self)
-
-        # if self.reward_func == "jonah_RNN":
-        #     return jonah_RNN_reward(self)
-        # elif self.reward_func == "aslip":
-        #     return aslip_reward(self, action)
-        # elif self.reward_func == "aslip_TaskSpace":
-        #     return aslip_TaskSpace_reward(self, action)
-        # elif self.reward_func == "iros_paper":
-        #     return iros_paper_reward(self)
-        # elif self.reward_func == "5k_speed_reward":
-        #     return old_speed_reward(self)
-        # elif self.reward_func == "speed_footheightvelflag":
-        #     return speedmatch_footheightvelflag_reward(self)
-        # elif self.reward_func == "speed_footheightvelflag_even":
-        #     return speedmatch_footheightvelflag_even_reward(self)
-        # elif self.reward_func == "speed_footheightvelflag_even_capzvel":
-        #     return speedmatch_footheightvelflag_even_capzvel_reward(self)
-        # elif self.reward_func == "step_even_reward":
-        #     return step_even_reward(self)
-        # elif self.reward_func == "step_even_pelheight_reward":
-        #     return step_even_pelheight_reward(self)
-        # elif self.reward_func == "step_smooth_pelheight_reward":
-        #     return step_smooth_pelheight_reward(self)
-        # elif self.reward_func == "speed_footheightvelflag_even_footorient":
-        #     return speedmatch_footheightvelflag_even_footorient_reward(self)
-        # elif self.reward_func == "speed_footheightvelflag_even_footorient_footdist":
-        #     return speedmatch_footheightvelflag_even_footorient_footdist_reward(self)
-        # elif self.reward_func == "speed_footheightvelflag_even_footorient_smooth":
-        #     return speedmatch_footheightvelflag_even_footorient_smooth_reward(self)
-        # elif self.reward_func == "speed_footheightvelflag_even_footorient_footdist_torquecost":
-        #     return speedmatch_footheightvelflag_even_footorient_footdist_torquecost_reward(self)
-        # elif self.reward_func == "speed_footheightvelflag_even_footorient_footdist_torquecost_smooth":
-        #     return speedmatch_footheightvelflag_even_footorient_footdist_torquecost_smooth_reward(self)
-        # elif self.reward_func == "speed_footheightsmooth_footorient":
-        #     return speedmatch_footheightsmooth_footorient_reward(self)
-        # elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiproll_torquecost_reward":
-        #     return speedmatch_footheightsmooth_footorient_hiproll_torquecost_reward(self)
-        # elif self.reward_func == "speedmatch_footclock_footorient_reward":
-        #     return speedmatch_footclock_footorient_reward(self)
-        # elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiproll_reward":
-        #     return speedmatch_footheightsmooth_footorient_hiproll_reward(self)
-        # elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiprollvelact_reward":
-        #     return speedmatch_footheightsmooth_footorient_hiprollvelact_reward(self)
-        # elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiprollvelact_orientchange_reward":
-        #     return speedmatch_footheightsmooth_footorient_hiprollvelact_orientchange_reward(self)
-        # elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiprollyawvelact_reward":
-        #     return speedmatch_footheightsmooth_footorient_hiprollyawvelact_reward(self)
-        # elif self.reward_func == "speedmatch_footheightsmooth_footorient_hiprollyawphasetorque_reward":
-        #     return speedmatch_footheightsmooth_footorient_hiprollyawphasetorque_reward(self)
-        # else:
-        #     raise NotImplementedError
 
   # get the corresponding state from the reference trajectory for the current phase
     def get_ref_state(self, phase=None):

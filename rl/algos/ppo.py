@@ -326,7 +326,7 @@ class PPO:
                 else:
                     mirror_actions = policy(mirror_observation(obs_batch))
             mirror_actions = mirror_action(mirror_actions)
-            mirror_loss = 2 * (deterministic_actions - mirror_actions).pow(2).mean()
+            mirror_loss = 4 * (deterministic_actions - mirror_actions).pow(2).mean()
         else:
             mirror_loss = 0
 
