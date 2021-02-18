@@ -382,6 +382,8 @@ class EvalProcessClass():
 
     #TODO: Add pausing, and window quiting along with other render functionality
     def eval_policy(self, policy, args, run_args):
+        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep
+
 
         def print_input_update(e):
             print(f"\n\nstance dur.: {e.stance_duration:.2f}\t swing dur.: {e.swing_duration:.2f}\t stance mode: {e.stance_mode}\n")
@@ -423,7 +425,7 @@ class EvalProcessClass():
             env = CassieEnv_novel_footdist(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
         elif env_name == "CassieMinInput":
             env = CassieEnv_mininput(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, learn_gains=run_args.learn_gains, reward=args.reward, history=run_args.history)
-        elif path == "CassieMinInputVelSidestep":
+        elif env_name == "CassieMinInputVelSidestep":
             env = CassieEnv_mininput_vel_sidestep(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
         else:
             env = CassieStandingEnv(state_est=run_args.state_est)
@@ -437,7 +439,8 @@ class EvalProcessClass():
             env.sim.set_hfield_data(hfield_data.flatten())
 
         print(env.reward_func)
-        print()
+        env.reward_func = "speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward"
+        # print()
 
         if hasattr(policy, 'init_hidden_state'):
             policy.init_hidden_state()
@@ -459,6 +462,9 @@ class EvalProcessClass():
             timesteps = 0
             eval_reward = 0
             speed = 0.0
+            # slowmotion = False
+            slow_factor = 3
+            curr_slow = 0
 
             env.update_speed(speed)
 
@@ -470,6 +476,10 @@ class EvalProcessClass():
                         speed += 0.1
                     elif c == 's':
                         speed -= 0.1
+                    elif c == 'a':
+                        env.side_speed -= 0.1
+                    elif c == 'd':
+                        env.side_speed += 0.1
                     elif c == 'j':
                         env.phase_add += .1
                         # print("Increasing frequency to: {:.1f}".format(env.phase_add))
@@ -506,7 +516,7 @@ class EvalProcessClass():
                         env.stance_mode = "aerial"
                         
                     elif c == 'r':
-                        state = env.reset()
+                        state = env.reset_for_test()
                         speed = env.speed
                         if hasattr(policy, 'init_hidden_state'):
                             policy.init_hidden_state()
@@ -534,7 +544,8 @@ class EvalProcessClass():
                 if hasattr(env, 'simrate'):
                     start = time.time()
 
-                if (not env.vis.ispaused()):
+                if (not env.vis.ispaused()) and (not slowmo or (slowmo and curr_slow == slow_factor)):
+                    curr_slow = 0
                     # Update Orientation
                     env.orient_add = orient_add
                     # quaternion = euler2quat(z=orient_add, y=0, x=0)
@@ -571,7 +582,10 @@ class EvalProcessClass():
                     #     print("left foot z vel over 0.6: ", env.lfoot_vel[2])
                     # if env.rfoot_vel[2] < -0.6:
                     #     print("right foot z vel over 0.6: ", env.rfoot_vel[2])
-                    
+                    foot_pos = np.zeros(6)
+                    env.sim.foot_pos(foot_pos)
+                    # print(foot_pos[2], foot_pos[5])
+
                     eval_reward += reward
                     timesteps += 1
                     qvel = env.sim.qvel()
@@ -582,18 +596,19 @@ class EvalProcessClass():
                         yaw = quaternion2euler(new_orient)[2]
                         print("stp = {}  yaw = {:.2f}  spd = {}  ep_r = {:.2f}  stp_r = {:.2f}".format(timesteps, yaw, speed, eval_reward, reward))
 
+                curr_slow += 1
                 if visualize:
                     render_state = env.render()
                 if hasattr(env, 'simrate'):
                     # assume 40hz
                     end = time.time()
                     delaytime = max(0, 1000 / 40000 - (end-start))
-                    if slowmo:
-                        while(time.time() - end < delaytime*10):
-                            env.render()
-                            time.sleep(delaytime)
-                    else:
-                        time.sleep(delaytime)
+                    # if slowmo:
+                    #     while(time.time() - end < delaytime*10):
+                    #         env.render()
+                    #         time.sleep(delaytime)
+                    # else:
+                    time.sleep(delaytime)
 
             print("Eval reward: ", eval_reward)
 

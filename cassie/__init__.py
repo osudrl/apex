@@ -10,6 +10,7 @@ from .cassie_noaccel_footdist_nojoint_env import CassieEnv_noaccel_footdist_nojo
 from .cassie_novel_footdist_env import CassieEnv_novel_footdist
 from .cassie_mininput_env import CassieEnv_mininput
 from .cassie_mininput_vel_sidestep_env import CassieEnv_mininput_vel_sidestep
+from .cassie_min_example import CassieEnv_Min
 
 
 from .cassiemujoco import *
