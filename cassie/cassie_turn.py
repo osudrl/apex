@@ -16,7 +16,7 @@ import copy
 
 import pickle
 
-class CassieEnv_noaccel_footdist:
+class CassieEnv_turn:
     def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -113,6 +113,7 @@ class CassieEnv_noaccel_footdist:
             self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
 
         self.phase_add = 1
+        self.turn_rate = 0
 
         # global flat foot orientation, can be useful part of reward function:
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
@@ -201,6 +202,7 @@ class CassieEnv_noaccel_footdist:
         self.speed_schedule = np.zeros(3)
         self.orient_add = 0
         self.orient_command = 0
+        self.turn_command = 0
         self.orient_time = 1000 
         self.orient_dur = 40
         self.speed_time = 500
@@ -276,7 +278,7 @@ class CassieEnv_noaccel_footdist:
         mjstate_size   = 40
         state_est_size = 44
 
-        speed_size     = 1
+        command_size     = 4
 
         clock_size    = 2
         
@@ -302,10 +304,10 @@ class CassieEnv_noaccel_footdist:
             base_mir_obs = np.array([0.1, 1, 2, -3, 4, -5, -13, -14, 15, 16, 17, 18, 19, -6, -7, 8, 9, 10, 11, 12, 20, -21, 22, -23, 24, -25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
             obs_size = mjstate_size
         if self.clock_based:
-            append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+speed_size)])
+            append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+command_size)])
             mirrored_obs = np.concatenate([base_mir_obs, append_obs])
             clock_inds = append_obs[0:clock_size].tolist()
-            obs_size += clock_size + speed_size
+            obs_size += clock_size + command_size
         else:
             mirrored_traj_sign = np.multiply(np.sign(mirrored_traj), obs_size+np.floor(np.abs(mirrored_traj)))
             mirrored_obs = np.concatenate([base_mir_obs, mirrored_traj_sign])
@@ -641,7 +643,8 @@ class CassieEnv_noaccel_footdist:
 
             # Speedmatching costs
             forward_diff = np.abs(qvel[0] - self.speed)
-            orient_diff = 1 - np.inner(np.array([1, 0, 0, 0]), qpos[3:7]) ** 2
+            orient_target = euler2quat(z=self.orient_add, x=0, y=0)
+            orient_diff = 1 - np.inner(orient_target, qpos[3:7]) ** 2
             euler = quaternion2euler(qpos[3:7])
             orient_rollyaw = 2 * np.linalg.norm(euler[[0,2]])
             y_vel = np.abs(qvel[1])
@@ -718,6 +721,7 @@ class CassieEnv_noaccel_footdist:
 
         self.time  += 1
         self.phase += self.phase_add
+        self.orient_add += self.turn_rate
 
         if (self.aslip_traj and self.phase >= self.phaselen) or self.phase >= self.phaselen:
             # self.phase = 0
@@ -740,7 +744,10 @@ class CassieEnv_noaccel_footdist:
             self.update_speed(max(0.0, min(3.0, self.speed + self.speed_schedule[min(int(np.floor(self.time/self.speed_time)), 2)])))
             # print("update speed: ", self.speed)
         if self.orient_time <= self.time <= self.orient_time + self.orient_dur:
-            self.orient_add = self.orient_command * (self.time - self.orient_time) / self.orient_dur
+            # self.orient_add = self.orient_command * (self.time - self.orient_time) / self.orient_dur
+            self.turn_rate = self.turn_command
+        else:
+            self.turn_rate = 0
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.3:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
@@ -927,7 +934,7 @@ class CassieEnv_noaccel_footdist:
 
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
-        rand_traj_phase = random.randint(0, floor(len(self.trajectory) / self.simrate) - 1)
+        # rand_traj_phase = random.randint(0, floor(len(self.trajectory) / self.simrate) - 1)
         # qpos, qvel = self.get_ref_state(self.phase)
         # qpos, qvel = self.get_ref_state(rand_traj_phase)
         rand_ind = random.randint(0, len(self.trajectory)-1)
@@ -943,9 +950,8 @@ class CassieEnv_noaccel_footdist:
         y_size = 0.2
         qvel[0] += np.random.random() * 2 * x_size - x_size
         qvel[1] = np.random.random() * 2 * y_size - y_size
-        orientation = random.randint(-10, 10) * np.pi / 25
-        quaternion = euler2quat(z=orientation, y=0, x=0)
-        qpos[3:7] = quaternion
+        orient_range = 10/25 * np.pi
+        self.orient_add = random.uniform(-orient_range, orient_range)
         self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
 
@@ -976,9 +982,10 @@ class CassieEnv_noaccel_footdist:
         # self.phase_add = 1 + 0.5*random.random()
         self.update_speed(self.speed)
 
-        self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
-        self.orient_command = 0#random.randint(-10, 10) * np.pi / 30
-        self.orient_time = 500#random.randint(25, 125) 
+        tps = 1/2.5 * np.pi * (self.simrate*0.0005) # max radian change per second to command
+        self.turn_command = random.uniform(-tps, tps)
+        self.orient_time = random.randint(25, 125)
+        self.orient_dur = random.randint(30, 50)
 
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
@@ -1078,6 +1085,9 @@ class CassieEnv_noaccel_footdist:
 
         self.speed_schedule = self.speed * np.ones(3)
         self.orient_command = 0
+        self.turn_rate = 0
+        self.turn_command = 0
+        self.orient_dur = 0
         self.orient_time = 1000 
 
         if not full_reset:
@@ -1283,7 +1293,7 @@ class CassieEnv_noaccel_footdist:
             clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                     np.cos(2 * np.pi *  self.phase / (self.phaselen))]
             
-            ext_state = np.concatenate((clock, [self.speed]))
+            ext_state = np.concatenate((clock, [self.speed, self.orient_add, self.phase_add, self.turn_rate]))
 
         # ASLIP TRAJECTORY
         elif self.aslip_traj and not self.clock_based:
@@ -1296,16 +1306,6 @@ class CassieEnv_noaccel_footdist:
         else:
             ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
 
-        # Update orientation
-        new_orient = self.cassie_state.pelvis.orientation[:]
-        new_translationalVelocity = self.cassie_state.pelvis.translationalVelocity[:]
-        # new_translationalVelocity[0:2] += self.com_vel_offset
-        quaternion = euler2quat(z=self.orient_add, y=0, x=0)
-        iquaternion = inverse_quaternion(quaternion)
-        new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
-        if new_orient[0] < 0:
-            new_orient = -new_orient
-        new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
         motor_pos = self.cassie_state.motor.position[:]
         joint_pos = np.concatenate([self.cassie_state.joint.position[0:2], self.cassie_state.joint.position[3:5]])
         joint_vel = np.concatenate([self.cassie_state.joint.velocity[0:2], self.cassie_state.joint.velocity[0:2]])
@@ -1317,10 +1317,10 @@ class CassieEnv_noaccel_footdist:
         robot_state = np.concatenate([
             self.cassie_state.leftFoot.position[:],     # left foot position
             self.cassie_state.rightFoot.position[:],     # right foot position
-            new_orient,                                 # pelvis orientation
+            self.cassie_state.pelvis.orientation[:],                                 # pelvis orientation
             motor_pos,                                     # actuated joint positions
 
-            new_translationalVelocity,                       # pelvis translational velocity
+            self.cassie_state.pelvis.translationalVelocity[:],                       # pelvis translational velocity
             self.cassie_state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
             self.cassie_state.motor.velocity[:],                                     # actuated joint velocities
             

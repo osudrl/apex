@@ -55,8 +55,8 @@ def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based
 
 
     # Custom Cassie Environment
-    if path in ['Cassie-v0', 'CassieMin-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieFootDist', 'CassieNoaccelFootDist', 'CassieNoaccelFootDistNojoint', 'CassieNovelFootDist', 'CassieMinInput', 'CassieMinInputVelSidestep']:
-        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep
+    if path in ['Cassie-v0', 'CassieMin-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieFootDist', 'CassieNoaccelFootDist', 'CassieNoaccelFootDistNojoint', 'CassieNovelFootDist', 'CassieMinInput', 'CassieMinInputVelSidestep', 'CassieTurn']:
+        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn
 
         if path == 'Cassie-v0':
             # env_fn = partial(CassieEnv, traj=traj, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
@@ -81,7 +81,8 @@ def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based
             env_fn = partial(CassieEnv_mininput, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, reward=reward, history=history)
         elif path == "CassieMinInputVelSidestep":
             env_fn = partial(CassieEnv_mininput_vel_sidestep, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, learn_gains=learn_gains, reward=reward, history=history)
-
+        elif path == "CassieTurn":
+            env_fn = partial(CassieEnv_turn, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         # TODO for Yesh: make mirrored_obs an attribute of environment, configured based on setup parameters
         if mirror:
             from rl.envs.wrappers import SymmetricEnv
