@@ -13,6 +13,8 @@ from .cassie_mininput_vel_sidestep_env import CassieEnv_mininput_vel_sidestep
 from .cassie_min_example import CassieEnv_Min
 from .cassie_turn import CassieEnv_turn
 from .cassie_turn_no_orientadd import CassieEnv_turn_no_orientadd
+from .cassie_clean import CassieEnv_clean
+
 
 from .cassiemujoco import *
 

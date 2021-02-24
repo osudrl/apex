@@ -219,14 +219,8 @@ class CassieEnv_noaccel_footdist:
         self.l_foot_orient = 0
         self.r_foot_orient = 0
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
-        self.l_high = False
-        self.r_high = False
         self.lfoot_vel = np.zeros(3)
         self.rfoot_vel = np.zeros(3)
-        self.l_foot_cost = 0
-        self.r_foot_cost = 0
-        self.l_foot_cost_even = 0
-        self.r_foot_cost_even = 0
         self.l_foot_cost_smooth = 0
         self.r_foot_cost_smooth = 0
         self.l_foot_cost_var = 0
@@ -375,15 +369,6 @@ class CassieEnv_noaccel_footdist:
         self.sim.foot_pos(curr_fpos)
         self.lfoot_vel = (curr_fpos[0:3] - prev_foot[0:3]) / 0.0005
         self.rfoot_vel = (curr_fpos[3:6] - prev_foot[3:6]) / 0.0005
-        foot_forces = self.sim.get_foot_forces()
-        if self.l_high and foot_forces[0] > 0:
-            self.l_high = False
-        elif not self.l_high and curr_fpos[2] >= 0.19:
-            self.l_high = True
-        if self.r_high and foot_forces[1] > 0:
-            self.r_high = False
-        elif not self.r_high and curr_fpos[5] >= 0.19:
-            self.r_high = True
 
     def step_sim_basic(self, action):
 
@@ -426,10 +411,6 @@ class CassieEnv_noaccel_footdist:
 
         self.l_foot_orient = 0
         self.r_foot_orient = 0
-        self.l_foot_cost = 0
-        self.r_foot_cost = 0
-        self.l_foot_cost_even = 0
-        self.r_foot_cost_even = 0
         self.l_foot_cost_smooth = 0
         self.r_foot_cost_smooth = 0
         self.l_foot_cost_var = 0
@@ -540,50 +521,6 @@ class CassieEnv_noaccel_footdist:
             l_td_cost = 40*(foot_pos[2])**2 * self.lfoot_vel[2]**2
             l_vel_cost = np.sqrt(np.power(self.lfoot_vel[:], 2).sum())
             l_force_cost = np.abs(foot_forces[0]) / 75
-            # Right foot cost
-            # if foot_forces[0] ==  0:
-            #     # If left foot in air, then keep right foot in place and on ground
-            #     self.r_foot_cost += r_ground_cost
-            # else:
-            #     # Otherwise, left foot is on ground and can lift right foot up. 
-            #     if not self.r_high:
-            #         # If right foot not reach desired height yet, then use distance cost
-            #         self.r_foot_cost += r_height_cost
-            #     else:
-            #         # Otherwise right foot reached height, bring back down slowly. Weight distance by z vel
-            #         self.r_foot_cost += r_td_cost
-            # # Left foot cost
-            # if foot_forces[1] ==  0:
-            #     # If right foot in air, then keep left foot in place and on ground
-            #     self.l_foot_cost += l_ground_cost
-            # else:
-            #     # Otherwise, right foot is on ground and can lift left foot up. 
-            #     if not self.r_high:
-            #         # If left foot not reach desired height yet, then use distance cost
-            #         self.l_foot_cost += l_height_cost
-            #     else:
-            #         # Otherwise left foot reached height, bring back down slowly. Weight distance by z vel
-            #         self.l_foot_cost += l_td_cost
-
-            # # Foot height cost even 
-            # # For first half of cycle, lift up left foot and keep right foot on ground. 
-            # if self.phase < self.phaselen / 2.0:
-            #     self.r_foot_cost_even += r_ground_cost
-            #     if not self.l_high:
-            #         # If left foot not reach desired height yet, then use distance cost
-            #         self.l_foot_cost_even += l_height_cost
-            #     else:
-            #         # Otherwise left foot reached height, bring back down slowly. Weight distance by z vel
-            #         self.l_foot_cost_even += l_td_cost
-            # # For second half of cycle, lift up right foot and keep left foot on ground
-            # else:
-            #     self.l_foot_cost_even += l_ground_cost
-            #     if not self.r_high:
-            #         # If right foot not reach desired height yet, then use distance cost
-            #         self.r_foot_cost_even += r_height_cost
-            #     else:
-            #         # Otherwise right foot reached height, bring back down slowly. Weight distance by z vel
-            #         self.r_foot_cost_even += r_td_cost
 
             # Foot height cost smooth 
             # Left foot starts on ground and then lift up and then back on ground.
@@ -843,33 +780,6 @@ class CassieEnv_noaccel_footdist:
 
         return l_swing_linclock, r_swing_linclock
 
-    def lin_clock4(self, swing_ratio, phase):
-        percent_trans = 0#.2  # percent of stance time to use as transition
-        swing_time = self.phaselen * swing_ratio
-        stance_time = self.phaselen * (1-swing_ratio)
-        trans_time = stance_time * percent_trans
-        phase_offset = (swing_time - stance_time) / 2
-        stance_time -= trans_time
-        r_phase = phase - phase_offset
-        if r_phase < 0:
-            r_phase += self.phaselen
-        l_swing_linclock = 0
-        if phase < (swing_time + trans_time)/2:
-            l_swing_linclock = phase / ((swing_time+trans_time)/2)
-        elif (swing_time + trans_time)/2 <= phase < swing_time + trans_time:
-            l_swing_linclock = 1 - (phase-(swing_time + trans_time)/2) / ((swing_time+trans_time)/2)
-        elif swing_time+trans_time <= phase < self.phaselen:#swing_time+trans_time+stance_time:
-            l_swing_linclock = 0
-        r_swing_linclock = 0
-        if r_phase < stance_time:
-            r_swing_linclock = 0
-        elif stance_time <= r_phase < stance_time + (swing_time+trans_time)/2:
-            r_swing_linclock = (r_phase-stance_time) / ((swing_time+trans_time)/2)
-        elif stance_time+(swing_time+trans_time)/2 <= r_phase < self.phaselen:
-            r_swing_linclock = 1 - (r_phase-(stance_time+(swing_time+trans_time)/2)) / ((swing_time+trans_time)/2)
-
-        return l_swing_linclock, r_swing_linclock
-
     def lin_clock5(self, swing_ratio, phase, percent_trans=.4):
 
         # percent_trans = .4  # percent of swing time to use as transition
@@ -927,7 +837,7 @@ class CassieEnv_noaccel_footdist:
 
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
-        rand_traj_phase = random.randint(0, floor(len(self.trajectory) / self.simrate) - 1)
+        # rand_traj_phase = random.randint(0, floor(len(self.trajectory) / self.simrate) - 1)
         # qpos, qvel = self.get_ref_state(self.phase)
         # qpos, qvel = self.get_ref_state(rand_traj_phase)
         rand_ind = random.randint(0, len(self.trajectory)-1)
@@ -962,7 +872,7 @@ class CassieEnv_noaccel_footdist:
             self.trajectory = self.trajectories[random_speed_idx] # switch the current trajectory
             self.phaselen = self.trajectory.length - 1
         else:
-            self.speed = (random.randint(0, 40)) / 10
+            self.speed = (random.randint(0, 10)) / 10
             # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
             # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
             self.speed_schedule = self.speed*np.ones(3)
@@ -1262,9 +1172,6 @@ class CassieEnv_noaccel_footdist:
         qpos = np.copy(self.sim.qpos())
         qvel = np.copy(self.sim.qvel()) 
 
-        # ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
-        ref_pos, ref_vel = self.get_ref_state(0)
-
         # TODO: maybe convert to set subtraction for clarity
         # {i for i in range(35)} - 
         # {0, 10, 11, 12, 13, 17, 18, 19, 24, 25, 26, 27, 31, 32, 33}
@@ -1294,6 +1201,8 @@ class CassieEnv_noaccel_footdist:
         
         # OTHER TRAJECTORY
         else:
+            # ref_pos, ref_vel = self.get_ref_state(self.phase + self.phase_add)
+            ref_pos, ref_vel = self.get_ref_state(0)
             ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
 
         # Update orientation

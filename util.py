@@ -55,7 +55,7 @@ def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based
 
 
     # Custom Cassie Environment
-    if path in ['Cassie-v0', 'CassieMin-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieFootDist', 'CassieNoaccelFootDist', 'CassieNoaccelFootDistNojoint', 'CassieNovelFootDist', 'CassieMinInput', 'CassieMinInputVelSidestep', 'CassieTurn', 'CassieTurn_no_orientadd']:
+    if path in ['Cassie-v0', 'CassieMin-v0', 'CassiePlayground-v0', 'CassieStandingEnv-v0', 'CassieNoaccelFootDistOmniscient', 'CassieFootDist', 'CassieNoaccelFootDist', 'CassieNoaccelFootDistNojoint', 'CassieNovelFootDist', 'CassieMinInput', 'CassieMinInputVelSidestep', 'CassieTurn', 'CassieTurn_no_orientadd', 'CassieClean']:
         from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn, CassieEnv_turn_no_orientadd
 
         if path == 'Cassie-v0':
@@ -85,6 +85,8 @@ def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based
             env_fn = partial(CassieEnv_turn, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
         elif path == "CassieTurn_no_orientadd":
             env_fn = partial(CassieEnv_turn_no_orientadd, traj=traj, simrate=simrate, clock_based=clock_based, state_est=state_est, dynamics_randomization=dynamics_randomization, no_delta=no_delta, reward=reward, history=history)
+        elif path == "CassieClean":
+            env_fn = partial(CassieEnv_clean, simrate=simrate, dynamics_randomization=dynamics_randomization, reward=reward, history=history)
         else:
             print("Error: Unknown cassie environment")
             exit()
@@ -437,7 +439,8 @@ class EvalProcessClass():
             env = CassieEnv_turn(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
         elif env_name == "CassieTurn_no_orientadd":
             env = CassieEnv_turn_no_orientadd(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        
+        elif path == "CassieClean":
+            env = CassieEnv_clean(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
         else:
             env = CassieStandingEnv(state_est=run_args.state_est)
         
@@ -449,8 +452,8 @@ class EvalProcessClass():
             hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
             env.sim.set_hfield_data(hfield_data.flatten())
 
-        print(env.reward_func)
-        env.reward_func = "speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward"
+        # print(env.reward_func)
+        # env.reward_func = "speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward"
         # print()
 
         if hasattr(policy, 'init_hidden_state'):
@@ -558,7 +561,9 @@ class EvalProcessClass():
                 if (not env.vis.ispaused()) and (not slowmo or (slowmo and curr_slow == slow_factor)):
                     curr_slow = 0
                     # Update Orientation
-                    env.orient_add = orient_add
+                    # env.orient_add = orient_add
+                    env.turn_rate = orient_add / 10
+                    # print(env.orient_add)
                     # quaternion = euler2quat(z=orient_add, y=0, x=0)
                     # iquaternion = inverse_quaternion(quaternion)
 
