@@ -16,7 +16,7 @@ import copy
 
 import pickle
 
-class CassieEnv_turn:
+class CassieEnv_turn_no_orientadd:
     def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -278,7 +278,7 @@ class CassieEnv_turn:
         mjstate_size   = 40
         state_est_size = 44
 
-        command_size     = 4
+        command_size     = 3
 
         clock_size    = 2
         
@@ -1295,7 +1295,7 @@ class CassieEnv_turn:
             clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                     np.cos(2 * np.pi *  self.phase / (self.phaselen))]
             
-            ext_state = np.concatenate((clock, [self.speed, self.orient_add, self.phase_add, self.turn_rate]))
+            ext_state = np.concatenate((clock, [self.speed, self.phase_add, self.turn_rate]))
 
         # ASLIP TRAJECTORY
         elif self.aslip_traj and not self.clock_based:
