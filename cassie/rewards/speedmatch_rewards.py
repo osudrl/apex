@@ -1155,3 +1155,6 @@ def speedmatch_heuristic_reward(self):
     # - lfoot_vel_bonus - rfoot_vel_bonus - foot_penalty
     # - lforce - rforce
     #+ pelbonus- pelaccel_penalty - foot_penalty
+
+def empty_reward(self):
+    return 0
