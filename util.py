@@ -383,7 +383,7 @@ class EvalProcessClass():
 
     #TODO: Add pausing, and window quiting along with other render functionality
     def eval_policy(self, policy, args, run_args):
-        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep
+        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn
 
 
         def print_input_update(e):
@@ -428,6 +428,8 @@ class EvalProcessClass():
             env = CassieEnv_mininput(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, learn_gains=run_args.learn_gains, reward=args.reward, history=run_args.history)
         elif env_name == "CassieMinInputVelSidestep":
             env = CassieEnv_mininput_vel_sidestep(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
+        elif env_name == "CassieTurn":
+            env = CassieEnv_turn(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
         else:
             env = CassieStandingEnv(state_est=run_args.state_est)
         
@@ -439,8 +441,8 @@ class EvalProcessClass():
             hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
             env.sim.set_hfield_data(hfield_data.flatten())
 
-        print(env.reward_func)
-        env.reward_func = "speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward"
+        # print(env.reward_func)
+        # env.reward_func = "speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward"
         # print()
 
         if hasattr(policy, 'init_hidden_state'):
@@ -548,7 +550,9 @@ class EvalProcessClass():
                 if (not env.vis.ispaused()) and (not slowmo or (slowmo and curr_slow == slow_factor)):
                     curr_slow = 0
                     # Update Orientation
-                    env.orient_add = orient_add
+                    # env.orient_add = orient_add
+                    env.turn_rate = orient_add / 10
+                    # print(env.orient_add)
                     # quaternion = euler2quat(z=orient_add, y=0, x=0)
                     # iquaternion = inverse_quaternion(quaternion)
 
