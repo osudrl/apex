@@ -385,7 +385,7 @@ class EvalProcessClass():
 
     #TODO: Add pausing, and window quiting along with other render functionality
     def eval_policy(self, policy, args, run_args):
-        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn
+        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn, CassieEnv_clean
 
 
         def print_input_update(e):
@@ -432,7 +432,7 @@ class EvalProcessClass():
             env = CassieEnv_mininput_vel_sidestep(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
         elif env_name == "CassieTurn":
             env = CassieEnv_turn(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif path == "CassieClean":
+        elif env_name == "CassieClean":
             env = CassieEnv_clean(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
         else:
             env = CassieStandingEnv(state_est=run_args.state_est)
