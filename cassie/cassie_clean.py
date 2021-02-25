@@ -18,9 +18,10 @@ import pickle
 
 class CassieEnv_clean:
     def __init__(self, simrate=60, dynamics_randomization=True, reward="empty_reward", history=0):
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+        self.sim = CassieSim("./cassie/cassiemujoco/cassie_mass.xml")
         self.vis = None
         self.clock_based = True
+        self.phase_based = False
 
         self.reward_func = reward
         self.dynamics_randomization = dynamics_randomization
@@ -435,8 +436,6 @@ class CassieEnv_clean:
             self.orient_rollyaw_cost += orient_rollyaw
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
-        
-
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -678,8 +677,8 @@ class CassieEnv_clean:
         self.orient_time = 1000 
 
         if not full_reset:
-            qpos = np.copy(self.reset_states.qpos[rand_ind])
-            qvel = np.copy(self.reset_states.qvel[rand_ind])
+            qpos = np.copy(self.reset_states.qpos[0])
+            qvel = np.copy(self.reset_states.qvel[0])
 
             # Need to reset u? Or better way to reset cassie_state than taking step
             self.cassie_state = self.sim.step_pd(self.u)
@@ -699,8 +698,8 @@ class CassieEnv_clean:
 
         if self.slope_rand:
             self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
-        if self.load_mass_rand:
-            sim.set_body_mass(0, name="load_mass")
+        # if self.load_mass_rand:
+            # self.sim.set_body_mass(0, name="load_mass")
 
         # Reward terms
         self.l_foot_orient = 0
