@@ -278,7 +278,7 @@ class CassieEnv_turn_no_orientadd:
         mjstate_size   = 40
         state_est_size = 44
 
-        command_size     = 3
+        command_size     = 2
 
         clock_size    = 2
         
@@ -642,17 +642,23 @@ class CassieEnv_turn_no_orientadd:
                 self.act_cost += 0
 
             # Speedmatching costs
-            orient_target = euler2quat(z=self.orient_add, x=0, y=0)
+            quaternion = euler2quat(z=self.orient_add, x=0, y=0)
+            iquaternion = inverse_quaternion(quaternion)
+
+            orient_targ = np.array([1, 0, 0, 0])
+            actual_orient = quaternion_product(iquaternion, qpos[3:7])
+            orient_diff = 1 - np.inner(orient_target, actual_orient) ** 2
+            
             speed_target = np.array([self.speed, 0, 0])
-            speed_target = rotate_by_quaternion(speed_target, orient_target)
-            speed_diff = np.sum(np.abs(qvel[0:2] - speed_target[0:2]))
-            orient_diff = 1 - np.inner(orient_target, qpos[3:7]) ** 2
+            speed_target = rotate_by_quaternion(speed_target, iquaternion)
+            forward_diff = np.abs(qvel[0] - speed_target[0])
+
             euler = quaternion2euler(qpos[3:7])
             orient_rollyaw = 2 * np.linalg.norm(euler[[0,2]])
-            y_vel = np.abs(qvel[1])
+            y_vel = np.abs(qvel[1] - speed_target[1])
             straight_diff = 8*np.abs(qpos[1])
-            if speed_diff < 0.05:
-                speed_diff = 0
+            if forward_diff < 0.05:
+                forward_diff = 0
             if y_vel < 0.05:
                 y_vel = 0
             if np.abs(qpos[1]) < 0.05:
@@ -661,13 +667,12 @@ class CassieEnv_turn_no_orientadd:
                 orient_diff = 0
             else:
                 orient_diff *= 30
-            self.forward_cost += speed_diff
+            self.forward_cost += forward_diff
             self.orient_cost += orient_diff
             self.orient_rollyaw_cost += orient_rollyaw
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
         
-
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -952,8 +957,11 @@ class CassieEnv_turn_no_orientadd:
         y_size = 0.2
         qvel[0] += np.random.random() * 2 * x_size - x_size
         qvel[1] = np.random.random() * 2 * y_size - y_size
-        orient_range = 10/25 * np.pi
-        self.orient_add = random.uniform(-orient_range, orient_range)
+        orientation = random.randint(-10, 10) * np.pi / 25
+        quaternion = euler2quat(z=orientation, y=0, x=0)
+        qpos[3:7] = quaternion
+        # orient_range = 10/25 * np.pi
+        self.orient_add = 0#random.uniform(-orient_range, orient_range)
         self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
 
@@ -1295,7 +1303,7 @@ class CassieEnv_turn_no_orientadd:
             clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                     np.cos(2 * np.pi *  self.phase / (self.phaselen))]
             
-            ext_state = np.concatenate((clock, [self.speed, self.phase_add, self.turn_rate]))
+            ext_state = np.concatenate((clock, [self.speed, self.turn_rate]))
 
         # ASLIP TRAJECTORY
         elif self.aslip_traj and not self.clock_based:
@@ -1308,6 +1316,16 @@ class CassieEnv_turn_no_orientadd:
         else:
             ext_state = np.concatenate([ref_pos[self.pos_index], ref_vel[self.vel_index]])
 
+        # Update orientation
+        new_orient = self.cassie_state.pelvis.orientation[:]
+        new_translationalVelocity = self.cassie_state.pelvis.translationalVelocity[:]
+        quaternion = euler2quat(z=self.orient_add, y=0, x=0)
+        iquaternion = inverse_quaternion(quaternion)
+        new_orient = quaternion_product(iquaternion, self.cassie_state.pelvis.orientation[:])
+        if new_orient[0] < 0:
+            new_orient = -new_orient
+        new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
+
         motor_pos = self.cassie_state.motor.position[:]
         joint_pos = np.concatenate([self.cassie_state.joint.position[0:2], self.cassie_state.joint.position[3:5]])
         joint_vel = np.concatenate([self.cassie_state.joint.velocity[0:2], self.cassie_state.joint.velocity[0:2]])
@@ -1319,10 +1337,10 @@ class CassieEnv_turn_no_orientadd:
         robot_state = np.concatenate([
             self.cassie_state.leftFoot.position[:],     # left foot position
             self.cassie_state.rightFoot.position[:],     # right foot position
-            self.cassie_state.pelvis.orientation[:],                                 # pelvis orientation
+            new_orient,                                 # pelvis orientation
             motor_pos,                                     # actuated joint positions
 
-            self.cassie_state.pelvis.translationalVelocity[:],                       # pelvis translational velocity
+            new_translationalVelocity,                       # pelvis translational velocity
             self.cassie_state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
             self.cassie_state.motor.velocity[:],                                     # actuated joint velocities
             
