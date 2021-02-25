@@ -645,7 +645,7 @@ class CassieEnv_turn_no_orientadd:
             quaternion = euler2quat(z=self.orient_add, x=0, y=0)
             iquaternion = inverse_quaternion(quaternion)
 
-            orient_targ = np.array([1, 0, 0, 0])
+            orient_target = np.array([1, 0, 0, 0])
             actual_orient = quaternion_product(iquaternion, qpos[3:7])
             orient_diff = 1 - np.inner(orient_target, actual_orient) ** 2
             
