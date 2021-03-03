@@ -21,8 +21,9 @@ import numpy as np
 _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # Initialize libcassiesim
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_slosh_mass.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_yoke.xml"))
 cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
-# cassie_mujoco_init(str.encode(_dir_path+"/cassie_hfield.xml"))
 # cassie_mujoco_init(str.encode("../model/cassie_hfield.xml"))
 
 
@@ -89,6 +90,11 @@ class CassieSim:
         qvelp = cassie_sim_qvel(self.c)
         for i in range(min(len(qvel), 32)):
             qvelp[i] = qvel[i]
+
+    def set_qacc(self, qacc):
+        qaccp = cassie_sim_qacc(self.c)
+        for i in range(32):
+            qaccp[i] = qacc[i]
 
     def hold(self):
         cassie_sim_hold(self.c)
@@ -331,6 +337,105 @@ class CassieSim:
             size_array[i] = data[i]
         cassie_sim_set_hfield_size(self.c, size_array)
 
+    def copy(self, src):
+        cassie_sim_copy(self.c, src.c)
+
+    def copy_just_sim(self, src):
+        cassie_sim_copy_just_sim(self.c, src.c)
+
+    def duplicate(self):
+        return cassie_sim_duplicate(self.c)
+
+    def copy_mjd(self, src):
+        cassie_sim_copy_mjd(self.c, src.c)
+
+    def copy_state_est(self, src):
+        # print("in python copy")
+        cassie_sim_copy_state_est(self.c, src.c)
+        # print("after copy")
+
+    def get_cassie_out(self):
+        return cassie_sim_get_cassie_out(self.c)
+
+    def run_state_est(self, cassie_out):
+        y = state_out_t()
+        cassie_sim_run_state_est(self.c, cassie_out, y)
+        return y
+
+    def get_act_vel(self):
+        act_vel_p = cassie_sim_act_vel(self.c)
+        return act_vel_p[:10]
+
+    def set_act_vel(self, act_vel):
+        act_vel_p = cassie_sim_act_vel(self.c)
+        for i in range(10):
+            act_vel_p[i] = act_vel[i]
+
+    def get_sensordata(self):
+        sensor_p = cassie_sim_sensordata(self.c)
+        return sensor_p[:29]
+
+    def set_sensordata(self, sdata):
+        sensor_p = cassie_sim_sensordata(self.c)
+        for i in range(29):
+            sensor_p[i] = sdata[i]
+
+    # Returns a pointer to an array of joint_filter_t objects. Can be accessed/indexed as a usual python array of
+    # joint filter objects
+    def get_joint_filter(self):
+        j_filters = cassie_sim_joint_filter(self.c)
+        out_filters = (joint_filter_t*6)()
+        for i in range(6):
+            for j in range(4):
+                out_filters[i].x[j] = j_filters[i].x[j]
+            for j in range(3):
+                out_filters[i].y[j] = j_filters[i].y[j]
+        return out_filters
+        # return j_filters
+
+    # Set interal state of the joint filters. Takes in an c struct array object of joint_filter_t objects,
+    # which can be initialized like "j=(joint_filter_t*size)()" and then accessed as a usual python list. 
+    # See cassiemujoco_ctypes for definition of joint_filter_t object
+    def set_joint_filter(self, joint_filters):
+        cassie_sim_set_joint_filter(self.c, joint_filters)
+
+    def set_joint_filter2(self, x, y):
+        x_arr = (ctypes.c_double * (6*4))(*x)
+        y_arr = (ctypes.c_double * (6*3))(*y)
+        cassie_sim_set_joint_filter2(self.c, ctypes.cast(x_arr, ctypes.POINTER(ctypes.c_double)), ctypes.cast(y_arr, ctypes.POINTER(ctypes.c_double)))
+
+    # Returns a pointer to an array of drive_filter_t objects. Can be accessed/indexed as a usual python array of
+    # drive filter objects
+    def get_drive_filter(self):
+        d_filters = cassie_sim_drive_filter(self.c)
+        out_filters = (drive_filter_t*10)()
+        for i in range(10):
+            for j in range(9):
+                out_filters[i].x[j] = d_filters[i].x[j]
+        return out_filters
+
+    # Set interal state of the drive filters. Takes in an c struct array object of drive_filter_t objects,
+    # which can be initialized like "j=(drive_filter_t*size)()" and then accessed as a usual python list. 
+    # See cassiemujoco_ctypes for definition of drive_filter_t object
+    def set_drive_filter(self, drive_filters):
+        cassie_sim_set_drive_filter(self.c, drive_filters)
+
+    def set_drive_filter2(self, x):
+        x_arr = (ctypes.c_int * (10*9))(*x)
+        cassie_sim_set_drive_filter2(self.c, ctypes.cast(x_arr, ctypes.POINTER(ctypes.c_int)))
+
+    # Get the current state of the torque delay array. Returns a 2d numpy array of size (10, 6), 
+    # number of motors by number of delay cycles
+    def get_torque_delay(self):
+        t_arr = (ctypes.c_double * 60)()
+        cassie_sim_torque_delay(self.c, t_arr)
+        # return np.array(t_arr[:]).reshape((10, 6))
+        return np.array(t_arr[:])
+
+    # Set the torque delay state. Takes in a 2d numpy array of size (10, 6), number of motors by number of delay cycles
+    def set_torque_delay(self, data):
+        set_t_arr = (ctypes.c_double * 60)(*data)
+        cassie_sim_set_torque_delay(self.c, ctypes.cast(set_t_arr, ctypes.POINTER(ctypes.c_double)))
 
     def __del__(self):
         cassie_sim_free(self.c)

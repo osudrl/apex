@@ -325,6 +325,9 @@ cassie_sim_duplicate.argtypes = [POINTER_T(struct_cassie_sim)]
 cassie_sim_copy = _libraries['./libcassiemujoco.so'].cassie_sim_copy
 cassie_sim_copy.restype = None
 cassie_sim_copy.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(struct_cassie_sim)]
+cassie_sim_copy_just_sim = _libraries['./libcassiemujoco.so'].cassie_sim_copy_just_sim
+cassie_sim_copy_just_sim.restype = None
+cassie_sim_copy_just_sim.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(struct_cassie_sim)]
 cassie_sim_free = _libraries['./libcassiemujoco.so'].cassie_sim_free
 cassie_sim_free.restype = None
 cassie_sim_free.argtypes = [POINTER_T(struct_cassie_sim)]
@@ -339,6 +342,21 @@ class struct_c__SA_state_out_t(ctypes.Structure):
 
 class struct_c__SA_pd_in_t(ctypes.Structure):
     pass
+
+class struct_c__SA_joint_filter_t(ctypes.Structure):
+    _pack_ = True # source:False
+    _fields_ = [
+    ('x', ctypes.c_double * 4),
+    ('y', ctypes.c_double * 3),
+    ]
+joint_filter_t = struct_c__SA_joint_filter_t
+
+class struct_c__SA_drive_filter_t(ctypes.Structure):
+    _pack_ = True # source:False
+    _fields_ = [
+    ('x', ctypes.c_int * 9),
+    ]
+drive_filter_t = struct_c__SA_drive_filter_t
 
 cassie_sim_step_pd = _libraries['./libcassiemujoco.so'].cassie_sim_step_pd
 cassie_sim_step_pd.restype = None
@@ -544,6 +562,62 @@ cassie_sim_set_geom_name_quat.argtypes = [POINTER_T(struct_cassie_sim), ctypes.c
 cassie_sim_set_const = _libraries['./libcassiemujoco.so'].cassie_sim_set_const
 cassie_sim_set_const.restype = None
 cassie_sim_set_const.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_copy_mjd = _libraries['./libcassiemujoco.so'].cassie_sim_copy_mjd
+cassie_sim_copy_mjd.restype = None
+cassie_sim_copy_mjd.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(struct_cassie_sim)]
+
+cassie_sim_copy_state_est = _libraries['./libcassiemujoco.so'].cassie_sim_copy_state_est
+cassie_sim_copy_state_est.restype = None
+cassie_sim_copy_state_est.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(struct_cassie_sim)]
+
+cassie_sim_act_vel = _libraries['./libcassiemujoco.so'].cassie_sim_act_vel
+cassie_sim_act_vel.restype = POINTER_T(ctypes.c_double)
+cassie_sim_act_vel.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_sensordata = _libraries['./libcassiemujoco.so'].cassie_sim_sensordata
+cassie_sim_sensordata.restype = POINTER_T(ctypes.c_double)
+cassie_sim_sensordata.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_joint_filter = _libraries['./libcassiemujoco.so'].cassie_sim_joint_filter
+cassie_sim_joint_filter.restype = POINTER_T(joint_filter_t)
+cassie_sim_joint_filter.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_set_joint_filter = _libraries['./libcassiemujoco.so'].cassie_sim_set_joint_filter
+cassie_sim_set_joint_filter.restype = None
+cassie_sim_set_joint_filter.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(joint_filter_t)]
+
+cassie_sim_set_joint_filter2 = _libraries['./libcassiemujoco.so'].cassie_sim_set_joint_filter2
+cassie_sim_set_joint_filter2.restype = None
+cassie_sim_set_joint_filter2.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double), POINTER_T(ctypes.c_double)]
+
+cassie_sim_drive_filter = _libraries['./libcassiemujoco.so'].cassie_sim_drive_filter
+cassie_sim_drive_filter.restype = POINTER_T(drive_filter_t)
+cassie_sim_drive_filter.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_set_drive_filter = _libraries['./libcassiemujoco.so'].cassie_sim_set_drive_filter
+cassie_sim_set_drive_filter.restype = None
+cassie_sim_set_drive_filter.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(drive_filter_t)]
+
+cassie_sim_set_drive_filter2 = _libraries['./libcassiemujoco.so'].cassie_sim_set_drive_filter2
+cassie_sim_set_drive_filter2.restype = None
+cassie_sim_set_drive_filter2.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_int)]
+
+cassie_sim_torque_delay = _libraries['./libcassiemujoco.so'].cassie_sim_torque_delay
+cassie_sim_torque_delay.restype = None
+cassie_sim_torque_delay.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+
+cassie_sim_set_torque_delay = _libraries['./libcassiemujoco.so'].cassie_sim_set_torque_delay
+cassie_sim_set_torque_delay.restype = None
+cassie_sim_set_torque_delay.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double)]
+
+cassie_sim_get_cassie_out = _libraries['./libcassiemujoco.so'].cassie_sim_get_cassie_out
+cassie_sim_get_cassie_out.restype = cassie_out_t
+cassie_sim_get_cassie_out.argtypes = [POINTER_T(struct_cassie_sim)]
+
+cassie_sim_run_state_est = _libraries['./libcassiemujoco.so'].cassie_sim_run_state_est
+cassie_sim_run_state_est.restype = None
+cassie_sim_run_state_est.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(cassie_out_t), POINTER_T(struct_c__SA_state_out_t)]
 
 class struct_c__SA_pd_motor_in_t(ctypes.Structure):
     _pack_ = True # source:False
@@ -810,6 +884,10 @@ __all__ = \
     'cassie_sim_foot_quat', 'cassie_sim_body_vel', 'cassie_sim_set_body_name_mass',
     'cassie_sim_get_hfield_nrow', 'cassie_sim_get_hfield_ncol', 'cassie_sim_get_nhfielddata',
     'cassie_sim_get_hfield_size', 'cassie_sim_set_hfield_size', 'cassie_sim_hfielddata', 'cassie_sim_set_hfielddata',
-    'cassie_sim_foot_quat', 'cassie_sim_body_vel', 'cassie_sim_set_body_name_mass', 'cassie_vis_set_cam']
+    'cassie_sim_foot_quat', 'cassie_sim_body_vel', 'cassie_sim_set_body_name_mass', 'cassie_vis_set_cam', 
+    'cassie_sim_joint_filter', 'cassie_sim_set_joint_filter', 'cassie_sim_drive_filter', 'cassie_sim_set_drive_filter',
+    'cassie_sim_torque_delay', 'cassie_sim_set_torque_delay', 'drive_filter_t', 'joint_filter_t', 'cassie_sim_act_vel',
+    'cassie_sim_set_drive_filter2', 'cassie_sim_set_joint_filter2', 'cassie_sim_sensordata', 'cassie_sim_copy_mjd', 'cassie_sim_copy_state_est',
+    'cassie_sim_copy_just_sim', 'cassie_sim_get_cassie_out', 'cassie_sim_run_state_est']
 
 # 'cassie_sim_set_cassiestate'
