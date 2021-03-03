@@ -48,3 +48,11 @@ def step_smooth_pelheight_reward(self):
             + 0.4*np.exp(-self.l_foot_cost_smooth) + 0.4*np.exp(-self.r_foot_cost_smooth)
 
     return reward
+
+def stand_up_pole_reward(self):
+
+    reward = 0.2*np.exp(-self.forward_cost) + 0.3*np.exp(-self.pole_pos_cost) + 0.3*np.exp(-self.pole_vel_cost) \
+                + .05*np.exp(-self.pel_transacc) + .05*np.exp(-self.pel_rotacc) \
+                + .05*np.exp(-self.act_cost) + 0.05*np.exp(-self.torque_penalty)
+
+    return reward

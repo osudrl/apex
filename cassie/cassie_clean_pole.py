@@ -16,9 +16,12 @@ import copy
 
 import pickle
 
-class CassieEnv_clean:
+class CassieEnv_clean_pole:
     def __init__(self, simrate=60, dynamics_randomization=False, reward="empty_reward", history=0):
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie_mass.xml")
+        self.sim = CassieSim("./cassie/cassiemujoco/cassiepole.xml")
+        if self.sim.nq != 36:
+            print("Error: wrong model file")
+            exit()
         self.vis = None
         self.clock_based = True
         self.phase_based = False
@@ -204,6 +207,9 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
+        self.pole_pos_cost              = 0
+        self.pole_vel_cost              = 0
+
 
         self.swing_ratio = 0.4
 
@@ -217,6 +223,8 @@ class CassieEnv_clean:
         speed_size     = 1
 
         clock_size    = 2
+
+        ext_size = 2
         
         
         base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, -7, 8, -9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, -21, 22,
@@ -224,10 +232,10 @@ class CassieEnv_clean:
                                     38, 39, 36, 37, 42, 43, 40, 41])
         obs_size = state_est_size
         
-        append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+speed_size)])
+        append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+speed_size+ext_size)])
         mirrored_obs = np.concatenate([base_mir_obs, append_obs])
         clock_inds = append_obs[0:clock_size].tolist()
-        obs_size += clock_size + speed_size
+        obs_size += clock_size + speed_size + ext_size
        
 
         # NOTE: mirror loss only set up for clock based with state estimation so far. 
@@ -338,6 +346,8 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
+        self.pole_pos_cost              = 0
+        self.pole_vel_cost              = 0
 
         # Reward clocks
         one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
@@ -354,8 +364,8 @@ class CassieEnv_clean:
 
         for _ in range(self.simrate):
             self.step_simulation(action)
-            qpos = np.copy(self.sim.qpos())
-            qvel = np.copy(self.sim.qvel())
+            qpos = np.copy(self.sim.qpos_full())
+            qvel = np.copy(self.sim.qvel_full())
 
             # Foot Orientation Cost
             self.l_foot_orient += 20*(1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
@@ -437,6 +447,10 @@ class CassieEnv_clean:
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
 
+            # Mass costs
+            self.pole_pos_cost = np.abs(3*qpos[-1])
+            self.pole_vel_cost = np.abs(qvel[-1])
+
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
         self.l_foot_cost_var            /= self.simrate
@@ -464,6 +478,9 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        /= self.simrate
         self.straight_cost              /= self.simrate
         self.yvel_cost                  /= self.simrate
+        self.pole_pos_cost              /= self.simrate
+        self.pole_vel_cost              /= self.simrate
+
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -574,9 +591,8 @@ class CassieEnv_clean:
         self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
 
-        if True:
-            qpos = np.concatenate((qpos, [qpos[0], qpos[1], 1.25]))
-            qvel = np.concatenate((qvel, np.zeros(3)))
+        qpos = np.concatenate((qpos, [0]))
+        qvel = np.concatenate((qvel, [0]))
 
         self.sim.set_qpos_full(qpos)
         self.sim.set_qvel_full(qvel)
@@ -584,7 +600,7 @@ class CassieEnv_clean:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = (random.randint(0, 10)) / 10
+        self.speed = 0#(random.randint(0, 10)) / 10
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
         self.speed_schedule = self.speed*np.ones(3)
@@ -660,6 +676,8 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
+        self.pole_pos_cost              = 0
+        self.pole_vel_cost              = 0
 
         return self.get_full_state()
 
@@ -733,6 +751,8 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
+        self.pole_pos_cost              = 0
+        self.pole_vel_cost              = 0
 
         return self.get_full_state()
 
@@ -771,8 +791,8 @@ class CassieEnv_clean:
         return globals()[self.reward_func](self)
 
     def get_full_state(self):
-        qpos = np.copy(self.sim.qpos())
-        qvel = np.copy(self.sim.qvel()) 
+        qpos = np.copy(self.sim.qpos_full())
+        qvel = np.copy(self.sim.qvel_full()) 
 
         # TODO: maybe convert to set subtraction for clarity
         # {i for i in range(35)} - 
@@ -791,7 +811,7 @@ class CassieEnv_clean:
         clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                 np.cos(2 * np.pi *  self.phase / (self.phaselen))]
         
-        ext_state = np.concatenate((clock, [self.speed]))
+        ext_state = np.concatenate((clock, [self.speed, qpos[-1], qvel[1]]))
 
         # Update orientation
         new_orient = self.cassie_state.pelvis.orientation[:]

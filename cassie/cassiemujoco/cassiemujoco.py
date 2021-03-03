@@ -21,9 +21,10 @@ import numpy as np
 _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # Initialize libcassiesim
-cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
-# cassie_mujoco_init(str.encode(_dir_path+"/cassie_hfield.xml"))
-# cassie_mujoco_init(str.encode("../model/cassie_hfield.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_norefinertia.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_tray_box.xml"))
+cassie_mujoco_init(str.encode(_dir_path+"/cassiepole.xml"))
 
 
 # Interface classes
@@ -33,10 +34,15 @@ cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 class CassieSim:
     def __init__(self, modelfile, reinit=False):
         self.c = cassie_sim_init(modelfile.encode('utf-8'), reinit)
-        self.nv = 32
+        params = cassie_sim_params(self.c)
+        self.nv = params[1]
         self.nbody = 26
-        self.nq = 35
+        self.nq = params[0]
         self.ngeom = 35
+        # self.nv = 32
+        # self.nbody = 26
+        # self.nq = 35
+        # self.ngeom = 35
 
     def step(self, u):
         y = cassie_out_t()
@@ -64,9 +70,17 @@ class CassieSim:
         qposp = cassie_sim_qpos(self.c)
         return qposp[:35]
 
+    def qpos_full(self):
+        qposp = cassie_sim_qpos(self.c)
+        return qposp[:self.nq]
+
     def qvel(self):
         qvelp = cassie_sim_qvel(self.c)
         return qvelp[:32]
+
+    def qvel_full(self):
+        qvelp = cassie_sim_qvel(self.c)
+        return qvelp[:self.nv]
 
     def qacc(self):
         qaccp = cassie_sim_qacc(self.c)
@@ -85,9 +99,19 @@ class CassieSim:
         for i in range(min(len(qpos), 35)):
             qposp[i] = qpos[i]
 
+    def set_qpos_full(self, qpos):
+        qposp = cassie_sim_qpos(self.c)
+        for i in range(min(len(qpos), self.nq)):
+            qposp[i] = qpos[i]
+
     def set_qvel(self, qvel):
         qvelp = cassie_sim_qvel(self.c)
         for i in range(min(len(qvel), 32)):
+            qvelp[i] = qvel[i]
+
+    def set_qvel_full(self, qvel):
+        qvelp = cassie_sim_qvel(self.c)
+        for i in range(min(len(qvel), self.nv)):
             qvelp[i] = qvel[i]
 
     def hold(self):
