@@ -11,7 +11,7 @@ _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 _libraries = {}
-_libraries['./libcassiemujoco.so'] = ctypes.CDLL(_dir_path + '/libcassiemujoco.so')
+_libraries['./libcassiemujoco.so'] = ctypes.CDLL(_dir_path + '/libcassiemujoco_notorquedelay.so')
 # if local wordsize is same as target, keep ctypes pointer function.
 if ctypes.sizeof(ctypes.c_void_p) == 8:
     POINTER_T = ctypes.POINTER
@@ -618,6 +618,9 @@ cassie_sim_get_cassie_out.argtypes = [POINTER_T(struct_cassie_sim)]
 cassie_sim_run_state_est = _libraries['./libcassiemujoco.so'].cassie_sim_run_state_est
 cassie_sim_run_state_est.restype = None
 cassie_sim_run_state_est.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(cassie_out_t), POINTER_T(struct_c__SA_state_out_t)]
+cassie_sim_params = _libraries['./libcassiemujoco.so'].cassie_sim_params
+cassie_sim_params.restype = POINTER_T(ctypes.c_int32)
+cassie_sim_params.argtypes = [POINTER_T(struct_cassie_sim)]
 
 class struct_c__SA_pd_motor_in_t(ctypes.Structure):
     _pack_ = True # source:False
@@ -884,10 +887,15 @@ __all__ = \
     'cassie_sim_foot_quat', 'cassie_sim_body_vel', 'cassie_sim_set_body_name_mass',
     'cassie_sim_get_hfield_nrow', 'cassie_sim_get_hfield_ncol', 'cassie_sim_get_nhfielddata',
     'cassie_sim_get_hfield_size', 'cassie_sim_set_hfield_size', 'cassie_sim_hfielddata', 'cassie_sim_set_hfielddata',
+<<<<<<< HEAD
     'cassie_sim_foot_quat', 'cassie_sim_body_vel', 'cassie_sim_set_body_name_mass', 'cassie_vis_set_cam', 
     'cassie_sim_joint_filter', 'cassie_sim_set_joint_filter', 'cassie_sim_drive_filter', 'cassie_sim_set_drive_filter',
     'cassie_sim_torque_delay', 'cassie_sim_set_torque_delay', 'drive_filter_t', 'joint_filter_t', 'cassie_sim_act_vel',
     'cassie_sim_set_drive_filter2', 'cassie_sim_set_joint_filter2', 'cassie_sim_sensordata', 'cassie_sim_copy_mjd', 'cassie_sim_copy_state_est',
     'cassie_sim_copy_just_sim', 'cassie_sim_get_cassie_out', 'cassie_sim_run_state_est']
+=======
+    'cassie_sim_foot_quat', 'cassie_sim_body_vel', 'cassie_sim_set_body_name_mass', 'cassie_vis_set_cam',
+    'cassie_sim_params']
+>>>>>>> 495cf7d19cc720dfd99cdc1ac102ff613ef75541
 
 # 'cassie_sim_set_cassiestate'
