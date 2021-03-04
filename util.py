@@ -445,6 +445,8 @@ class EvalProcessClass():
             env = CassieEnv_turn_no_orientadd(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
         elif env_name == "CassieClean":
             env = CassieEnv_clean(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
+        elif env_name == "CassieClean_pole":
+            env = CassieEnv_clean_pole(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
         elif env_name == "CassieClean_tray":
             env = CassieEnv_clean_tray(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
         else:
@@ -458,7 +460,6 @@ class EvalProcessClass():
             hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
             env.sim.set_hfield_data(hfield_data.flatten())
 
-        # print(env.reward_func)
         # env.reward_func = "speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward"
         # print()
 
