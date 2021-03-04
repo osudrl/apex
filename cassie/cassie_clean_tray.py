@@ -16,10 +16,10 @@ import copy
 
 import pickle
 
-class CassieEnv_clean_pole:
+class CassieEnv_clean_tray:
     def __init__(self, simrate=60, dynamics_randomization=False, reward="empty_reward", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassiepole.xml")
-        if self.sim.nq != 36:
+        if self.sim.nq != 42:
             print("Error: wrong model file")
             exit()
         self.vis = None
@@ -207,9 +207,7 @@ class CassieEnv_clean_pole:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
-        self.pole_pos_cost              = 0
-        self.pole_vel_cost              = 0
-        self.com_height                 = 0
+        self.tray_box_cost              = 0
 
         self.swing_ratio = 0.4
 
@@ -224,7 +222,7 @@ class CassieEnv_clean_pole:
 
         clock_size    = 2
 
-        ext_size = 2
+        ext_size = 7 + 6
         
         
         base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, -7, 8, -9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, -21, 22,
@@ -346,9 +344,7 @@ class CassieEnv_clean_pole:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
-        self.pole_pos_cost              = 0
-        self.pole_vel_cost              = 0
-        self.com_height                 = 0
+        self.tray_box_cost              = 0
 
         # Reward clocks
         one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
@@ -449,9 +445,7 @@ class CassieEnv_clean_pole:
             self.yvel_cost += y_vel
 
             # Mass costs
-            self.pole_pos_cost += np.abs(3*qpos[-1])
-            self.pole_vel_cost += np.abs(qvel[-1])
-            self.com_height += (0.95- qpos[2]) ** 2
+            self.tray_box_cost += 2*np.linalg.norm(qpos[0:2] - qpos[-7:-5])
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -480,10 +474,7 @@ class CassieEnv_clean_pole:
         self.orient_rollyaw_cost        /= self.simrate
         self.straight_cost              /= self.simrate
         self.yvel_cost                  /= self.simrate
-        self.pole_pos_cost              /= self.simrate
-        self.pole_vel_cost              /= self.simrate
-        self.com_height                 /= self.simrate
-
+        self.tray_box_cost              /= self.simrate
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -594,8 +585,8 @@ class CassieEnv_clean_pole:
         self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
 
-        qpos = np.concatenate((qpos, [0]))
-        qvel = np.concatenate((qvel, [0]))
+        qpos = np.concatenate((qpos, [0, 0, 1.25, 1, 0, 0, 0]))
+        qvel = np.concatenate((qvel, [0, 0, 0, 0, 0, 0]))
 
         self.sim.set_qpos_full(qpos)
         self.sim.set_qvel_full(qvel)
@@ -603,7 +594,7 @@ class CassieEnv_clean_pole:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = 0#(random.randint(0, 10)) / 10
+        self.speed = (random.randint(0, 40)) / 10
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
         self.speed_schedule = self.speed*np.ones(3)
@@ -679,9 +670,7 @@ class CassieEnv_clean_pole:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
-        self.pole_pos_cost              = 0
-        self.pole_vel_cost              = 0
-        self.com_height                 = 0
+        self.tray_box_cost              = 0
 
         return self.get_full_state()
 
@@ -755,9 +744,7 @@ class CassieEnv_clean_pole:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
-        self.pole_pos_cost              = 0
-        self.pole_vel_cost              = 0
-        self.com_height                 = 0
+        self.tray_box_cost              = 0
 
         return self.get_full_state()
 
@@ -816,7 +803,7 @@ class CassieEnv_clean_pole:
         clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                 np.cos(2 * np.pi *  self.phase / (self.phaselen))]
         
-        ext_state = np.concatenate((clock, [self.speed, qpos[-1], qvel[1]]))
+        ext_state = np.concatenate((clock, [self.speed], qpos[-7:], qvel[-6:]))
 
         # Update orientation
         new_orient = self.cassie_state.pelvis.orientation[:]
