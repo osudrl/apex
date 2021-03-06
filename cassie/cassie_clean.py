@@ -83,6 +83,7 @@ class CassieEnv_clean:
         self.slope_rand = False
         self.joint_rand = False
         self.load_mass_rand = False
+        self.getup = True
         # Record default dynamics parameters
         if self.dynamics_randomization:
             self.default_damping = self.sim.get_dof_damping()
@@ -204,6 +205,7 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
+        self.com_height                 = 0
 
         self.swing_ratio = 0.4
 
@@ -338,6 +340,7 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
+        self.com_height                 = 0
 
         # Reward clocks
         one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
@@ -436,6 +439,7 @@ class CassieEnv_clean:
             self.orient_rollyaw_cost += orient_rollyaw
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
+            self.com_height += 4*(0.95 - qpos[2]) ** 2
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -464,6 +468,7 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        /= self.simrate
         self.straight_cost              /= self.simrate
         self.yvel_cost                  /= self.simrate
+        self.com_height                 /= self.simrate
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -492,6 +497,8 @@ class CassieEnv_clean:
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.4:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
             done = True
+        if self.getup:
+            done = False
 
         if return_omniscient_state:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
@@ -538,7 +545,7 @@ class CassieEnv_clean:
         self.time  += 1
         self.phase += self.phase_add
 
-        if (self.aslip_traj and self.phase >= self.phaselen) or self.phase > self.phaselen:
+        if self.phase > self.phaselen:
             self.phase = 0
             self.counter += 1
 
@@ -574,17 +581,34 @@ class CassieEnv_clean:
         self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
 
-        if True:
+        if False:
             qpos = np.concatenate((qpos, [qpos[0], qpos[1], 1.25]))
-            qvel = np.concatenate((qvel, np.zeros(3)))
+            qvel = np.concatenate((qvel, np.zeros(3)))            
 
         self.sim.set_qpos_full(qpos)
         self.sim.set_qvel_full(qvel)
 
+        if self.getup:
+            angle = np.random.uniform(0, 2*np.pi)
+            force_size = np.random.uniform(0, 100)
+            force_time = np.random.randint(0, 10)
+            force_x = force_size * np.cos(angle)
+            force_y = force_size * np.sin(angle)
+            for i in range(force_time):
+                self.sim.apply_force([force_x, force_y, 0, 0, 0, 0], "cassie-pelvis")
+                self.step_basic(np.zeros(10))
+            for i in range(10):
+                self.step_basic(np.zeros(10))
+            self.phase = random.uniform(0, self.phaselen)
+            self.time = 0
+            self.counter = 0
+
+            self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
+
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = (random.randint(0, 10)) / 10
+        self.speed = 0#(random.randint(0, 10)) / 10
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
         self.speed_schedule = self.speed*np.ones(3)
@@ -660,6 +684,7 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
+        self.com_height                 = 0
 
         return self.get_full_state()
 
@@ -733,6 +758,7 @@ class CassieEnv_clean:
         self.orient_rollyaw_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
+        self.com_height                 = 0
 
         return self.get_full_state()
 
@@ -790,6 +816,8 @@ class CassieEnv_clean:
         # CLOCK BASED (NO TRAJECTORY)
         clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                 np.cos(2 * np.pi *  self.phase / (self.phaselen))]
+        if self.getup:
+            clock = [0, 0]
         
         ext_state = np.concatenate((clock, [self.speed]))
 
