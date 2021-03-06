@@ -58,9 +58,25 @@ def stand_up_pole_reward(self):
 
     return reward
 
+def stand_up_pole_free_reward(self):
+
+    reward = 0.2*np.exp(-self.com_height) \
+                + 0.5*np.exp(-self.pole_pos_cost) + 0.3*np.exp(-self.pole_vel_cost) \
+
+    return reward
+
 def stand_smooth_reward(self):
 
-    reward = 0.4*np.exp(-self.forward_cost) + 0.4*np.exp(-self.com_height) \
+    reward = 0.2*np.exp(-self.forward_cost) + 0.6*np.exp(-self.com_height) \
+                + .05*np.exp(-self.pel_transacc) + .05*np.exp(-self.pel_rotacc) \
+                + .05*np.exp(-self.act_cost) + 0.05*np.exp(-self.torque_penalty)
+
+    return reward
+
+def stand_smooth_footorient_reward(self):
+
+    reward = 0.2*np.exp(-self.forward_cost) +  0.2*np.exp(-self.yvel_cost) + 0.3*np.exp(-self.com_height) \
+                + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
                 + .05*np.exp(-self.pel_transacc) + .05*np.exp(-self.pel_rotacc) \
                 + .05*np.exp(-self.act_cost) + 0.05*np.exp(-self.torque_penalty)
 

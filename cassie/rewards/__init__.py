@@ -13,6 +13,7 @@ from .standing_rewards import *
 # from .speedmatch_heuristic_reward import *
 from .side_speedmatch_rewards import *
 from .mass_rewards import *
+from .getup_rewards import *
 # from .side_speedmatch_foottraj_reward import *
 # from .side_speedmatch_heightvel_reward import *
 # from .side_speedmatch_heuristic_reward import *
