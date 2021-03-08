@@ -77,6 +77,7 @@ class CassieEnv_clean:
         self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
         # global flat foot orientation, can be useful part of reward function:
         self.neutral_foot_orient = np.array([-0.24790886454547323, -0.24679713195445646, -0.6609396704367185, 0.663921021343526])
+        self.face_up_orient = euler2quat(x=0, y=-np.pi/4, z=0)
 
         #### Dynamics Randomization ####
         # self.dynamics_randomization = False
@@ -84,6 +85,7 @@ class CassieEnv_clean:
         self.joint_rand = False
         self.load_mass_rand = False
         self.getup = True
+        self.zero_clock = False
         # Record default dynamics parameters
         if self.dynamics_randomization:
             self.default_damping = self.sim.get_dof_damping()
@@ -206,6 +208,7 @@ class CassieEnv_clean:
         self.straight_cost              = 0
         self.yvel_cost                  = 0
         self.com_height                 = 0
+        self.face_up_cost               = 0
 
         self.swing_ratio = 0.4
 
@@ -341,6 +344,7 @@ class CassieEnv_clean:
         self.straight_cost              = 0
         self.yvel_cost                  = 0
         self.com_height                 = 0
+        self.face_up_cost               = 0
 
         # Reward clocks
         one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
@@ -440,6 +444,7 @@ class CassieEnv_clean:
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
             self.com_height += 4*(0.95 - qpos[2]) ** 2
+            self.face_up_cost += 1 - np.inner(self.face_up_orient, qpos[3:7]) ** 2
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -469,6 +474,7 @@ class CassieEnv_clean:
         self.straight_cost              /= self.simrate
         self.yvel_cost                  /= self.simrate
         self.com_height                 /= self.simrate
+        self.face_up_cost               /= self.simrate
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -590,8 +596,8 @@ class CassieEnv_clean:
 
         if self.getup:
             angle = np.random.uniform(0, 2*np.pi)
-            force_size = np.random.uniform(0, 100)
-            force_time = np.random.randint(0, 10)
+            force_size = np.random.uniform(100, 150)
+            force_time = np.random.randint(10, 20)
             force_x = force_size * np.cos(angle)
             force_y = force_size * np.sin(angle)
             for i in range(force_time):
@@ -685,6 +691,7 @@ class CassieEnv_clean:
         self.straight_cost              = 0
         self.yvel_cost                  = 0
         self.com_height                 = 0
+        self.face_up_cost               = 0
 
         return self.get_full_state()
 
@@ -759,6 +766,7 @@ class CassieEnv_clean:
         self.straight_cost              = 0
         self.yvel_cost                  = 0
         self.com_height                 = 0
+        self.face_up_cost               = 0
 
         return self.get_full_state()
 
@@ -816,7 +824,7 @@ class CassieEnv_clean:
         # CLOCK BASED (NO TRAJECTORY)
         clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                 np.cos(2 * np.pi *  self.phase / (self.phaselen))]
-        if self.getup:
+        if self.getup or self.zero_clock:
             clock = [0, 0]
         
         ext_state = np.concatenate((clock, [self.speed]))
