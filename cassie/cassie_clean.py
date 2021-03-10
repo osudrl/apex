@@ -61,6 +61,7 @@ class CassieEnv_clean:
         self.counter = 0 # number of phase cycles completed in episode
         self.speed = 0
         self.phase_add = 1
+        self.sprint = 0
 
         # NOTE: a reference trajectory represents ONE phase cycle
         # Set cycle time/number of phases in the clock
@@ -84,7 +85,7 @@ class CassieEnv_clean:
         self.slope_rand = False
         self.joint_rand = False
         self.load_mass_rand = False
-        self.getup = True
+        self.getup = False
         self.zero_clock = False
         # Record default dynamics parameters
         if self.dynamics_randomization:
@@ -167,6 +168,7 @@ class CassieEnv_clean:
         self.orient_time = 1000 
         self.orient_dur = 40
         self.speed_time = 500
+        self.turn_rate = 0
 
         # Keep track of actions, torques
         self.prev_action = None 
@@ -360,13 +362,20 @@ class CassieEnv_clean:
         # r_force = ceil(r_swing)
 
         for _ in range(self.simrate):
+            if self.push_time <= self.time <= self.push_time + self.push_dur:
+                force_x = self.push_size * np.cos(self.push_ang)
+                force_y = self.push_size * np.sin(self.push_ang)
+                self.sim.apply_force([force_x, force_y, 0, 0, 0, 0], "cassie-pelvis")
             self.step_simulation(action)
             qpos = np.copy(self.sim.qpos())
             qvel = np.copy(self.sim.qvel())
+            quaternion = euler2quat(z=self.orient_add, x=0, y=0)
+            iquaternion = inverse_quaternion(quaternion)
 
             # Foot Orientation Cost
-            self.l_foot_orient += 20*(1 - np.inner(self.neutral_foot_orient, self.sim.xquat("left-foot")) ** 2)
-            self.r_foot_orient += 20*(1 - np.inner(self.neutral_foot_orient, self.sim.xquat("right-foot")) ** 2)
+            foot_orient_target = quaternion_product(iquaternion, self.neutral_foot_orient)
+            self.l_foot_orient += 20*(1 - np.inner(foot_orient_target, self.sim.xquat("left-foot")) ** 2)
+            self.r_foot_orient += 20*(1 - np.inner(foot_orient_target, self.sim.xquat("right-foot")) ** 2)
 
             # Hip Yaw velocity cost
             self.hiproll_cost += (np.abs(qvel[6]) + np.abs(qvel[19])) / 3
@@ -422,11 +431,19 @@ class CassieEnv_clean:
                 self.act_cost += 0
 
             # Speedmatching costs
-            forward_diff = np.abs(qvel[0] - self.speed)
-            orient_diff = 1 - np.inner(np.array([1, 0, 0, 0]), qpos[3:7]) ** 2
+            orient_target = np.array([1, 0, 0, 0])
+            actual_orient = quaternion_product(iquaternion, qpos[3:7])
+            if actual_orient[0] < 0:
+                actual_orient = -actual_orient
+            speed_target = np.array([self.speed, 0, 0])
+            speed_target = rotate_by_quaternion(speed_target, iquaternion)
+
+            forward_diff = np.abs(qvel[0] - speed_target[0])
+            y_vel = np.abs(qvel[1] - speed_target[1])
+            orient_diff = 1 - np.inner(orient_target, actual_orient) ** 2
+
             euler = quaternion2euler(qpos[3:7])
             orient_rollyaw = 2 * np.linalg.norm(euler[[0,2]])
-            y_vel = np.abs(qvel[1])
             straight_diff = 8*np.abs(qpos[1])
             if forward_diff < 0.05:
                 forward_diff = 0
@@ -481,6 +498,7 @@ class CassieEnv_clean:
 
         self.time  += 1
         self.phase += self.phase_add
+        self.orient_add += self.turn_rate
 
         if self.phase >= self.phaselen:
             self.phase -= self.phaselen
@@ -498,7 +516,12 @@ class CassieEnv_clean:
             self.update_speed(max(0.0, min(3.0, self.speed + self.speed_schedule[min(int(np.floor(self.time/self.speed_time)), 2)])))
             # print("update speed: ", self.speed)
         if self.orient_time <= self.time <= self.orient_time + self.orient_dur:
-            self.orient_add = self.orient_command * (self.time - self.orient_time) / self.orient_dur
+            # self.orient_add = self.orient_command * (self.time - self.orient_time) / self.orient_dur
+            self.turn_rate = self.turn_command
+        else:
+            self.turn_rate = 0
+        if self.time == self.sprint_switch:
+            self.sprint = 1 - self.sprint     # Swap 0 to 1 and 1 to 0
 
         # TODO: make 0.3 a variable/more transparent
         if reward < 0.4:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
@@ -614,7 +637,7 @@ class CassieEnv_clean:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = 0#(random.randint(0, 10)) / 10
+        self.speed = 0#(random.randint(0, 40)) / 10
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
         self.speed_schedule = self.speed*np.ones(3)
@@ -629,8 +652,21 @@ class CassieEnv_clean:
         self.update_speed(self.speed)
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
-        self.orient_command = 0#random.randint(-10, 10) * np.pi / 30
-        self.orient_time = 500#random.randint(25, 125) 
+        tps = 1/2.5 * np.pi * (self.simrate*0.0005) # max radian change per second to command
+        self.turn_command = 0#random.uniform(-tps, tps)
+        self.orient_time = random.randint(60, 125)
+        self.orient_dur = random.randint(30, 50)
+        self.turn_rate = 0
+
+        self.push_ang = random.uniform(0, 2*np.pi)
+        self.push_size = random.uniform(50, 100)
+        self.push_time = 500#random.randint(60, 125)
+        self.push_dur = 0#random.randint(5, 20)
+
+        self.sprint = random.randint(0, 1)
+        self.sprint_switch = random.randint(60, 125)
+        self.swing_ratio = 0.8
+        self.phase_add = 1.5
 
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
@@ -711,6 +747,7 @@ class CassieEnv_clean:
         self.speed_schedule = self.speed * np.ones(3)
         self.orient_command = 0
         self.orient_time = 1000 
+        self.turn_rate
 
         if not full_reset:
             qpos = np.copy(self.reset_states.qpos[0])
@@ -824,9 +861,10 @@ class CassieEnv_clean:
         # CLOCK BASED (NO TRAJECTORY)
         clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                 np.cos(2 * np.pi *  self.phase / (self.phaselen))]
-        if self.getup or self.zero_clock:
+        if self.getup or self.zero_clock or self.sprint == 0:
             clock = [0, 0]
-        
+        if self.sprint == 1:
+            self.speed = 1
         ext_state = np.concatenate((clock, [self.speed]))
 
         # Update orientation
@@ -841,7 +879,7 @@ class CassieEnv_clean:
         new_translationalVelocity = rotate_by_quaternion(self.cassie_state.pelvis.translationalVelocity[:], iquaternion)
         motor_pos = self.cassie_state.motor.position[:]
         joint_pos = np.concatenate([self.cassie_state.joint.position[0:2], self.cassie_state.joint.position[3:5]])
-        joint_vel = np.concatenate([self.cassie_state.joint.velocity[0:2], self.cassie_state.joint.velocity[0:2]])
+        joint_vel = np.concatenate([self.cassie_state.joint.velocity[0:2], self.cassie_state.joint.velocity[3:5]])
         if self.joint_rand:
             motor_pos += self.joint_offsets[0:10]
             joint_pos += self.joint_offsets[10:14]

@@ -18,3 +18,13 @@ def tray_box_reward(self):
         reward = 0
 
     return reward
+
+def tray_box_reward_easy(self):
+    reward = .1*np.exp(-self.forward_cost) + .1*np.exp(-self.orient_cost) \
+                + .05*np.exp(-self.straight_cost) + .05*np.exp(-self.yvel_cost) \
+                + .15*np.exp(-self.l_foot_cost_forcevel) + .15*np.exp(-self.r_foot_cost_forcevel) \
+                + .1*np.exp(-self.l_foot_cost_pos) + .1*np.exp(-self.r_foot_cost_pos) \
+                + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
+                + .1*np.exp(-self.tray_box_cost)
+
+    return reward
