@@ -61,7 +61,7 @@ class CassieEnv_clean:
         self.counter = 0 # number of phase cycles completed in episode
         self.speed = 0
         self.phase_add = 1
-        self.sprint = 0
+        self.sprint = None
 
         # NOTE: a reference trajectory represents ONE phase cycle
         # Set cycle time/number of phases in the clock
@@ -85,7 +85,7 @@ class CassieEnv_clean:
         self.slope_rand = False
         self.joint_rand = False
         self.load_mass_rand = False
-        self.getup = False
+        self.getup = True
         self.zero_clock = False
         # Record default dynamics parameters
         if self.dynamics_randomization:
@@ -168,7 +168,14 @@ class CassieEnv_clean:
         self.orient_time = 1000 
         self.orient_dur = 40
         self.speed_time = 500
+        self.turn_command = 0
         self.turn_rate = 0
+        self.push_ang = 0
+        self.push_size = 0
+        self.push_time = np.inf
+        self.push_dur = 0
+        self.sprint_switch = np.inf#random.randint(60, 125)
+
 
         # Keep track of actions, torques
         self.prev_action = None 
@@ -861,10 +868,13 @@ class CassieEnv_clean:
         # CLOCK BASED (NO TRAJECTORY)
         clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                 np.cos(2 * np.pi *  self.phase / (self.phaselen))]
-        if self.getup or self.zero_clock or self.sprint == 0:
+        if self.getup or self.zero_clock:
             clock = [0, 0]
-        if self.sprint == 1:
-            self.speed = 1
+        if self.sprint is not None:
+            if self.sprint == 0:
+                clock = [0, 0]
+            elif self.sprint == 1:
+                self.speed = 1
         ext_state = np.concatenate((clock, [self.speed]))
 
         # Update orientation
