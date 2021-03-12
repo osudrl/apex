@@ -85,8 +85,9 @@ class CassieEnv_clean:
         self.slope_rand = False
         self.joint_rand = False
         self.load_mass_rand = False
-        self.getup = True
+        self.getup = False
         self.zero_clock = False
+        self.sprint = None
         # Record default dynamics parameters
         if self.dynamics_randomization:
             self.default_damping = self.sim.get_dof_damping()
@@ -218,6 +219,7 @@ class CassieEnv_clean:
         self.yvel_cost                  = 0
         self.com_height                 = 0
         self.face_up_cost               = 0
+        self.max_speed_cost             = 0
 
         self.swing_ratio = 0.4
 
@@ -354,6 +356,7 @@ class CassieEnv_clean:
         self.yvel_cost                  = 0
         self.com_height                 = 0
         self.face_up_cost               = 0
+        self.max_speed_cost             = 0
 
         # Reward clocks
         one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
@@ -439,11 +442,11 @@ class CassieEnv_clean:
 
             # Speedmatching costs
             orient_target = np.array([1, 0, 0, 0])
-            actual_orient = quaternion_product(iquaternion, qpos[3:7])
+            actual_orient = quaternion_product(quaternion, qpos[3:7])
             if actual_orient[0] < 0:
                 actual_orient = -actual_orient
             speed_target = np.array([self.speed, 0, 0])
-            speed_target = rotate_by_quaternion(speed_target, iquaternion)
+            speed_target = rotate_by_quaternion(speed_target, quaternion)
 
             forward_diff = np.abs(qvel[0] - speed_target[0])
             y_vel = np.abs(qvel[1] - speed_target[1])
@@ -469,6 +472,7 @@ class CassieEnv_clean:
             self.yvel_cost += y_vel
             self.com_height += 4*(0.95 - qpos[2]) ** 2
             self.face_up_cost += 1 - np.inner(self.face_up_orient, qpos[3:7]) ** 2
+            self.max_speed_cost += qvel[0]
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -499,6 +503,7 @@ class CassieEnv_clean:
         self.yvel_cost                  /= self.simrate
         self.com_height                 /= self.simrate
         self.face_up_cost               /= self.simrate
+        self.max_speed_cost             /= self.simrate
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -644,7 +649,7 @@ class CassieEnv_clean:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = 0#(random.randint(0, 40)) / 10
+        self.speed = (random.randint(0, 40)) / 10
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
         self.speed_schedule = self.speed*np.ones(3)
@@ -660,20 +665,23 @@ class CassieEnv_clean:
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
         tps = 1/2.5 * np.pi * (self.simrate*0.0005) # max radian change per second to command
+        if self.speed >= 3:
+            tps /= 2
         self.turn_command = 0#random.uniform(-tps, tps)
-        self.orient_time = random.randint(60, 125)
-        self.orient_dur = random.randint(30, 50)
+        self.orient_time = np.inf#random.randint(60, 125)
+        self.orient_dur = 0#random.randint(30, 50)
         self.turn_rate = 0
 
-        self.push_ang = random.uniform(0, 2*np.pi)
-        self.push_size = random.uniform(50, 100)
+        self.push_ang = 0#random.uniform(0, 2*np.pi)
+        self.push_size = 0#random.uniform(50, 100)
         self.push_time = 500#random.randint(60, 125)
         self.push_dur = 0#random.randint(5, 20)
 
-        self.sprint = random.randint(0, 1)
-        self.sprint_switch = random.randint(60, 125)
+        self.sprint = None#random.randint(0, 1)
+        self.sprint_switch = np.inf#random.randint(60, 125)
         self.swing_ratio = 0.8
         self.phase_add = 1.5
+        self.speed = 1
 
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
@@ -735,6 +743,7 @@ class CassieEnv_clean:
         self.yvel_cost                  = 0
         self.com_height                 = 0
         self.face_up_cost               = 0
+        self.max_speed_cost             = 0
 
         return self.get_full_state()
 
@@ -811,6 +820,7 @@ class CassieEnv_clean:
         self.yvel_cost                  = 0
         self.com_height                 = 0
         self.face_up_cost               = 0
+        self.max_speed_cost             = 0
 
         return self.get_full_state()
 
