@@ -61,7 +61,6 @@ class CassieEnv_clean:
         self.counter = 0 # number of phase cycles completed in episode
         self.speed = 0
         self.phase_add = 1
-        self.sprint = None
 
         # NOTE: a reference trajectory represents ONE phase cycle
         # Set cycle time/number of phases in the clock
@@ -88,6 +87,9 @@ class CassieEnv_clean:
         self.getup = False
         self.zero_clock = False
         self.sprint = None
+        self.train_turn = False
+        self.train_push = False
+        self.train_sprint = True
         # Record default dynamics parameters
         if self.dynamics_randomization:
             self.default_damping = self.sim.get_dof_damping()
@@ -220,6 +222,7 @@ class CassieEnv_clean:
         self.com_height                 = 0
         self.face_up_cost               = 0
         self.max_speed_cost             = 0
+        self.motor_vel_cost             = 0
 
         self.swing_ratio = 0.4
 
@@ -357,10 +360,11 @@ class CassieEnv_clean:
         self.com_height                 = 0
         self.face_up_cost               = 0
         self.max_speed_cost             = 0
+        self.motor_vel_cost             = 0
 
         # Reward clocks
-        one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
-        zero2zero_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*(self.phase-(self.phaselen)/2)) + 1)
+        # one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
+        # zero2zero_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*(self.phase-(self.phaselen)/2)) + 1)
         # l_swing, r_swing = self.lin_clock_fn(self.swing_ratio, self.phase)
         l_swing, r_swing = self.lin_clock5(self.swing_ratio, self.phase, percent_trans=.7)
         # l_stance = -l_swing + 1
@@ -398,7 +402,7 @@ class CassieEnv_clean:
                 self.hipyaw_act += 0
 
             # Stable Pelvis cost
-            self.pel_stable += 0.05*(np.abs(self.cassie_state.pelvis.rotationalVelocity[:]).sum() + np.abs(self.cassie_state.pelvis.translationalAcceleration[:]).sum())
+            # self.pel_stable += 0.05*(np.abs(self.cassie_state.pelvis.rotationalVelocity[:]).sum() + np.abs(self.cassie_state.pelvis.translationalAcceleration[:]).sum())
 
             # Foot height cost
             des_height = self.des_foot_height
@@ -416,8 +420,8 @@ class CassieEnv_clean:
             # Foot height cost smooth 
             # Left foot starts on ground and then lift up and then back on ground.
             # Right foot starts in air and then put on ground and then lift back up.
-            self.l_foot_cost_smooth_force += zero2zero_clock*(l_height_cost+l_force_cost) + one2one_clock*l_ground_cost
-            self.r_foot_cost_smooth_force += one2one_clock*(r_height_cost+r_force_cost) + zero2zero_clock*r_ground_cost
+            # self.l_foot_cost_smooth_force += zero2zero_clock*(l_height_cost+l_force_cost) + one2one_clock*l_ground_cost
+            # self.r_foot_cost_smooth_force += one2one_clock*(r_height_cost+r_force_cost) + zero2zero_clock*r_ground_cost
 
             self.l_foot_cost_var += l_swing*(l_height_cost+l_force_cost) + l_stance*l_vel_cost
             self.r_foot_cost_var += r_swing*(r_height_cost+r_force_cost) + r_stance*r_vel_cost
@@ -430,7 +434,7 @@ class CassieEnv_clean:
 
             # Torque costs
             curr_torques = np.array(self.cassie_state.motor.torque[:])
-            self.torque_cost += 0.00006*np.linalg.norm(np.square(curr_torques))
+            # self.torque_cost += 0.00006*np.linalg.norm(np.square(curr_torques))
             self.torque_penalty = 0.05 * sum(np.abs(curr_torques)/len(curr_torques))
             self.pel_transacc += np.linalg.norm(self.cassie_state.pelvis.translationalAcceleration[:])
             self.pel_rotacc += 2*np.linalg.norm(self.cassie_state.pelvis.rotationalVelocity[:])
@@ -467,12 +471,13 @@ class CassieEnv_clean:
                 orient_diff *= 30
             self.forward_cost += forward_diff
             self.orient_cost += orient_diff
-            self.orient_rollyaw_cost += orient_rollyaw
+            # self.orient_rollyaw_cost += orient_rollyaw
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
             self.com_height += 4*(0.95 - qpos[2]) ** 2
             self.face_up_cost += 1 - np.inner(self.face_up_orient, qpos[3:7]) ** 2
             self.max_speed_cost += qvel[0]
+            self.motor_vel_cost += 0.5*(np.abs(qvel[self.vel_idx]).sum() / 10)
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -504,6 +509,8 @@ class CassieEnv_clean:
         self.com_height                 /= self.simrate
         self.face_up_cost               /= self.simrate
         self.max_speed_cost             /= self.simrate
+        self.motor_vel_cost             /= self.simrate
+        # print(self.motor_vel_cost)
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -664,24 +671,40 @@ class CassieEnv_clean:
         self.update_speed(self.speed)
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
-        tps = 1/2.5 * np.pi * (self.simrate*0.0005) # max radian change per second to command
-        if self.speed >= 3:
-            tps /= 2
-        self.turn_command = 0#random.uniform(-tps, tps)
-        self.orient_time = np.inf#random.randint(60, 125)
-        self.orient_dur = 0#random.randint(30, 50)
-        self.turn_rate = 0
+        if self.train_turn:
+            tps = 1/2.5 * np.pi * (self.simrate*0.0005) # max radian change per second to command
+            if self.speed >= 3:
+                tps /= 2
+            self.turn_command = random.uniform(-tps, tps)
+            self.orient_time = random.randint(60, 125)
+            self.orient_dur = random.randint(30, 50)
+            self.turn_rate = 0
+        else:
+            self.turn_command = 0
+            self.orient_time = np.inf
+            self.orient_dur = 0
+            self.turn_rate = 0
 
-        self.push_ang = 0#random.uniform(0, 2*np.pi)
-        self.push_size = 0#random.uniform(50, 100)
-        self.push_time = 500#random.randint(60, 125)
-        self.push_dur = 0#random.randint(5, 20)
+        if self.train_push:
+            self.push_ang = random.uniform(0, 2*np.pi)
+            self.push_size = random.uniform(50, 100)
+            self.push_time = random.randint(60, 125)
+            self.push_dur = random.randint(5, 20)
+        else:
+            self.push_ang = 0
+            self.push_size = 0
+            self.push_time = np.inf
+            self.push_dur = 0
 
-        self.sprint = None#random.randint(0, 1)
-        self.sprint_switch = np.inf#random.randint(60, 125)
-        self.swing_ratio = 0.8
-        self.phase_add = 1.5
-        self.speed = 1
+        if self.train_sprint:
+            self.sprint = 1#random.randint(0, 1)
+            self.sprint_switch = np.inf#random.randint(60, 125)
+            self.swing_ratio = 0.8
+            self.phase_add = 1.5
+            self.speed = 5
+        else:
+            self.sprint = None
+            self.sprint_switch = np.inf
 
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
 
@@ -744,6 +767,7 @@ class CassieEnv_clean:
         self.com_height                 = 0
         self.face_up_cost               = 0
         self.max_speed_cost             = 0
+        self.motor_vel_cost             = 0
 
         return self.get_full_state()
 
@@ -821,6 +845,7 @@ class CassieEnv_clean:
         self.com_height                 = 0
         self.face_up_cost               = 0
         self.max_speed_cost             = 0
+        self.motor_vel_cost             = 0
 
         return self.get_full_state()
 
@@ -884,7 +909,7 @@ class CassieEnv_clean:
             if self.sprint == 0:
                 clock = [0, 0]
             elif self.sprint == 1:
-                self.speed = 1
+                self.speed = 5
         ext_state = np.concatenate((clock, [self.speed]))
 
         # Update orientation

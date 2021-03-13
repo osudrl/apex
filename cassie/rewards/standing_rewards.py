@@ -83,6 +83,17 @@ def stand_smooth_footorient_reward(self):
 
     return reward
 
+def stand_smooth_footorient_motorvel_reward(self):
+
+    reward = 0.15*np.exp(-self.forward_cost) +  0.15*np.exp(-self.yvel_cost) \
+                + 0.2*np.exp(-self.com_height) + .1*np.exp(-self.orient_cost) \
+                + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
+                + .05*np.exp(-self.pel_transacc) + .05*np.exp(-self.pel_rotacc) \
+                + .05*np.exp(-self.act_cost) + 0.05*np.exp(-self.torque_penalty) \
+                + 0.1*np.exp(-self.motor_vel_cost)
+
+    return reward
+
 def stand_sprint_reward(self):
     if self.sprint == 0:
         reward = 0.2*np.exp(-self.forward_cost) +  0.2*np.exp(-self.yvel_cost) \
