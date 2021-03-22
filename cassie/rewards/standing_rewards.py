@@ -94,6 +94,27 @@ def stand_smooth_footorient_motorvel_reward(self):
 
     return reward
 
+def stand_walk_switch_reward(self):
+
+    if self.speed == 0:
+        reward = 0.1*np.exp(-self.forward_cost) +  0.1*np.exp(-self.yvel_cost) \
+                    + 0.2*np.exp(-self.com_height) + .1*np.exp(-self.orient_cost) \
+                    + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
+                    + .05*np.exp(-self.pel_transacc) + .05*np.exp(-self.pel_rotacc) \
+                    + .1*np.exp(-self.act_cost) + 0.1*np.exp(-self.torque_penalty) \
+                    + 0.1*np.exp(-self.motor_vel_cost)
+    else:
+        reward = .1*np.exp(-self.forward_cost) + .1*np.exp(-self.orient_cost) \
+                + .05*np.exp(-self.straight_cost) + .05*np.exp(-self.yvel_cost) \
+                + .10*np.exp(-self.l_foot_cost_forcevel) + .10*np.exp(-self.r_foot_cost_forcevel) \
+                + .1*np.exp(-self.l_foot_cost_pos) + .1*np.exp(-self.r_foot_cost_pos) \
+                + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
+                + .05*np.exp(-self.hiproll_cost) + .05*np.exp(-self.hipyaw_vel) \
+                + .025*np.exp(-self.pel_transacc) + .025*np.exp(-self.pel_rotacc) \
+                + .025*np.exp(-self.act_cost) + 0.025*np.exp(-self.torque_penalty)
+
+    return reward
+
 def stand_sprint_reward(self):
     if self.sprint == 0:
         reward = 0.2*np.exp(-self.forward_cost) +  0.2*np.exp(-self.yvel_cost) \

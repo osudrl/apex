@@ -89,7 +89,8 @@ class CassieEnv_clean:
         self.sprint = None
         self.train_turn = False
         self.train_push = False
-        self.train_sprint = True
+        self.train_sprint = False
+        self.train_stand = True
         # Record default dynamics parameters
         if self.dynamics_randomization:
             self.default_damping = self.sim.get_dof_damping()
@@ -97,8 +98,8 @@ class CassieEnv_clean:
             self.default_ipos = self.sim.get_body_ipos()
             self.default_fric = self.sim.get_geom_friction()
 
-            weak_factor = 0.7
-            strong_factor = 1.3
+            weak_factor = 1#0.7
+            strong_factor = 2#1.3
 
             pelvis_damp_range = [[self.default_damping[0], self.default_damping[0]], 
                                 [self.default_damping[1], self.default_damping[1]], 
@@ -543,7 +544,7 @@ class CassieEnv_clean:
             self.sprint = 1 - self.sprint     # Swap 0 to 1 and 1 to 0
 
         # TODO: make 0.3 a variable/more transparent
-        if reward < 0.4:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
+        if reward < 0.3:# or np.exp(-self.l_foot_cost_smooth) < f_term or np.exp(-self.r_foot_cost_smooth) < f_term:
             done = True
         if self.getup:
             done = False
@@ -656,11 +657,17 @@ class CassieEnv_clean:
         # Need to reset u? Or better way to reset cassie_state than taking step
         self.cassie_state = self.sim.step_pd(self.u)
 
-        self.speed = (random.randint(0, 40)) / 10
+        if self.train_stand:
+            self.speed = (random.randint(-5, 5)) / 10
+            if bool(random.getrandbits(1)):
+                # print("picking speed zero")
+                self.speed = 0
+        else:
+            self.speed = (random.randint(0, 40)) / 10
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
         self.speed_schedule = self.speed*np.ones(3)
-        self.speed_time = 500#100 - np.random.randint(-20, 20)
+        self.speed_time = np.inf#100 - np.random.randint(-20, 20)
         # self.speed = self.speed_schedule[0]
         # Make sure that if speed is above 2, freq is at least 1.2
         # if self.speed > 1.5 or np.any(self.speed_schedule > 1.5):
@@ -685,12 +692,14 @@ class CassieEnv_clean:
             self.orient_dur = 0
             self.turn_rate = 0
 
-        if self.train_push:
+        if self.train_push and bool(random.getrandbits(1)):
+            # print("doing push")
             self.push_ang = random.uniform(0, 2*np.pi)
             self.push_size = random.uniform(50, 100)
-            self.push_time = random.randint(60, 125)
-            self.push_dur = random.randint(5, 20)
+            self.push_time = random.randint(0, 125)
+            self.push_dur = random.randint(5, 10)
         else:
+            # print("no push")
             self.push_ang = 0
             self.push_size = 0
             self.push_time = np.inf
@@ -720,7 +729,7 @@ class CassieEnv_clean:
             # rolling = np.random.uniform(5e-5, 5e-4)
             # for _ in range(int(len(self.default_fric)/3)):
             #     fric_noise += [translational, torsional, rolling]
-            self.fric_noise = np.clip([np.random.uniform(0.6, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)], 0, None)
+            self.fric_noise = np.clip([np.random.uniform(0.7, 1.0), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)], 0, None)
             self.sim.set_dof_damping(self.damp_noise)
             self.sim.set_body_mass(self.mass_noise)
             # self.sim.set_body_ipos(com_noise)
@@ -871,9 +880,13 @@ class CassieEnv_clean:
             self.swing_ratio = 0.4 + .4*(new_speed - 1)/3
             self.phase_add = 1 + 0.5*(new_speed - 1)/2
             self.des_foot_height = .1 + 0.2*(new_speed - 1)/2
+        elif new_speed == 0 and self.train_stand:
+            self.swing_ratio = 0.0
+            self.phase_add = 1
         else:
             self.swing_ratio = 0.4 
             self.des_foot_height = .10
+            self.phase_add = 1
         if new_speed > 3:
             self.phase_add = 1.5
             self.des_foot_height = 0.30
@@ -903,7 +916,7 @@ class CassieEnv_clean:
         # CLOCK BASED (NO TRAJECTORY)
         clock = [np.sin(2 * np.pi *  self.phase / (self.phaselen)),
                 np.cos(2 * np.pi *  self.phase / (self.phaselen))]
-        if self.getup or self.zero_clock:
+        if self.getup or self.zero_clock or (self.train_stand and self.speed == 0):
             clock = [0, 0]
         if self.sprint is not None:
             if self.sprint == 0:
