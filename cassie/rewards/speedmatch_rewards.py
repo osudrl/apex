@@ -54,6 +54,20 @@ def speedmatchavg_orientchange_forcevel_footpos_footorient_stablepel_hiprollyawv
 
     return reward
 
+def speedmatchavg_orientchange_forcevel_footpos_footorient_stablepel_hiprollyawvel_smoothact_torquecost_footydist_reward(self):
+
+    reward = .10*np.exp(-self.forward_cost) + .1*np.exp(-self.orient_cost) \
+                + .10*np.exp(-self.yvel_cost) \
+                + .10*np.exp(-self.l_foot_cost_forcevel) + .10*np.exp(-self.r_foot_cost_forcevel) \
+                + .1*np.exp(-self.l_foot_cost_pos) + .1*np.exp(-self.r_foot_cost_pos) \
+                + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
+                + .025*np.exp(-self.hiproll_cost) + .025*np.exp(-self.hipyaw_vel) \
+                + .025*np.exp(-self.pel_transacc) + .025*np.exp(-self.pel_rotacc) \
+                + .025*np.exp(-self.act_cost) + 0.025*np.exp(-self.torque_penalty) \
+                + .05*np.exp(-self.footydist_cost)
+
+    return reward
+
 def speedmatchavg_forcevel_footpos_footorient_stablepel_hiprollyawvel_smoothact_torquecost_traybox_reward(self):
 
     reward = .2*np.exp(-self.forward_cost) + .1*np.exp(-self.orient_cost) \
@@ -123,6 +137,14 @@ def sprint_reward(self):
                 + .15*np.exp(-self.l_foot_cost_forcevel) + .15*np.exp(-self.r_foot_cost_forcevel) \
                 + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
                 + .025*np.exp(-self.pel_transacc) + .025*np.exp(-self.pel_rotacc) \
+                + .05*np.exp(-self.act_cost) + 0.05*np.exp(-self.torque_penalty)
+    return reward
+
+def sprint_pure_speed_reward(self):
+    reward = .3*self.max_speed_cost + .15*np.exp(-self.orient_cost) \
+                + .15*np.exp(-self.straight_cost) + .05*np.exp(-self.yvel_cost) \
+                + .1*np.exp(-self.l_foot_orient) + .1*np.exp(-self.r_foot_orient) \
+                + .05*np.exp(-self.pel_rotacc) \
                 + .05*np.exp(-self.act_cost) + 0.05*np.exp(-self.torque_penalty)
     return reward
 

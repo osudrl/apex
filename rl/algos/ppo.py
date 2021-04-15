@@ -247,7 +247,7 @@ class PPO:
 
         return total_buf
 
-    def sample_parallel_old(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0):
+    def sample_parallel_old(self, env_fn, policy, critic, min_steps, max_traj_len, deterministic=False, anneal=1.0, term_thresh=0):
 
         result = []
         total_steps = 0
@@ -256,7 +256,7 @@ class PPO:
         if self.limit_cores:
             real_proc = 48 - 16*int(np.log2(60 / env_fn().simrate))
             print("limit cores active, using {} cores".format(real_proc))
-            args = (self, env_fn, policy, critic, min_steps*self.n_proc // real_proc, max_traj_len, deterministic)
+        args = (self, env_fn, policy, critic, min_steps // real_proc, max_traj_len, deterministic)
         result_ids = [self.sample.remote(*args) for _ in range(real_proc)]
         result = ray.get(result_ids)
 
@@ -518,6 +518,7 @@ class PPO:
                 logger.add_scalar("Misc/Sample Times", samp_time, itr)
                 logger.add_scalar("Misc/Optimize Times", opt_time, itr)
                 logger.add_scalar("Misc/Evaluation Times", eval_time, itr)
+                logger.add_scalar("Misc/Sample Rate", advantages.numel() / samp_time, itr)
                 logger.add_scalar("Misc/Termination Threshold", curr_thresh, itr)
 
             # TODO: add option for how often to save model

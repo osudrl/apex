@@ -16,6 +16,8 @@ from .cassie_turn_no_orientadd import CassieEnv_turn_no_orientadd
 from .cassie_clean import CassieEnv_clean
 from .cassie_clean_pole import CassieEnv_clean_pole
 from .cassie_clean_tray import CassieEnv_clean_tray
+from .cassie_nomotorvel import CassieEnv_nomotorvel
+from .cassie_nomotorvel_nopelvel import CassieEnv_nomotorvel_nopelvel
 
 
 from .cassiemujoco import *
