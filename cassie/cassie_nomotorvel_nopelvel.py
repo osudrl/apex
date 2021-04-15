@@ -16,7 +16,7 @@ import copy
 
 import pickle
 
-class CassieEnv_noaccel_footdist:
+class CassieEnv_nomotorvel_nopelvel:
     def __init__(self, traj='walking', simrate=60, clock_based=True, state_est=True, dynamics_randomization=True, no_delta=True, reward="iros_paper", history=0):
         self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.vis = None
@@ -125,7 +125,7 @@ class CassieEnv_noaccel_footdist:
         self.joint_rand = False
         self.train_turn = False
         self.train_stand = True
-        self.train_push = True
+        self.train_push = False
         self.step_in_place = False
         # Record default dynamics parameters
         if self.dynamics_randomization:
@@ -281,7 +281,7 @@ class CassieEnv_noaccel_footdist:
     def set_up_state_space(self):
 
         mjstate_size   = 40
-        state_est_size = 44
+        state_est_size = 31
 
         speed_size     = 1
 
@@ -298,9 +298,9 @@ class CassieEnv_noaccel_footdist:
                                         20, 21, 22, 23, 24, 25, -33, -34, 35, 36, 37, 38, 39, -26, -27, 28, 29, 30, 31, 32])
         
         if self.state_est:
-            base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, -7, 8, -9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, -21, 22,
-                                    -23, 24, -25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 
-                                    38, 39, 36, 37, 42, 43, 40, 41])
+            base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, -7, 8, -9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 
+                                    -20, 21, -22,
+                                    25, 26, 23, 24, 29, 30, 27, 28])
             # base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, 7, 8, 9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, 21, 22,
             #                         23, 24, 25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 36, 37, 38, 
             #                         42, 43, 44, 39, 40, 41, 48, 49, 50, 45, 46, 47])
@@ -927,7 +927,7 @@ class CassieEnv_noaccel_footdist:
                     # else:
                     #     self.step_in_place = False
             else:
-                self.speed = (random.randint(0, 40)) / 10
+                self.speed = (random.randint(-5, 5)) / 10
                 if random.randint(0, 4) == 0:
                     self.speed = 0
             # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
@@ -1325,9 +1325,7 @@ class CassieEnv_noaccel_footdist:
             new_orient,                                 # pelvis orientation
             motor_pos,                                     # actuated joint positions
 
-            new_translationalVelocity,                       # pelvis translational velocity
             self.cassie_state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
-            self.cassie_state.motor.velocity[:],                                     # actuated joint velocities
             
             joint_pos,                                     # unactuated joint positions
             joint_vel                                      # unactuated joint velocities
