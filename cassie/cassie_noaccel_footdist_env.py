@@ -124,9 +124,14 @@ class CassieEnv_noaccel_footdist:
         self.slope_rand = False
         self.joint_rand = False
         self.train_turn = False
-        self.train_stand = True
-        self.train_push = True
+        self.train_stand = False
+        self.train_push = False
         self.step_in_place = False
+        self.train_mass = True
+        self.train_sprint = False
+        if self.train_mass and self.sim.nq != 42:
+            print("Error: wrong model file")
+            exit()
         # Record default dynamics parameters
         if self.dynamics_randomization:
             self.default_damping = self.sim.get_dof_damping()
@@ -214,6 +219,8 @@ class CassieEnv_noaccel_footdist:
         self.push_time = np.inf
         self.push_dur = 0
         self.speed_time = 500
+        self.sprint = 1#random.randint(0, 1)
+        self.sprint_switch = np.inf#random.randint(60, 125)
 
 
         # Keep track of actions, torques
@@ -273,6 +280,8 @@ class CassieEnv_noaccel_footdist:
         self.com_height                 = 0
         self.motor_vel_cost             = 0
         self.footydist_cost             = 0
+        self.tray_box_cost              = 0
+        self.max_speed_cost             = 0
 
         self.swing_ratio = 0.4
 
@@ -466,6 +475,8 @@ class CassieEnv_noaccel_footdist:
         self.com_height                 = 0
         self.motor_vel_cost             = 0
         self.footydist_cost             = 0
+        self.tray_box_cost              = 0
+        self.max_speed_cost             = 0
 
         # Reward clocks
         one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
@@ -507,8 +518,8 @@ class CassieEnv_noaccel_footdist:
                 force_y = self.push_size * np.sin(self.push_ang)
                 self.sim.apply_force([force_x, force_y, 0, 0, 0, 0], "cassie-pelvis")
             self.step_simulation(action)
-            qpos = np.copy(self.sim.qpos())
-            qvel = np.copy(self.sim.qvel())
+            qpos = np.copy(self.sim.qpos_full())
+            qvel = np.copy(self.sim.qvel_full())
             quaternion = euler2quat(z=self.orient_add, x=0, y=0)
             iquaternion = inverse_quaternion(quaternion)
 
@@ -637,6 +648,12 @@ class CassieEnv_noaccel_footdist:
             else:
                 footydist = 0
             self.footydist_cost += footydist
+            self.max_speed_cost += qvel[0]
+
+            # Mass costs
+            if self.train_mass:
+                box_targ_pos = np.array([qpos[0], qpos[1], 1.2])
+                self.tray_box_cost += 2*np.linalg.norm(box_targ_pos - qpos[35:38])
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -685,6 +702,8 @@ class CassieEnv_noaccel_footdist:
         self.com_height                 /= self.simrate
         self.motor_vel_cost             /= self.simrate
         self.footydist_cost             /= self.simrate
+        self.tray_box_cost              /= self.simrate
+        self.max_speed_cost             /= self.simrate
 
         # print("hipyaw cost: ", self.hipyaw_cost)
         # print("torquecost: ", self.torque_cost)
@@ -927,9 +946,9 @@ class CassieEnv_noaccel_footdist:
                     # else:
                     #     self.step_in_place = False
             else:
-                self.speed = (random.randint(0, 40)) / 10
-                if random.randint(0, 4) == 0:
-                    self.speed = 0
+                self.speed = (random.randint(-5, 10)) / 10
+                # if random.randint(0, 4) == 0:
+                    # self.speed = 0
             # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
             # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
             self.speed_schedule = self.speed*np.ones(3)
@@ -969,6 +988,28 @@ class CassieEnv_noaccel_footdist:
             self.push_size = 0
             self.push_time = np.inf
             self.push_dur = 0
+
+        if self.train_mass:
+            box_pos = qpos[0:2] + [random.uniform(-0.05, .15), random.uniform(-0.1, 0.1)]
+            box_quat = euler2quat(z=random.uniform(-np.pi/25, np.pi/25), y=random.uniform(-np.pi/25, np.pi/25), x=random.uniform(-np.pi/25, np.pi/25))
+            # box_quat = np.array([1, 0, 0, 0])
+            qpos = np.concatenate((qpos, box_pos, [random.uniform(1.25, 1.26)], box_quat))
+            # box_vel = np.random.uniform(-0.05, 0.05, size=6)
+            box_vel = np.zeros(6)
+            qvel = np.concatenate((qvel, box_vel))
+
+            self.sim.set_qpos_full(qpos)
+            self.sim.set_qvel_full(qvel)
+
+        if self.train_sprint:
+            self.sprint = 1#random.randint(0, 1)
+            self.sprint_switch = np.inf#random.randint(60, 125)
+            self.swing_ratio = 0.8
+            self.phase_add = 1.5
+            self.speed = 5
+        else:
+            self.sprint = None
+            self.sprint_switch = np.inf
 
         self.orient_add = 0#random.randint(-10, 10) * np.pi / 25
         # self.orient_command = 0#random.randint(-10, 10) * np.pi / 30
@@ -1051,6 +1092,8 @@ class CassieEnv_noaccel_footdist:
         self.com_height                 = 0
         self.motor_vel_cost             = 0
         self.footydist_cost             = 0
+        self.tray_box_cost              = 0
+        self.max_speed_cost             = 0
 
         return self.get_full_state()
 
@@ -1150,6 +1193,8 @@ class CassieEnv_noaccel_footdist:
         self.com_height                 = 0
         self.motor_vel_cost             = 0
         self.footydist_cost             = 0
+        self.tray_box_cost              = 0
+        self.max_speed_cost             = 0
 
         return self.get_full_state()
 
@@ -1286,6 +1331,12 @@ class CassieEnv_noaccel_footdist:
             if (self.train_stand and self.speed == 0 and not self.step_in_place):
                 clock = [0, 0]
             
+            if self.sprint is not None:
+                if self.sprint == 0:
+                    clock = [0, 0]
+                elif self.sprint == 1:
+                    self.speed = 5
+
             ext_state = np.concatenate((clock, [self.speed]))
 
         # ASLIP TRAJECTORY
