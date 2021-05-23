@@ -474,7 +474,7 @@ class EvalProcessClass():
             hfield_data = np.load(os.path.join("./cassie/cassiemujoco/terrains/", args.terrain))
             env.sim.set_hfield_data(hfield_data.flatten())
 
-        # env.reward_func = "speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward"
+        env.reward_func = "speedmatchavg_footvarclock_footorient_stablepel_hiprollyawvel_smoothact_torquecost_reward"
         # print()
 
         if hasattr(policy, 'init_hidden_state'):
@@ -502,6 +502,8 @@ class EvalProcessClass():
             curr_slow = 0
 
             env.update_speed(speed)
+            step_start = False
+            step_count = 0
 
             while render_state:
             
@@ -551,7 +553,13 @@ class EvalProcessClass():
                         env.stance_mode = "aerial"
                         
                     elif c == 'r':
-                        state = env.reset_for_test()
+                        state = env.reset()
+                        # extra_pos = np.zeros(131-35)
+                        # extra_pos[-7:-4] = np.array([-1.3, 0, .25])
+                        # extra_pos[-4:] = np.array([1, 0, 0, 0])
+                        # reg_pos = env.sim.qpos()
+                        # reset_pos = np.concatenate((reg_pos, extra_pos))
+                        # env.sim.set_qpos_full(reset_pos)
                         speed = env.speed
                         if hasattr(policy, 'init_hidden_state'):
                             policy.init_hidden_state()
@@ -565,6 +573,9 @@ class EvalProcessClass():
                     elif c == 't':
                         slowmo = not slowmo
                         print("Slowmo : \n", slowmo)
+                    elif c == 'g':
+                        env.sprint = 1 - env.sprint
+                        print("Sprint: \n", env.sprint)
 
                     env.update_speed(speed)
                     # print(speed)
@@ -573,7 +584,7 @@ class EvalProcessClass():
                         send((env.swing_duration, env.stance_duration, env.strict_relaxer, env.stance_mode, env.have_incentive))
                 
                 if args.stats:
-                    print(f"act spd: {env.sim.qvel()[0]:.2f}   cmd speed: {env.speed:.2f}   phase add: {env.phase_add:.2f}   orient add: {orient_add:.2f}", end="\r")
+                    print(f"act spd: {np.linalg.norm(env.sim.qvel()[0:2]):.2f}   cmd speed: {env.speed:.2f}   phase add: {env.phase_add:.2f}   orient add: {orient_add:.2f}", end="\r")
                     # print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}\t phase add: {env.phase_add:.2f}\t orient add: {orient_add}", end="\r")
 
                 if hasattr(env, 'simrate'):
@@ -609,11 +620,28 @@ class EvalProcessClass():
                     #     # state[0] = 1      # For use with StateEst. Replicate hack that height is always set to one on hardware.
                     # else:
                     #     state[2:6] = torch.FloatTensor(new_orient)
-                    #     state[20:23] = torch.FloatTensor(new_translationalVelocity)          
-                        
+                    #     state[20:23] = torch.FloatTensor(new_translationalVelocity) 
+
+                    # if step_start and step_count < 30:
+                    #     env.speed = 0.1
+                    #     step_count += 1
+                    # else:
+                    #     env.speed = 0
+                    # if np.linalg.norm(env.sim.qvel()[0:2]) > 0.2:
+                    #     print("switching to step: ", step_count)
+                    #     env.speed = 0.2
+                    # else:
+                    #     env.speed = 0.0
+                    state = env.get_full_state()
+                    # print("state:", state)
+                    # print("lfoot:", env.cassie_state.leftFoot.position[:])
                     action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
 
                     state, reward, done, _ = env.step(action)
+                    # print(env.phaselen)
+                    # print(env.tray_box_cost)
+                    # qpos = env.sim.qpos_full()
+                    # print("reward: ", reward)
 
                     # if env.lfoot_vel[2] < -0.6:
                     #     print("left foot z vel over 0.6: ", env.lfoot_vel[2])
@@ -621,6 +649,12 @@ class EvalProcessClass():
                     #     print("right foot z vel over 0.6: ", env.rfoot_vel[2])
                     foot_pos = np.zeros(6)
                     env.sim.foot_pos(foot_pos)
+                    qpos = env.sim.qpos()
+                    iquat = inverse_quaternion(qpos[3:7])
+                    rot_foot_pos = np.concatenate((rotate_by_quaternion(foot_pos[0:3], iquat), rotate_by_quaternion(foot_pos[3:6], iquat)))
+                    # print(rot_foot_pos)
+                    # rel_fpos = np.concatenate((qpos[0:3], qpos[0:3])) - foot_pos
+                    # print(np.abs(rot_foot_pos[1] - rot_foot_pos[4]))
                     # print(foot_pos[2], foot_pos[5])
 
                     eval_reward += reward
