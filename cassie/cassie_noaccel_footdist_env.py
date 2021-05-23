@@ -49,6 +49,10 @@ class CassieEnv_noaccel_footdist:
             self.trajectory = CassieTrajectory(traj_path)
             self.speed = 0
 
+        dirname = os.path.dirname(__file__)
+        self.reset_states = np.load(os.path.join(dirname, "trajectory", "total_reset_states.npz"))
+        self.reset_len = self.reset_states["qpos"].shape[0]
+
         self.observation_space, self.clock_inds, self.mirrored_obs = self.set_up_state_space()
 
         # Adds option for state history for FF nets
@@ -124,10 +128,10 @@ class CassieEnv_noaccel_footdist:
         self.slope_rand = False
         self.joint_rand = False
         self.train_turn = False
-        self.train_stand = False
+        self.train_stand = True
         self.train_push = False
         self.step_in_place = False
-        self.train_mass = True
+        self.train_mass = False
         self.train_sprint = False
         if self.train_mass and self.sim.nq != 42:
             print("Error: wrong model file")
@@ -598,7 +602,7 @@ class CassieEnv_noaccel_footdist:
                 self.smooth_cost += 0
             self.prev_torque = curr_torques
             self.torque_cost += 0.00006*np.linalg.norm(np.square(curr_torques))
-            self.torque_penalty = 0.05 * sum(np.abs(curr_torques)/len(curr_torques))
+            self.torque_penalty += 0.05 * sum(np.abs(curr_torques)/len(curr_torques))
             self.left_rollyaw_torque_cost += zero2zero_clock*0.006*np.linalg.norm(np.square(curr_torques[[0, 1]]))
             self.right_rollyaw_torque_cost += one2one_clock*0.006*np.linalg.norm(np.square(curr_torques[[5, 6]]))
             self.pel_transacc += np.linalg.norm(self.cassie_state.pelvis.translationalAcceleration[:])
@@ -903,9 +907,14 @@ class CassieEnv_noaccel_footdist:
         # rand_traj_phase = random.randint(0, floor(len(self.trajectory) / self.simrate) - 1)
         # qpos, qvel = self.get_ref_state(self.phase)
         # qpos, qvel = self.get_ref_state(rand_traj_phase)
-        rand_ind = random.randint(0, len(self.trajectory)-1)
-        qpos = np.copy(self.trajectory.qpos[rand_ind])
-        qvel = np.copy(self.trajectory.qvel[rand_ind])
+        # rand_ind = random.randint(0, len(self.trajectory)-1)
+        # qpos = np.copy(self.trajectory.qpos[rand_ind])
+        # qvel = np.copy(self.trajectory.qvel[rand_ind])
+
+        rand_ind = random.randint(0, self.reset_len-1)
+        qpos = np.copy(self.reset_states["qpos"][rand_ind, :])
+        qvel = np.copy(self.reset_states["qvel"][rand_ind, :])
+
         # qpos = np.array([0, 0, 1.01, 1, 0, 0, 0,
         # 0.0045, 0, 0.4973, 0.9785, -0.0164, 0.01787, -0.2049,
         # -1.1997, 0, 1.4267, 0, -1.5244, 1.5244, -1.5968,
