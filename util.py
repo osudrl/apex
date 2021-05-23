@@ -498,7 +498,6 @@ class EvalProcessClass():
             env.update_speed(speed)
             step_start = False
             step_count = 0
-
             while render_state:
             
                 if isData():
@@ -568,8 +567,12 @@ class EvalProcessClass():
                         slowmo = not slowmo
                         print("Slowmo : \n", slowmo)
                     elif c == 'g':
-                        env.sprint = 1 - env.sprint
-                        print("Sprint: \n", env.sprint)
+                        speed = 4.0
+                        # env.sprint = 1 - env.sprint
+                        # print("Sprint: \n", env.sprint)
+                    elif c == 'n':
+                        env.vis.init_recording("./testVideo")
+                        print("Starting recording\n")
 
                     env.update_speed(speed)
                     # print(speed)
@@ -623,15 +626,60 @@ class EvalProcessClass():
                     #     env.speed = 0
                     # if np.linalg.norm(env.sim.qvel()[0:2]) > 0.2:
                     #     print("switching to step: ", step_count)
-                    #     env.speed = 0.2
+                    #     env.speed = 0.1
                     # else:
                     #     env.speed = 0.0
                     state = env.get_full_state()
                     # print("state:", state)
-                    # print("lfoot:", env.cassie_state.leftFoot.position[:])
+                    foot_euler = quaternion2euler(env.sim.xquat("left-foot"))
+                    # print("lfoot:", foot_euler)
                     action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
 
                     state, reward, done, _ = env.step(action)
+
+                    quat = state[6:10]
+                    pel_euler = quaternion2euler(quat)
+
+                    # print(env.cassie_state.leftFoot.orientation[:])
+                    # print("euler: ", pel_euler)
+                    # max_step = 90
+                    # if step_start and step_count < max_step:
+                    #     print("step count:", step_count)
+                    #     env.speed = 0.1
+                    #     step_count += 1
+                    #     if step_count >= max_step:
+                    #         step_start = False
+                    # else:
+                    #     env.speed = 0
+                    # if abs(pel_euler[0]) > .07 or abs(pel_euler[1]) > .07:
+                    #     print("switching to step")
+                    #     env.speed = 0.1
+                    #     step_start = True
+                    #     step_count = 0
+
+                    
+                    # if critic is not None:
+                    #     step_state = np.copy(state)
+                    #     step_state[-3:] = [np.sin(2 * np.pi *  env.phase / (env.phaselen)), np.cos(2 * np.pi *  env.phase / (env.phaselen)), 0.1]
+                    #     orig_val = critic(torch.Tensor(state)).detach().numpy()
+                    #     step_val = critic(torch.Tensor(step_state)).detach().numpy()
+                    #     print("Curr value: {}\t Step value: {}\n".format(orig_val, step_val))
+                    #     max_step = 80
+                    #     if step_start and step_count < max_step:
+                    #         print("step count:", step_count)
+                    #         env.speed = 0.01
+                    #         step_count += 1
+                    #         if step_count >= max_step:
+                    #             step_start = False
+                    #     else:
+                    #         env.speed = 0
+                    #     if step_val - orig_val > 4:
+                    #         print("switching to step")
+                    #         env.speed = 0.01
+                    #         step_start = True
+                    #         step_count = 0
+
+
                     # print(env.phaselen)
                     # print(env.tray_box_cost)
                     # qpos = env.sim.qpos_full()
@@ -664,6 +712,8 @@ class EvalProcessClass():
                 curr_slow += 1
                 if visualize:
                     render_state = env.render()
+                    if env.vis.is_recording:
+                        env.vis.record_frame()
                 if hasattr(env, 'simrate'):
                     # assume 40hz
                     end = time.time()
@@ -673,9 +723,11 @@ class EvalProcessClass():
                     #         env.render()
                     #         time.sleep(delaytime)
                     # else:
-                    time.sleep(delaytime)
+                    time.sleep(delaytime/2)
 
             print("Eval reward: ", eval_reward)
+            if env.vis.is_recording:
+                env.vis.close_recording()
 
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
