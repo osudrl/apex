@@ -18,6 +18,9 @@ from .cassie_clean_pole import CassieEnv_clean_pole
 from .cassie_clean_tray import CassieEnv_clean_tray
 from .cassie_nomotorvel import CassieEnv_nomotorvel
 from .cassie_nomotorvel_nopelvel import CassieEnv_nomotorvel_nopelvel
+from .cassie_mjvel import CassieEnv_mjvel
+from .cassie_filtervel import CassieEnv_filtervel
+from .cassie_accel_nopelvel import CassieEnv_accel_nopelvel
 
 
 from .cassiemujoco import *
