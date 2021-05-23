@@ -845,8 +845,9 @@ class CassieEnv_clean:
 
         self.speed_schedule = self.speed * np.ones(3)
         self.orient_command = 0
-        self.orient_time = 1000 
+        self.orient_time = np.inf 
         self.turn_rate = 0
+        self.speed_time = np.inf
 
         if not full_reset:
             qpos = np.copy(self.reset_states.qpos[0])

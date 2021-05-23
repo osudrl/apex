@@ -403,7 +403,7 @@ class EvalProcessClass():
             self.plot_process.start()
 
     #TODO: Add pausing, and window quiting along with other render functionality
-    def eval_policy(self, policy, args, run_args):
+    def eval_policy(self, policy, args, run_args, critic=None):
         from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn, CassieEnv_turn_no_orientadd, CassieEnv_clean, CassieEnv_clean_pole, CassieEnv_clean_tray, CassieEnv_nomotorvel, CassieEnv_nomotorvel_nopelvel
 
 
@@ -425,47 +425,10 @@ class EvalProcessClass():
         max_traj_len = args.traj_len
         visualize = not args.no_viz
         print("env name: ", run_args.env_name)
-        if run_args.env_name is None:
-            env_name = args.env_name
-        else:
-            env_name = run_args.env_name
-        if env_name == "Cassie-v0":
-            env = CassieEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieMin-v0":
-            env = CassieMinEnv(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif env_name == "CassiePlayground-v0":
-            env = CassiePlayground(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history, mission=args.mission)
-        elif env_name == "CassieNoaccelFootDistOmniscient":
-            env = CassieEnv_noaccel_footdist_omniscient(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieFootDist":
-            env = CassieEnv_footdist(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieNoaccelFootDist":
-            env = CassieEnv_noaccel_footdist(traj=run_args.traj, simrate=run_args.simrate, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieNoaccelFootDistNojoint":
-            env = CassieEnv_noaccel_footdist_nojoint(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieNovelFootDist":
-            env = CassieEnv_novel_footdist(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieMinInput":
-            env = CassieEnv_mininput(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, learn_gains=run_args.learn_gains, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieMinInputVelSidestep":
-            env = CassieEnv_mininput_vel_sidestep(traj=run_args.traj, simrate=run_args.simrate, clock_based=run_args.clock_based, state_est=run_args.state_est, dynamics_randomization=run_args.dyn_random, no_delta=run_args.no_delta, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieTurn":
-            env = CassieEnv_turn(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieTurn_no_orientadd":
-            env = CassieEnv_turn_no_orientadd(traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieClean":
-            env = CassieEnv_clean(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieClean_pole":
-            env = CassieEnv_clean_pole(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieClean_tray":
-            env = CassieEnv_clean_tray(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieEnv_nomotorvel":
-            env = CassieEnv_nomotorvel(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
-        elif env_name == "CassieEnv_nomotorvel_nopelvel":
-            env = CassieEnv_nomotorvel_nopelvel(simrate=run_args.simrate, dynamics_randomization=run_args.dyn_random, reward=args.reward, history=run_args.history)
-        else:
-            env = CassieStandingEnv(state_est=run_args.state_est)
-        
+
+        env_fn = env_factory(run_args.env_name, traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
+        env = env_fn()
+       
         if args.debug:
             env.debug = True
 
