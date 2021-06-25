@@ -21,6 +21,7 @@ from .cassie_nomotorvel_nopelvel import CassieEnv_nomotorvel_nopelvel
 from .cassie_mjvel import CassieEnv_mjvel
 from .cassie_filtervel import CassieEnv_filtervel
 from .cassie_accel_nopelvel import CassieEnv_accel_nopelvel
+from .cassie_mj import CassieEnv_mj
 
 
 from .cassiemujoco import *
