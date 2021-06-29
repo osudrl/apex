@@ -577,8 +577,12 @@ def run_experiment(args):
                 policy = Gaussian_FF_Actor(obs_dim, action_dim, fixed_std=np.exp(args.std_dev), env_name=args.env_name, bounded=args.bounded)
             critic = FF_V(obs_dim)
 
-        with torch.no_grad():
-            policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn, procs=args.num_procs))
+        if args.do_prenorm:
+            with torch.no_grad():
+                policy.obs_mean, policy.obs_std = map(torch.Tensor, get_normalization_params(iter=args.input_norm_steps, noise_std=1, policy=policy, env_fn=env_fn, procs=args.num_procs))
+        else:
+            policy.obs_mean = torch.zeros(obs_dim)
+            policy.obs_std = torch.ones(obs_dim)
         critic.obs_mean = policy.obs_mean
         critic.obs_std = policy.obs_std
     
