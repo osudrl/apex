@@ -32,7 +32,8 @@ class CassieEnv_mj(CassieEnv_clean):
         self.train_sprint = False
         self.train_stand = False
         self.step_in_place = False
-        self.noisy_state = True
+        self.noisy_state = False
+        self.true_state = True
 
         self.state_noise = np.array([0.02, 0.02, 0.02, 0.02, 0.02, 0.02,      # Foot position
                             0, 0, 0, 0,         # Pel quat
@@ -265,11 +266,32 @@ class CassieEnv_mj(CassieEnv_clean):
         ext_state = np.concatenate((clock, [self.speed]))
 
         # Update orientation
-        new_orient = qpos[3:7]#self.cassie_state.pelvis.orientation[:]
+        if self.true_state:
+            foot_pos = np.zeros(6)
+            self.sim.foot_pos(foot_pos)
+            new_orient = qpos[3:7]
+            lfoot = foot_pos[0:3] - qpos[0:3]
+            rfoot = foot_pos[3:6] - qpos[0:3]
+            motor_pos = qpos[self.pos_idx]
+            new_translationalVelocity = qvel[0:3]
+            rot_vel = qvel[3:6]
+            motor_vel = qvel[self.vel_idx]
+            joint_pos = qpos[[15, 16, 29, 30]]
+            joint_vel = qvel[[13, 14, 26, 27]]
+        else:
+            new_orient = self.cassie_state.pelvis.orientation[:]
+            lfoot = self.cassie_state.leftFoot.position[:]
+            rfoot = self.cassie_state.rightFoot.position[:]
+            motor_pos = self.cassie_state.motor.position[:]
+            new_translationalVelocity = self.cassie_state.pelvis.translationalVelocity[:]
+            rot_vel = self.cassie_state.pelvis.rotationalVelocity[:]
+            motor_vel = self.cassie_state.motor.velocity[:]
+            joint_pos = np.concatenate([self.cassie_state.joint.position[0:2], self.cassie_state.joint.position[3:5]])
+            joint_vel = np.concatenate([self.cassie_state.joint.velocity[0:2], self.cassie_state.joint.velocity[3:5]])
         if self.noisy_state:
             noise_quat = euler2quat(z=np.random.uniform(-0.01, 0.01), y=np.random.uniform(-0.01, 0.01), x=np.random.uniform(-0.01, 0.01))
             new_orient = quaternion_product(noise_quat, new_orient)
-        new_translationalVelocity = qvel[0:3]
+        # new_translationalVelocity = qvel[0:3]
         quaternion = euler2quat(z=self.orient_add, y=0, x=0)
         iquaternion = inverse_quaternion(quaternion)
         # print("new orient:", new_orient)
@@ -277,33 +299,60 @@ class CassieEnv_mj(CassieEnv_clean):
         if new_orient[0] < 0:
             new_orient = -new_orient
         new_translationalVelocity = rotate_by_quaternion(new_translationalVelocity, iquaternion)
-        rot_vel = qvel[3:6]
-        motor_pos = qpos[self.pos_idx]
-        motor_vel = qvel[self.vel_idx]
-        joint_pos = qpos[[15, 16, 29, 30]]
-        joint_vel = qvel[[13, 14, 26, 27]]
+        # rot_vel = qvel[3:6]
+        # motor_pos = qpos[self.pos_idx]
+        # motor_vel = qvel[self.vel_idx]
+        # joint_pos = qpos[[15, 16, 29, 30]]
+        # joint_vel = qvel[[13, 14, 26, 27]]
         if self.joint_rand:
             motor_pos += self.joint_offsets[0:10]
             joint_pos += self.joint_offsets[10:14]
 
-        foot_pos = np.zeros(6)
-        self.sim.foot_pos(foot_pos)
+        # foot_pos = np.zeros(6)
+        # self.sim.foot_pos(foot_pos)
 
         # Use state estimator
         robot_state = np.concatenate([
-            np.zeros(3), np.zeros(3),
-            # foot_pos[0:3] - qpos[0:3],     # left foot position
-            # foot_pos[3:6] - qpos[0:3],     # right foot position
-            new_orient,                                 # pelvis orientation
-            motor_pos,                                     # actuated joint positions
-            new_translationalVelocity,                       # pelvis translational velocity
-            rot_vel,                          # pelvis rotational velocity 
-            motor_vel,                                     # actuated joint velocities
-            
-            joint_pos,                                     # unactuated joint positions
-            joint_vel                                      # unactuated joint velocities
-        ])
-        # print("robot state:", robot_state)
+                lfoot,     # left foot position
+                rfoot,     # right foot position
+                new_orient,                                 # pelvis orientation
+                motor_pos,                                     # actuated joint positions
+                new_translationalVelocity,                       # pelvis translational velocity
+                rot_vel,                          # pelvis rotational velocity 
+                motor_vel,                                     # actuated joint velocities
+                
+                joint_pos,                                     # unactuated joint positions
+                joint_vel                                      # unactuated joint velocities
+            ])
+        # if self.true_state:
+        #     robot_state = np.concatenate([
+        #         # np.zeros(3), np.zeros(3),
+        #         foot_pos[0:3] - qpos[0:3],     # left foot position
+        #         foot_pos[3:6] - qpos[0:3],     # right foot position
+        #         new_orient,                                 # pelvis orientation
+        #         motor_pos,                                     # actuated joint positions
+        #         new_translationalVelocity,                       # pelvis translational velocity
+        #         rot_vel,                          # pelvis rotational velocity 
+        #         motor_vel,                                     # actuated joint velocities
+                
+        #         joint_pos,                                     # unactuated joint positions
+        #         joint_vel                                      # unactuated joint velocities
+        #     ])
+        # else:
+        #     robot_state = np.concatenate([
+        #         # np.zeros(3), np.zeros(3),
+        #         self.cassie_state.leftFoot.position[:],     # left foot position
+        #         self.cassie_state.rightFoot.position[:],     # right foot position
+        #         new_orient,                                 # pelvis orientation
+        #         motor_pos,                                     # actuated joint positions
+
+        #         new_translationalVelocity,                       # pelvis translational velocity
+        #         self.cassie_state.pelvis.rotationalVelocity[:],                          # pelvis rotational velocity 
+        #         self.cassie_state.motor.velocity[:],                                     # actuated joint velocities
+                
+        #         joint_pos,                                     # unactuated joint positions
+        #         joint_vel                                      # unactuated joint velocities
+        #     ])
 
         if self.noisy_state:
             noise_add = np.random.uniform(-self.state_noise, self.state_noise)
