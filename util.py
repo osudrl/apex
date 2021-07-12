@@ -407,7 +407,7 @@ class EvalProcessClass():
             self.plot_process.start()
 
     #TODO: Add pausing, and window quiting along with other render functionality
-    def eval_policy(self, policy, args, run_args, critic=None):
+    def eval_policy(self, policy, args, run_args, critic=None, scaling=1, shift=0):
         from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn, CassieEnv_turn_no_orientadd, CassieEnv_clean, CassieEnv_clean_pole, CassieEnv_clean_tray, CassieEnv_nomotorvel, CassieEnv_nomotorvel_nopelvel
 
 
@@ -429,6 +429,7 @@ class EvalProcessClass():
         max_traj_len = args.traj_len
         visualize = not args.no_viz
         print("env name: ", run_args.env_name)
+        # run_args.env_name = "CassieClean"
 
         env_fn = env_factory(run_args.env_name, traj=run_args.traj, state_est=run_args.state_est, no_delta=run_args.no_delta, dynamics_randomization=run_args.dyn_random, phase_based=run_args.phase_based, clock_based=run_args.clock_based, reward=args.reward, history=run_args.history)
         env = env_fn()
@@ -452,6 +453,7 @@ class EvalProcessClass():
         orient_add = 0
 
         slowmo = False
+        do_norm = False
 
         if visualize:
             env.render()
@@ -546,6 +548,12 @@ class EvalProcessClass():
                     elif c == 'n':
                         env.vis.init_recording("./testVideo")
                         print("Starting recording\n")
+                    elif c == 'q':
+                        env.true_state = not env.true_state
+                        print("True state:", env.true_state)
+                    elif c == "e":
+                        do_norm = not do_norm
+                        print("Doing normalization: ", do_norm)
 
                     env.update_speed(speed)
                     # print(speed)
@@ -555,6 +563,7 @@ class EvalProcessClass():
                 
                 if args.stats:
                     print(f"act spd: {np.linalg.norm(env.sim.qvel()[0:2]):.2f}   cmd speed: {env.speed:.2f}   phase add: {env.phase_add:.2f}   orient add: {orient_add:.2f}", end="\r")
+                    # print(f"act spd: {np.linalg.norm(env.sim.qvel()[0:2]):.2f}   cmd speed: {env.speed:.2f}   True state: {env.true_state}   Norm: {do_norm}", end="\r")
                     # print(f"act spd: {env.sim.qvel()[0]:.2f}\t cmd speed: {env.speed:.2f}\t phase add: {env.phase_add:.2f}\t orient add: {orient_add}", end="\r")
 
                 if hasattr(env, 'simrate'):
@@ -603,6 +612,9 @@ class EvalProcessClass():
                     # else:
                     #     env.speed = 0.0
                     state = env.get_full_state()
+                    if do_norm:
+                        state *= scaling
+                        state += shift
                     # print("state:", state)
                     foot_euler = quaternion2euler(env.sim.xquat("left-foot"))
                     # print("lfoot:", foot_euler)
