@@ -23,6 +23,8 @@ from .cassie_filtervel import CassieEnv_filtervel
 from .cassie_accel_nopelvel import CassieEnv_accel_nopelvel
 from .cassie_mj import CassieEnv_mj
 from .cassie_accel_nofy_nojoint import CassieEnv_accel_nofy_nojoint
+from .cassie_accel_nofy import CassieEnv_accel_nofy
+from .cassie_mj_accel import CassieEnv_mj_accel
 
 
 from .cassiemujoco import *
