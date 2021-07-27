@@ -75,8 +75,8 @@ class CassieEnv_clean:
         self.pos_idx = [7, 8, 9, 14, 20, 21, 22, 23, 28, 34]
         self.vel_idx = [6, 7, 8, 12, 18, 19, 20, 21, 25, 31]
 
-        self.pos_index = np.array([1,2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34])
-        self.vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31])
+        self.pos_index = np.array([1,2,3,4,5,6,7,8,9,14,15,16,20,21,22,23,28,29,30,34]) # For ref traj matching
+        self.vel_index = np.array([0,1,2,3,4,5,6,7,8,12,13,14,18,19,20,21,25,26,27,31]) # For ref traj matching
 
         self.offset = np.array([0.0045, 0.0, 0.4973, -1.1997, -1.5968, 0.0045, 0.0, 0.4973, -1.1997, -1.5968])
         # global flat foot orientation, can be useful part of reward function:
@@ -92,10 +92,14 @@ class CassieEnv_clean:
         self.zero_clock = False
         self.sprint = None
         self.train_turn = False
-        self.train_push = True
+        self.train_push = False
         self.train_sprint = False
-        self.train_stand = True
+        self.train_stand = False
         self.step_in_place = False
+        self.train_mass = False
+        if self.train_mass and self.sim.nq != 42:
+            print("Error: wrong model file")
+            exit()
         # Record default dynamics parameters
         if self.dynamics_randomization:
             self.default_damping = self.sim.get_dof_damping()
@@ -225,7 +229,7 @@ class CassieEnv_clean:
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
-        self.orient_rollpitch_cost        = 0
+        self.orient_rollpitch_cost      = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
         self.com_height                 = 0
@@ -234,6 +238,10 @@ class CassieEnv_clean:
         self.motor_vel_cost             = 0
         self.motor_acc_cost             = 0
         self.foot_vel_cost              = 0
+        self.ZMP_cost                   = 0
+        self.tray_box_cost              = 0
+        self.pole_pos_cost              = 0
+        self.pole_vel_cost              = 0
 
         self.swing_ratio = 0.4
 
@@ -249,7 +257,7 @@ class CassieEnv_clean:
         clock_size    = 2
         
         
-        base_mir_obs = np.array([ 3, 4, 5, 0.1, 1, 2, 6, -7, 8, -9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, -21, 22,
+        base_mir_obs = np.array([ 3, -4, 5, 0.1, -1, 2, 6, -7, 8, -9, -15, -16, 17, 18, 19, -10, -11, 12, 13, 14, 20, -21, 22,
                                     -23, 24, -25, -31, -32, 33, 34, 35, -26, -27, 28, 29, 30, 
                                     38, 39, 36, 37, 42, 43, 40, 41])
         obs_size = state_est_size
@@ -376,6 +384,10 @@ class CassieEnv_clean:
         self.motor_vel_cost             = 0
         self.motor_acc_cost             = 0
         self.foot_vel_cost              = 0
+        self.ZMP_cost                   = 0
+        self.tray_bos_cost              = 0
+        self.pole_pos_cost              = 0
+        self.pole_vel_cost              = 0
 
         # Reward clocks
         # one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
@@ -396,7 +408,7 @@ class CassieEnv_clean:
                 force_y = self.push_size * np.sin(self.push_ang)
                 self.sim.apply_force([force_x, force_y, 0, 0, 0, 0], "cassie-pelvis")
             self.step_simulation(action)
-            qpos = np.copy(self.sim.qpos())
+            qpos = np.copy(self.sim.qpos_full())
             qvel = np.copy(self.sim.qvel())
             qacc = np.copy(self.sim.qacc())
             quaternion = euler2quat(z=self.orient_add, x=0, y=0)
@@ -432,6 +444,7 @@ class CassieEnv_clean:
             # Foot height cost
             des_height = self.des_foot_height
             self.sim.foot_pos(foot_pos)
+            ZMP_mid = (foot_pos[0:2] + foot_pos[3:5]) / 2
             foot_forces = self.sim.get_foot_forces()
             r_ground_cost = foot_pos[5]**2 +  np.linalg.norm(self.rfoot_vel)
             r_height_cost = 40*(des_height - foot_pos[5])**2
@@ -464,7 +477,8 @@ class CassieEnv_clean:
             curr_torques = np.array(self.cassie_state.motor.torque[:])
             # self.torque_cost += 0.00006*np.linalg.norm(np.square(curr_torques))
             self.torque_penalty += 0.05 * sum(np.abs(curr_torques)/len(curr_torques))
-            self.pel_transacc += np.linalg.norm(self.cassie_state.pelvis.translationalAcceleration[:])
+            
+            self.pel_transacc += np.linalg.norm(self.cassie_state.pelvis.translationalAcceleration[0:2])
             self.pel_rotacc += 2*np.linalg.norm(self.cassie_state.pelvis.rotationalVelocity[:])
 
             if self.prev_action is not None:
@@ -504,12 +518,23 @@ class CassieEnv_clean:
             self.orient_rollpitch_cost += orient_rollpitch
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
-            self.com_height += 4*(0.85 - qpos[2]) ** 2
+            self.com_height += 4*(0.95 - qpos[2]) ** 2
             self.face_up_cost += 1 - np.inner(self.face_up_orient, qpos[3:7]) ** 2
             self.max_speed_cost += qvel[0]
             self.motor_vel_cost += 0.5*(np.abs(qvel[self.vel_idx]).sum() / 10)
             self.motor_acc_cost += 4*np.linalg.norm(qvel[self.vel_idx])
             self.foot_vel_cost += self.max_foot_vel
+            self.ZMP_cost += 4*np.linalg.norm(qpos[0:2] - ZMP_mid)
+
+            # Mass costs
+            if self.train_mass:
+                shift = np.array([0.1, 0, 0.23])
+                shift = rotate_by_quaternion(shift, qpos[3:7])
+                box_targ_pos = qpos[0:2] + shift[0:2]
+                self.tray_box_cost += 2*np.linalg.norm(box_targ_pos - qpos[35:37])
+            if self.train_pole:
+                self.pole_pos_cost += np.abs(3*qpos[-1])
+                self.pole_vel_cost += np.abs(qvel[-1])
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -546,7 +571,10 @@ class CassieEnv_clean:
         self.motor_vel_cost             /= self.simrate
         self.motor_acc_cost             /= self.simrate
         self.foot_vel_cost              /= self.simrate
-        # print(self.motor_acc_cost)
+        self.ZMP_cost                   /= self.simrate
+        self.tray_box_cost              /= self.simrate
+        self.pole_pos_cost              /= self.simrate
+        self.pole_vel_cost              /= self.simrate
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -585,6 +613,9 @@ class CassieEnv_clean:
             done = True
         if self.getup:
             done = False
+        if self.train_mass:
+            if self.sim.qpos_full()[37] < 0.7:
+                done = True
 
         if return_omniscient_state:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
@@ -667,9 +698,11 @@ class CassieEnv_clean:
         self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
 
-        if False:
-            qpos = np.concatenate((qpos, [qpos[0], qpos[1], 1.25]))
-            qvel = np.concatenate((qvel, np.zeros(3)))            
+        if self.train_mass:
+            shift = np.array([0.1, 0, 0.23])
+            shift = rotate_by_quaternion(shift, qpos[3:7])
+            qpos = np.concatenate((qpos, [qpos[0]+shift[0], qpos[1]+shift[1], qpos[2]+shift[2]], qpos[3:7]))
+            qvel = np.concatenate((qvel, qvel[0:2], np.zeros(4)))            
 
         self.sim.set_qpos_full(qpos)
         self.sim.set_qvel_full(qvel)
@@ -700,7 +733,7 @@ class CassieEnv_clean:
             # if bool(random.getrandbits(1)):
                 # self.speed = 0
         else:
-            self.speed = (random.randint(0, 40)) / 10
+            self.speed = (random.randint(-5, 10)) / 10
             # if random.randint(0, 4) == 0:
             #     self.speed = 0
             #     self.speed_schedule = [0, 4]
@@ -827,6 +860,10 @@ class CassieEnv_clean:
         self.motor_vel_cost             = 0
         self.motor_acc_cost             = 0
         self.foot_vel_cost              = 0
+        self.ZMP_cost                   = 0
+        self.tray_box_cost              = 0
+        self.pole_pos_cost              = 0
+        self.pole_vel_cost              = 0
 
         return self.get_full_state()
 
@@ -911,6 +948,10 @@ class CassieEnv_clean:
         self.motor_vel_cost             = 0
         self.motor_acc_cost             = 0
         self.foot_vel_cost              = 0
+        self.ZMP_cost                   = 0
+        self.tray_box_cost              = 0
+        self.pole_pos_cost              = 0
+        self.pole_vel_cost              = 0
 
         return self.get_full_state()
 

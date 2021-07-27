@@ -41,6 +41,19 @@ def speedmatchavg_forcevel_footpos_footorient_stablepel_hiprollyawvel_smoothact_
 
     return reward
 
+def run_nopeltransacc_reward(self):
+
+    reward = .1*np.exp(-self.forward_cost) + .1*np.exp(-self.orient_cost) \
+                + .05*np.exp(-self.straight_cost) + .05*np.exp(-self.yvel_cost) \
+                + .10*np.exp(-self.l_foot_cost_forcevel) + .10*np.exp(-self.r_foot_cost_forcevel) \
+                + .1*np.exp(-self.l_foot_cost_pos) + .1*np.exp(-self.r_foot_cost_pos) \
+                + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
+                + .05*np.exp(-self.hiproll_cost) + .05*np.exp(-self.hipyaw_vel) \
+                + .025*np.exp(-self.pel_rotacc) \
+                + .025*np.exp(-self.act_cost) + 0.05*np.exp(-self.torque_penalty)
+
+    return reward
+
 def speedmatch_foothop_reward(self):
 
     reward = .2*np.exp(-self.forward_cost) + .1*np.exp(-self.orient_cost) \

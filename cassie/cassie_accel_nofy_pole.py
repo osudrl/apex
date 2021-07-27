@@ -17,7 +17,7 @@ import copy
 
 import pickle
 
-class CassieEnv_accel_nofy(CassieEnv_clean):
+class CassieEnv_accel_nofy_pole(CassieEnv_clean):
     def __init__(self, simrate=60, dynamics_randomization=False, reward="empty_reward", history=0):
         CassieEnv_clean.__init__(self, simrate, dynamics_randomization, reward, history)
         
@@ -31,16 +31,17 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
         self.train_push = False
         self.train_sprint = False
         self.train_stand = False
-        self.train_mass = True
+        self.train_mass = False
+        self.train_pole = True
         self.step_in_place = False
 
-        if self.train_mass and self.sim.nq != 42:
+        if self.sim.nq != 36:
             print("Error: wrong model file")
             exit()
 
     def set_up_state_space(self):
         state_est_size = 42
-        speed_size     = 1
+        ext_size     = 3
         clock_size    = 2
 
         base_mir_obs = np.array([ 2, 3, 0.1, 1, # Foot xz pos
@@ -53,10 +54,10 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
 
         obs_size = state_est_size
         
-        append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+speed_size)])
+        append_obs = np.array([len(base_mir_obs) + i for i in range(clock_size+ext_size)])
         mirrored_obs = np.concatenate([base_mir_obs, append_obs])
         clock_inds = append_obs[0:clock_size].tolist()
-        obs_size += clock_size + speed_size
+        obs_size += clock_size + ext_size
        
         # NOTE: mirror loss only set up for clock based with state estimation so far. 
         observation_space = np.zeros(obs_size)
@@ -99,13 +100,9 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
         quaternion = euler2quat(z=orientation, y=0, x=0)
         qpos[3:7] = quaternion
         self.y_offset = 0#random.uniform(-3.5, 3.5)
-        # qpos[1] = self.y_offset
 
-        if self.train_mass:
-            shift = np.array([0.1, 0, 0.23])
-            shift = rotate_by_quaternion(shift, qpos[3:7])
-            qpos = np.concatenate((qpos, [qpos[0]+shift[0], qpos[1]+shift[1], qpos[2]+shift[2]], qpos[3:7]))
-            qvel = np.concatenate((qvel, qvel[0:2], np.zeros(4))) 
+        qpos = np.concatenate((qpos, [0]))
+        qvel = np.concatenate((qvel, [0]))
 
         self.sim.set_qpos_full(qpos)
         self.sim.set_qvel_full(qvel)
@@ -142,15 +139,9 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
                 self.speed = 0
             #     self.speed_schedule = [0, 4]
             else:
-                self.speed = (random.randint(0, 40)) / 10
+                self.speed = (random.randint(-5, 10)) / 10
             #     self.speed_schedule = [self.speed, np.clip(self.speed + (random.randint(5, 10)) / 10, 0, 4)]
             # self.speed_time = 150 + np.random.randint(-20, 20)
-        if self.train_mass:
-            self.speed_time = np.inf
-            if random.randint(0, 4) == 0:
-                self.speed = 0
-            else:
-                self.speed = (random.randint(-5, 1)) / 10
 
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10
@@ -231,8 +222,6 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
             self.sim.set_geom_quat(floor_quat, "floor")
         if self.joint_rand:
             self.joint_offsets = np.random.uniform(-0.03, 0.03, 14)
-        if self.load_mass_rand:
-            self.sim.set_body_mass(np.random.uniform(1, 10), name="load_mass")
 
         # Reward terms
         self.l_foot_orient = 0
@@ -300,7 +289,7 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
                 clock = [0, 0]
             elif self.sprint == 1:
                 self.speed = 4
-        ext_state = np.concatenate((clock, [self.speed]))
+        ext_state = np.concatenate((clock, [self.speed, qpos[-1], qvel[-1]]))
 
         # Update orientation
         new_orient = self.cassie_state.pelvis.orientation[:]

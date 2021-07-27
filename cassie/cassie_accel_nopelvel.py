@@ -28,10 +28,15 @@ class CassieEnv_accel_nopelvel(CassieEnv_clean):
         self.zero_clock = False
         self.sprint = None
         self.train_turn = False
-        self.train_push = False
+        self.train_push = True
         self.train_sprint = False
-        self.train_stand = False
+        self.train_stand = True
+        self.train_mass = False
         self.step_in_place = False
+
+        if self.train_mass and self.sim.nq != 42:
+            print("Error: wrong model file")
+            exit()
 
     def reset(self):
 
@@ -60,9 +65,11 @@ class CassieEnv_accel_nopelvel(CassieEnv_clean):
         self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
 
-        if False:
-            qpos = np.concatenate((qpos, [qpos[0], qpos[1], 1.25]))
-            qvel = np.concatenate((qvel, np.zeros(3)))            
+        if self.train_mass:
+            shift = np.array([0.1, 0, 0.23])
+            shift = rotate_by_quaternion(shift, qpos[3:7])
+            qpos = np.concatenate((qpos, [qpos[0]+shift[0], qpos[1]+shift[1], qpos[2]+shift[2]], qpos[3:7]))
+            qvel = np.concatenate((qvel, qvel[0:2], np.zeros(4)))             
 
         self.sim.set_qpos_full(qpos)
         self.sim.set_qvel_full(qvel)
@@ -94,13 +101,14 @@ class CassieEnv_accel_nopelvel(CassieEnv_clean):
                 # self.speed = 0
         else:
             self.speed = (random.randint(0, 40)) / 10
+            self.speed_time = np.inf
             # if random.randint(0, 4) == 0:
             #     self.speed = 0
             #     self.speed_schedule = [0, 4]
             # else:
             #     self.speed = (random.randint(0, 40)) / 10
-            #     self.speed_schedule = [self.speed, np.clip(self.speed + (random.randint(10, 20)) / 10, 0, 4)]
-            self.speed_time = np.inf#100 + np.random.randint(-20, 20)
+            #     self.speed_schedule = [self.speed, np.clip(self.speed + (random.randint(5, 10)) / 10, 0, 4)]
+            # self.speed_time = 150 + np.random.randint(-20, 20)
 
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10

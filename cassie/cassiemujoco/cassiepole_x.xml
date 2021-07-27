@@ -83,7 +83,7 @@
       <!-- <joint type='slide' axis='1 0 0' limited='true' range='0 0.00001'/>
       <joint type='slide' axis='0 1 0' limited='true' range='0 0.00001'/>
       <joint type='slide' axis='0 0 1' limited='true' range='1.01 1.010001' ref='1.01'/> -->
-      <joint type='ball' limited='true'/>
+      <joint type='ball' limited='false'/>
       <geom type='mesh' mesh='cassie-pelvis'/>
       <geom type='sphere' size='0.15' pos='0.02 0 0.02' class='collision'/>
       <site name='imu' size='0.01' pos='0.03155 0 -0.07996'/>
