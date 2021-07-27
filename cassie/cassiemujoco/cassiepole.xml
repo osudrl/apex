@@ -216,9 +216,9 @@
       <body name='yoke' pos='0.1545 0 0.275' euler='0 90 0'> 
         <inertial pos='0.0277 0 -.0524' mass='1.15' fullinertia='0.015 0.0201 0.0171 -1.663e-08 -6.0056e-06 -0.003953'/>
         <geom type='capsule' size='0.03 .1545' />
-        <body name='slosh_string' pos='-0.275 0 0.1545' euler='0 90 0'> 
-          <joint type='hinge' axis='1 0 0' limited='false' pos='0.0 0.0 0.275' damping='.1'/>
-          <geom type='capsule' size='0.025 .25' mass='.4'/>
+        <body name='slosh_string' pos='-0.375 0 0.1545' euler='0 90 0'> 
+          <joint type='hinge' axis='1 0 0' limited='false' pos='0.0 0.0 0.375' damping='.1'/>
+          <geom type='capsule' size='0.025 .375' mass='.5'/>
           <!-- <body name='slosh_mass' pos='0 0 -0.28'> 
             <geom type='sphere' mass='5' size='.08'/>
           </body> -->
