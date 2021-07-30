@@ -41,7 +41,7 @@ class CassieEnv_accel_nofy_pole(CassieEnv_clean):
 
     def set_up_state_space(self):
         state_est_size = 42
-        ext_size     = 3
+        ext_size     = 4
         clock_size    = 2
 
         base_mir_obs = np.array([ 2, 3, 0.1, 1, # Foot xz pos
@@ -289,7 +289,8 @@ class CassieEnv_accel_nofy_pole(CassieEnv_clean):
                 clock = [0, 0]
             elif self.sprint == 1:
                 self.speed = 4
-        ext_state = np.concatenate((clock, [self.speed, qpos[-1], qvel[-1]]))
+        
+        ext_state = np.concatenate((clock, [self.speed, np.sin(qpos[-1]), np.cos(qpos[-1]), qvel[-1]]))
 
         # Update orientation
         new_orient = self.cassie_state.pelvis.orientation[:]

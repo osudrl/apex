@@ -31,8 +31,9 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
         self.train_push = False
         self.train_sprint = False
         self.train_stand = False
-        self.train_mass = True
+        self.train_mass = False
         self.step_in_place = False
+        self.train_pole = False
 
         if self.train_mass and self.sim.nq != 42:
             print("Error: wrong model file")

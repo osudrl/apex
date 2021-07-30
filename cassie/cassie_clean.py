@@ -616,6 +616,8 @@ class CassieEnv_clean:
         if self.train_mass:
             if self.sim.qpos_full()[37] < 0.7:
                 done = True
+        if self.train_pole and np.abs(qpos[-1]) > np.pi/2:
+            done = True
 
         if return_omniscient_state:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
