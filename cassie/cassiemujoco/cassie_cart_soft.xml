@@ -244,10 +244,10 @@
         <joint name='cart-right-bar' type='ball' limited='false'/>
       </body>
     </body>
-    <body name="ball_mass" pos='-1.3 0 .2'>
+    <!-- <body name="ball_mass" pos='-1.3 0 .2'>
        <geom type="sphere" size="0.1" mass='1' class='obstacle'/>
        <joint name='ball_mass' type='free' limited='false'/>
-    </body>
+    </body> -->
     
 
     <!-- Add any other moving bodies after the Cassie definition -->
