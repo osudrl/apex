@@ -17,8 +17,9 @@ import copy
 import pickle
 
 class CassieEnv_clean:
-    def __init__(self, simrate=60, dynamics_randomization=False, reward="empty_reward", history=0):
-        self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+    def __init__(self, simrate=60, dynamics_randomization=False, reward="empty_reward", history=0, model="cassie.xml", reinit=False):
+        # self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
+        self.sim = CassieSim(os.path.join("./cassie/cassiemujoco/", model), reinit)
         self.vis = None
         self.clock_based = True
         self.phase_based = False
@@ -242,6 +243,7 @@ class CassieEnv_clean:
         self.tray_box_cost              = 0
         self.pole_pos_cost              = 0
         self.pole_vel_cost              = 0
+        self.orient_pitch               = 0
 
         self.swing_ratio = 0.4
 
@@ -375,7 +377,7 @@ class CassieEnv_clean:
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
-        self.orient_rollpitch_cost        = 0
+        self.orient_rollpitch_cost      = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
         self.com_height                 = 0
@@ -388,6 +390,7 @@ class CassieEnv_clean:
         self.tray_bos_cost              = 0
         self.pole_pos_cost              = 0
         self.pole_vel_cost              = 0
+        self.orient_pitch               = 0
 
         # Reward clocks
         # one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
@@ -535,6 +538,8 @@ class CassieEnv_clean:
             if self.train_pole:
                 self.pole_pos_cost += np.abs(3*qpos[-1])
                 self.pole_vel_cost += np.abs(qvel[-1])
+                if np.abs(euler[1]) > 0.06:
+                    self.orient_pitch += 2*np.abs(euler[1])
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
@@ -575,6 +580,7 @@ class CassieEnv_clean:
         self.tray_box_cost              /= self.simrate
         self.pole_pos_cost              /= self.simrate
         self.pole_vel_cost              /= self.simrate
+        self.orient_pitch               /= self.simrate
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -616,8 +622,8 @@ class CassieEnv_clean:
         if self.train_mass:
             if self.sim.qpos_full()[37] < 0.7:
                 done = True
-        if self.train_pole and np.abs(qpos[-1]) > np.pi/2:
-            done = True
+        # if self.train_pole and (np.abs(qpos[-1]) > np.pi/4 or np.abs(qvel[4]) > 1.5):
+        #     done = True
 
         if return_omniscient_state:
             return self.get_full_state(), self.get_omniscient_state(), reward, done, {}
@@ -866,6 +872,7 @@ class CassieEnv_clean:
         self.tray_box_cost              = 0
         self.pole_pos_cost              = 0
         self.pole_vel_cost              = 0
+        self.orient_pitch               = 0
 
         return self.get_full_state()
 
@@ -954,6 +961,7 @@ class CassieEnv_clean:
         self.tray_box_cost              = 0
         self.pole_pos_cost              = 0
         self.pole_vel_cost              = 0
+        self.orient_pitch               = 0
 
         return self.get_full_state()
 

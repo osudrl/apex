@@ -18,8 +18,8 @@ import copy
 import pickle
 
 class CassieEnv_accel_nofy(CassieEnv_clean):
-    def __init__(self, simrate=60, dynamics_randomization=False, reward="empty_reward", history=0):
-        CassieEnv_clean.__init__(self, simrate, dynamics_randomization, reward, history)
+    def __init__(self, simrate=60, dynamics_randomization=False, reward="empty_reward", history=0, model="cassie.xml", reinit=False):
+        CassieEnv_clean.__init__(self, simrate, dynamics_randomization, reward, history, model=model, reinit=reinit)
         
         self.slope_rand = False
         self.joint_rand = False
