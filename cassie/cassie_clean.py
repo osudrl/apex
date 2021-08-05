@@ -98,6 +98,10 @@ class CassieEnv_clean:
         self.train_stand = False
         self.step_in_place = False
         self.train_mass = False
+        self.train_cart = False
+        self.train_carrypole = False
+        self.train_loadmass = False
+        self.load_list = ["cassie.xml", "cassie_tray_box.xml", "cassiepole_light.xml", "cassie_cart_soft.xml", "cassie_carry_pole.xml"]
         if self.train_mass and self.sim.nq != 42:
             print("Error: wrong model file")
             exit()
@@ -706,11 +710,21 @@ class CassieEnv_clean:
         self.y_offset = 0#random.uniform(-3.5, 3.5)
         # qpos[1] = self.y_offset
 
-        if self.train_mass:
+        if self.train_loadmass:
+            rand_mass = random.randint(0, len(self.load_list))
+            self.sim = CassieSim("./cassie/cassiemujoco/" + self.load_list[rand_mass], reinit=True)
+            if self.vis is not None:
+                self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/" + self.load_list[rand_mass])
+
+        if self.train_mass or (self.train_loadmass and rand_mass == 1):
             shift = np.array([0.1, 0, 0.23])
             shift = rotate_by_quaternion(shift, qpos[3:7])
             qpos = np.concatenate((qpos, [qpos[0]+shift[0], qpos[1]+shift[1], qpos[2]+shift[2]], qpos[3:7]))
-            qvel = np.concatenate((qvel, qvel[0:2], np.zeros(4)))            
+            qvel = np.concatenate((qvel, qvel[0:2], np.zeros(4)))    
+
+        if self.train_loadmass and rand_mass > 1:
+            qpos = np.concatenate((qpos, np.zeros(self.sim.nq - len(qpos))))
+            qvel = np.concatenate((qvel, np.zeros(self.sim.nv - len(qvel))))        
 
         self.sim.set_qpos_full(qpos)
         self.sim.set_qvel_full(qvel)
@@ -901,6 +915,14 @@ class CassieEnv_clean:
 
             # Need to reset u? Or better way to reset cassie_state than taking step
             self.cassie_state = self.sim.step_pd(self.u)
+            if self.train_cart:
+                qpos = np.concatenate((qpos, np.zeros(self.sim.nq - len(qpos))))
+                qvel = np.concatenate((qvel, np.zeros(self.sim.nv - len(qvel))))
+            if self.train_carrypole:
+                qpos = np.concatenate((qpos, np.zeros(self.sim.nq - len(qpos))))
+                qvel = np.concatenate((qvel, np.zeros(self.sim.nv - len(qvel))))
+            self.sim.set_qpos_full(qpos)
+            self.sim.set_qvel_full(qvel)
         else:
             self.sim.full_reset()
             self.reset_cassie_state()
