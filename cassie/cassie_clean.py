@@ -101,7 +101,11 @@ class CassieEnv_clean:
         self.train_cart = False
         self.train_carrypole = False
         self.train_loadmass = False
+        self.train_pole = False
         self.load_list = ["cassie.xml", "cassie_tray_box.xml", "cassiepole_light.xml", "cassie_cart_soft.xml", "cassie_carry_pole.xml"]
+        self.legacy_reward = False
+        self.mass_reward = self.train_mass or self.train_pole
+        self.stand_reward = self.train_stand
         if self.train_mass and self.sim.nq != 42:
             print("Error: wrong model file")
             exit()
@@ -354,60 +358,67 @@ class CassieEnv_clean:
 
     def step(self, action, return_omniscient_state=False, f_term=0):
 
+        foot_pos = np.zeros(6)
         self.l_foot_orient = 0
         self.r_foot_orient = 0
-        self.l_foot_cost_var = 0
-        self.r_foot_cost_var = 0
-        self.l_foot_cost_speedpos = 0
-        self.r_foot_cost_speedpos = 0
         self.l_foot_cost_pos = 0
         self.r_foot_cost_pos = 0
         self.l_foot_cost_forcevel = 0
         self.r_foot_cost_forcevel = 0
-        self.l_foot_cost_hop = 0
-        self.r_foot_cost_hop = 0
         self.torque_cost = 0
         self.hiproll_cost = 0
-        self.hiproll_act = 0
         self.hipyaw_vel = 0
-        self.hipyaw_act = 0
-        foot_pos = np.zeros(6)
-        self.pel_stable = 0
         self.act_cost                   = 0
         self.torque_penalty             = 0
-        self.l_foot_cost_smooth_force   = 0
-        self.r_foot_cost_smooth_force   = 0
         self.pel_transacc               = 0
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
-        self.orient_rollpitch_cost      = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
-        self.com_height                 = 0
-        self.face_up_cost               = 0
-        self.max_speed_cost             = 0
-        self.motor_vel_cost             = 0
-        self.motor_acc_cost             = 0
-        self.foot_vel_cost              = 0
-        self.ZMP_cost                   = 0
-        self.tray_bos_cost              = 0
-        self.pole_pos_cost              = 0
-        self.pole_vel_cost              = 0
-        self.orient_pitch               = 0
+        if self.legacy_reward: 
+            self.l_foot_cost_var = 0
+            self.r_foot_cost_var = 0
+            self.l_foot_cost_speedpos = 0
+            self.r_foot_cost_speedpos = 0
+            self.l_foot_cost_hop = 0
+            self.r_foot_cost_hop = 0
+            self.hiproll_act = 0
+            self.hipyaw_act = 0
+            self.l_foot_cost_smooth_force   = 0
+            self.r_foot_cost_smooth_force   = 0
+            self.orient_rollpitch_cost      = 0
+            self.max_speed_cost             = 0
+            self.motor_vel_cost             = 0
+            self.motor_acc_cost             = 0
+        if self.mass_reward:
+            self.com_height                 = 0
+            self.tray_bos_cost              = 0
+            self.pole_pos_cost              = 0
+            self.pole_vel_cost              = 0
+            self.orient_pitch               = 0
+        if self.stand_reward:
+            self.com_height                 = 0
+            self.foot_vel_cost              = 0
+            self.ZMP_cost                   = 0
 
         # Reward clocks
-        # one2one_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*self.phase) + 1)
-        # zero2zero_clock = 0.5*(np.cos(2*np.pi/(self.phaselen)*(self.phase-(self.phaselen)/2)) + 1)
-        # l_swing, r_swing = self.lin_clock_fn(self.swing_ratio, self.phase)
         l_swing, r_swing = self.lin_clock5(self.swing_ratio, self.phase, percent_trans=.7)
-        # l_stance = -l_swing + 1
-        # r_stance = -r_swing + 1
         l_force, r_force = self.lin_clock5(self.swing_ratio, self.phase, percent_trans=.2)
         l_stance = -l_force + 1
         r_stance = -r_force + 1
-        # l_force = ceil(l_swing)
-        # r_force = ceil(r_swing)
+
+        orient_target = np.array([1, 0, 0, 0])
+        speed_target = np.array([self.speed, 0, 0])
+        foot_orient_target = self.neutral_foot_orient
+        
+        des_height = self.des_foot_height
+        if self.orient_add != 0:
+            quaternion = euler2quat(z=self.orient_add, x=0, y=0)
+            iquaternion = inverse_quaternion(quaternion)
+
+            foot_orient_target = quaternion_product(iquaternion, foot_orient_target)
+            speed_target = rotate_by_quaternion(speed_target, quaternion)
 
         for _ in range(self.simrate):
             if self.push_time <= self.time <= self.push_time + self.push_dur:
@@ -417,12 +428,8 @@ class CassieEnv_clean:
             self.step_simulation(action)
             qpos = np.copy(self.sim.qpos_full())
             qvel = np.copy(self.sim.qvel())
-            qacc = np.copy(self.sim.qacc())
-            quaternion = euler2quat(z=self.orient_add, x=0, y=0)
-            iquaternion = inverse_quaternion(quaternion)
 
             # Foot Orientation Cost
-            foot_orient_target = quaternion_product(iquaternion, self.neutral_foot_orient)
             # lquat = self.cassie_state.leftFoot.orientation[:]
             # rquat = self.cassie_state.rightFoot.orientation[:]
             # ref = qpos[3:7]
@@ -437,48 +444,27 @@ class CassieEnv_clean:
 
             # Hip Yaw velocity cost
             self.hiproll_cost += (np.abs(qvel[6]) + np.abs(qvel[19])) / 3
-            self.hipyaw_vel += (np.abs(qvel[7]) + np.abs(qvel[20]))
-            if self.prev_action is not None:
-                self.hiproll_act += 2*np.linalg.norm(self.prev_action[[0, 5]] - action[[0, 5]])
-                self.hipyaw_act += 2*np.linalg.norm(self.prev_action[[1, 6]] - action[[1, 6]])
-            else:
-                self.hiproll_act += 0
-                self.hipyaw_act += 0
-
-            # Stable Pelvis cost
-            # self.pel_stable += 0.05*(np.abs(self.cassie_state.pelvis.rotationalVelocity[:]).sum() + np.abs(self.cassie_state.pelvis.translationalAcceleration[:]).sum())
+            self.hipyaw_vel += (np.abs(qvel[7]) + np.abs(qvel[20]))                
 
             # Foot height cost
-            des_height = self.des_foot_height
             self.sim.foot_pos(foot_pos)
-            ZMP_mid = (foot_pos[0:2] + foot_pos[3:5]) / 2
             foot_forces = self.sim.get_foot_forces()
-            r_ground_cost = foot_pos[5]**2 +  np.linalg.norm(self.rfoot_vel)
+            # foot_forces = np.zeros(6)
+            
             r_height_cost = 40*(des_height - foot_pos[5])**2
             r_vel_cost = np.sqrt(np.power(self.rfoot_vel[:], 2).sum())
             r_force_cost = np.abs(foot_forces[1]) / 75
-            l_ground_cost = foot_pos[2]**2 +  np.linalg.norm(self.lfoot_vel)
             l_height_cost = 40*(des_height - foot_pos[2])**2
             l_vel_cost = np.sqrt(np.power(self.lfoot_vel[:], 2).sum())
             l_force_cost = np.abs(foot_forces[0]) / 75
-            self.max_foot_vel = max(self.max_foot_vel, l_vel_cost, r_vel_cost)
-
+            
             # Foot height cost smooth 
             # Left foot starts on ground and then lift up and then back on ground.
             # Right foot starts in air and then put on ground and then lift back up.
-            # self.l_foot_cost_smooth_force += zero2zero_clock*(l_height_cost+l_force_cost) + one2one_clock*l_ground_cost
-            # self.r_foot_cost_smooth_force += one2one_clock*(r_height_cost+r_force_cost) + zero2zero_clock*r_ground_cost
-
-            self.l_foot_cost_var += l_swing*(l_height_cost+l_force_cost) + l_stance*l_vel_cost
-            self.r_foot_cost_var += r_swing*(r_height_cost+r_force_cost) + r_stance*r_vel_cost
-            self.l_foot_cost_speedpos += l_swing*(l_height_cost) + l_stance*l_vel_cost
-            self.r_foot_cost_speedpos += r_swing*(r_height_cost) + r_stance*r_vel_cost
             self.l_foot_cost_pos += l_swing*(l_height_cost)
             self.r_foot_cost_pos += r_swing*(r_height_cost)
             self.l_foot_cost_forcevel += l_force*(l_force_cost) + l_stance*l_vel_cost
-            self.r_foot_cost_forcevel += r_force*(r_force_cost) + r_stance*r_vel_cost
-            self.l_foot_cost_hop += l_force*(l_force_cost) + l_stance*l_vel_cost
-            self.r_foot_cost_hop += l_force*(r_force_cost) + l_stance*r_vel_cost
+            self.r_foot_cost_forcevel += r_force*(r_force_cost) + r_stance*r_vel_cost                
 
             # Torque costs
             curr_torques = np.array(self.cassie_state.motor.torque[:])
@@ -488,27 +474,16 @@ class CassieEnv_clean:
             self.pel_transacc += np.linalg.norm(self.cassie_state.pelvis.translationalAcceleration[0:2])
             self.pel_rotacc += 2*np.linalg.norm(self.cassie_state.pelvis.rotationalVelocity[:])
 
-            if self.prev_action is not None:
-                self.act_cost += 5 * sum(np.abs(self.prev_action - action)) / len(action)
-            else:
-                self.act_cost += 0
-
             # Speedmatching costs
-            orient_target = np.array([1, 0, 0, 0])
-            actual_orient = quaternion_product(quaternion, qpos[3:7])
-            if actual_orient[0] < 0:
-                actual_orient = -actual_orient
-            actual_euler = quaternion2euler(actual_orient)
-            speed_target = np.array([self.speed, 0, 0])
-            speed_target = rotate_by_quaternion(speed_target, quaternion)
-
             forward_diff = np.abs(qvel[0] - speed_target[0])
             y_vel = np.abs(qvel[1] - speed_target[1])
+            actual_orient = qpos[3:7]
+            if self.orient_add != 0:
+                actual_orient = quaternion_product(quaternion, actual_orient)
+                if actual_orient[0] < 0:
+                    actual_orient = -actual_orient
             orient_diff = 1 - np.inner(orient_target, actual_orient) ** 2
-            # orient_diff = np.abs(actual_euler[2])
 
-            euler = quaternion2euler(qpos[3:7])
-            orient_rollpitch = 2 * np.linalg.norm(euler[[0,1]])
             straight_diff = 8*np.abs(qpos[1])
             # if forward_diff < 0.05:
             #     forward_diff = 0
@@ -522,16 +497,8 @@ class CassieEnv_clean:
                 orient_diff *= 30
             self.forward_cost += forward_diff
             self.orient_cost += orient_diff
-            self.orient_rollpitch_cost += orient_rollpitch
             self.straight_cost += straight_diff
             self.yvel_cost += y_vel
-            self.com_height += 4*(0.95 - qpos[2]) ** 2
-            self.face_up_cost += 1 - np.inner(self.face_up_orient, qpos[3:7]) ** 2
-            self.max_speed_cost += qvel[0]
-            self.motor_vel_cost += 0.5*(np.abs(qvel[self.vel_idx]).sum() / 10)
-            self.motor_acc_cost += 4*np.linalg.norm(qvel[self.vel_idx])
-            self.foot_vel_cost += self.max_foot_vel
-            self.ZMP_cost += 4*np.linalg.norm(qpos[0:2] - ZMP_mid)
 
             # Mass costs
             if self.train_mass:
@@ -539,52 +506,83 @@ class CassieEnv_clean:
                 shift = rotate_by_quaternion(shift, qpos[3:7])
                 box_targ_pos = qpos[0:2] + shift[0:2]
                 self.tray_box_cost += 2*np.linalg.norm(box_targ_pos - qpos[35:37])
+                self.com_height += 4*(0.95 - qpos[2]) ** 2
             if self.train_pole:
                 self.pole_pos_cost += np.abs(3*qpos[-1])
                 self.pole_vel_cost += np.abs(qvel[-1])
                 if np.abs(euler[1]) > 0.06:
                     self.orient_pitch += 2*np.abs(euler[1])
+            if self.stand_reward:
+                ZMP_mid = (foot_pos[0:2] + foot_pos[3:5]) / 2
+                self.com_height += 4*(0.95 - qpos[2]) ** 2
+                self.foot_vel_cost += self.max_foot_vel
+                self.ZMP_cost += 4*np.linalg.norm(qpos[0:2] - ZMP_mid)
+            if self.legacy_reward:
+                if self.prev_action is not None:
+                    self.hiproll_act += 2*np.linalg.norm(self.prev_action[[0, 5]] - action[[0, 5]])
+                    self.hipyaw_act += 2*np.linalg.norm(self.prev_action[[1, 6]] - action[[1, 6]])
+                else:
+                    self.hiproll_act += 0
+                    self.hipyaw_act += 0
+                self.max_foot_vel = max(self.max_foot_vel, l_vel_cost, r_vel_cost)
+                euler = quaternion2euler(qpos[3:7])
+                orient_rollpitch = 2 * np.linalg.norm(euler[[0,1]])
+                self.orient_rollpitch_cost += orient_rollpitch
+                self.max_speed_cost += qvel[0]
+                self.l_foot_cost_var += l_swing*(l_height_cost+l_force_cost) + l_stance*l_vel_cost
+                self.r_foot_cost_var += r_swing*(r_height_cost+r_force_cost) + r_stance*r_vel_cost
+                self.l_foot_cost_speedpos += l_swing*(l_height_cost) + l_stance*l_vel_cost
+                self.r_foot_cost_speedpos += r_swing*(r_height_cost) + r_stance*r_vel_cost
+                self.l_foot_cost_hop += l_force*(l_force_cost) + l_stance*l_vel_cost
+                self.r_foot_cost_hop += l_force*(r_force_cost) + l_stance*r_vel_cost
+                self.motor_vel_cost += 0.5*(np.abs(qvel[self.vel_idx]).sum() / 10)
+                self.motor_acc_cost += 4*np.linalg.norm(qvel[self.vel_idx])
 
         self.l_foot_orient              /= self.simrate
         self.r_foot_orient              /= self.simrate
-        self.l_foot_cost_var            /= self.simrate
-        self.r_foot_cost_var            /= self.simrate
-        self.l_foot_cost_speedpos       /= self.simrate
-        self.r_foot_cost_speedpos       /= self.simrate
         self.l_foot_cost_pos            /= self.simrate
         self.r_foot_cost_pos            /= self.simrate
         self.l_foot_cost_forcevel       /= self.simrate
         self.r_foot_cost_forcevel       /= self.simrate
-        self.l_foot_cost_hop            /= self.simrate
-        self.r_foot_cost_hop            /= self.simrate
         self.torque_cost                /= self.simrate
         self.hiproll_cost               /= self.simrate
-        self.hiproll_act                /= self.simrate
         self.hipyaw_vel                 /= self.simrate
-        self.hipyaw_act                 /= self.simrate
-        self.pel_stable                 /= self.simrate
-        self.act_cost                   /= self.simrate
         self.torque_penalty             /= self.simrate
-        self.l_foot_cost_smooth_force   /= self.simrate
-        self.r_foot_cost_smooth_force   /= self.simrate
         self.pel_transacc               /= self.simrate
         self.pel_rotacc                 /= self.simrate
         self.forward_cost               /= self.simrate
         self.orient_cost                /= self.simrate
-        self.orient_rollpitch_cost        /= self.simrate
         self.straight_cost              /= self.simrate
         self.yvel_cost                  /= self.simrate
-        self.com_height                 /= self.simrate
-        self.face_up_cost               /= self.simrate
-        self.max_speed_cost             /= self.simrate
-        self.motor_vel_cost             /= self.simrate
-        self.motor_acc_cost             /= self.simrate
-        self.foot_vel_cost              /= self.simrate
-        self.ZMP_cost                   /= self.simrate
-        self.tray_box_cost              /= self.simrate
-        self.pole_pos_cost              /= self.simrate
-        self.pole_vel_cost              /= self.simrate
-        self.orient_pitch               /= self.simrate
+        if self.legacy_reward: 
+            self.l_foot_cost_var            /= self.simrate
+            self.r_foot_cost_var            /= self.simrate
+            self.l_foot_cost_speedpos       /= self.simrate
+            self.r_foot_cost_speedpos       /= self.simrate
+            self.l_foot_cost_hop            /= self.simrate
+            self.r_foot_cost_hop            /= self.simrate
+            self.hiproll_act                /= self.simrate
+            self.hipyaw_act                 /= self.simrate
+            self.l_foot_cost_smooth_force   /= self.simrate
+            self.r_foot_cost_smooth_force   /= self.simrate
+            self.orient_rollpitch_cost      /= self.simrate
+            self.max_speed_cost             /= self.simrate
+            self.motor_vel_cost             /= self.simrate
+            self.motor_acc_cost             /= self.simrate
+        if self.mass_reward:
+            self.com_height                 /= self.simrate
+            self.tray_bos_cost              /= self.simrate
+            self.pole_pos_cost              /= self.simrate
+            self.pole_vel_cost              /= self.simrate
+            self.orient_pitch               /= self.simrate
+        if self.stand_reward:
+            self.com_height                 /= self.simrate
+            self.foot_vel_cost              /= self.simrate
+            self.ZMP_cost                   /= self.simrate
+        if self.prev_action is not None:
+            self.act_cost = 5 * sum(np.abs(self.prev_action - action)) / len(action)
+        else:
+            self.act_cost = 0
                
         height = self.sim.qpos()[2]
         self.curr_action = action
@@ -849,44 +847,46 @@ class CassieEnv_clean:
         # Reward terms
         self.l_foot_orient = 0
         self.r_foot_orient = 0
-        self.l_foot_cost_var = 0
-        self.r_foot_cost_var = 0
-        self.l_foot_cost_speedpos = 0
-        self.r_foot_cost_speedpos = 0
         self.l_foot_cost_pos = 0
         self.r_foot_cost_pos = 0
         self.l_foot_cost_forcevel = 0
         self.r_foot_cost_forcevel = 0
-        self.l_foot_cost_hop = 0
-        self.r_foot_cost_hop = 0
         self.torque_cost = 0
         self.hiproll_cost = 0
-        self.hiproll_act = 0
         self.hipyaw_vel = 0
-        self.hipyaw_act = 0
-        self.pel_stable = 0
         self.act_cost                   = 0
         self.torque_penalty             = 0
-        self.l_foot_cost_smooth_force   = 0
-        self.r_foot_cost_smooth_force   = 0
         self.pel_transacc               = 0
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
-        self.orient_rollpitch_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
-        self.com_height                 = 0
-        self.face_up_cost               = 0
-        self.max_speed_cost             = 0
-        self.motor_vel_cost             = 0
-        self.motor_acc_cost             = 0
-        self.foot_vel_cost              = 0
-        self.ZMP_cost                   = 0
-        self.tray_box_cost              = 0
-        self.pole_pos_cost              = 0
-        self.pole_vel_cost              = 0
-        self.orient_pitch               = 0
+        if self.legacy_reward: 
+            self.l_foot_cost_var = 0
+            self.r_foot_cost_var = 0
+            self.l_foot_cost_speedpos = 0
+            self.r_foot_cost_speedpos = 0
+            self.l_foot_cost_hop = 0
+            self.r_foot_cost_hop = 0
+            self.hiproll_act = 0
+            self.hipyaw_act = 0
+            self.l_foot_cost_smooth_force   = 0
+            self.r_foot_cost_smooth_force   = 0
+            self.orient_rollpitch_cost      = 0
+            self.max_speed_cost             = 0
+            self.motor_vel_cost             = 0
+            self.motor_acc_cost             = 0
+        if self.mass_reward:
+            self.com_height                 = 0
+            self.tray_bos_cost              = 0
+            self.pole_pos_cost              = 0
+            self.pole_vel_cost              = 0
+            self.orient_pitch               = 0
+        if self.stand_reward:
+            self.com_height                 = 0
+            self.foot_vel_cost              = 0
+            self.ZMP_cost                   = 0
 
         return self.get_full_state()
 
@@ -943,47 +943,48 @@ class CassieEnv_clean:
             # self.sim.set_body_mass(0, name="load_mass")
 
         # Reward terms
-        self.max_foot_vel = 0.0
         self.l_foot_orient = 0
         self.r_foot_orient = 0
-        self.l_foot_cost_var = 0
-        self.r_foot_cost_var = 0
-        self.l_foot_cost_speedpos = 0
-        self.r_foot_cost_speedpos = 0
         self.l_foot_cost_pos = 0
         self.r_foot_cost_pos = 0
         self.l_foot_cost_forcevel = 0
         self.r_foot_cost_forcevel = 0
-        self.l_foot_cost_hop = 0
-        self.r_foot_cost_hop = 0
         self.torque_cost = 0
         self.hiproll_cost = 0
-        self.hiproll_act = 0
         self.hipyaw_vel = 0
-        self.hipyaw_act = 0
-        self.pel_stable = 0
         self.act_cost                   = 0
         self.torque_penalty             = 0
-        self.l_foot_cost_smooth_force   = 0
-        self.r_foot_cost_smooth_force   = 0
         self.pel_transacc               = 0
         self.pel_rotacc                 = 0
         self.forward_cost               = 0
         self.orient_cost                = 0
-        self.orient_rollpitch_cost        = 0
         self.straight_cost              = 0
         self.yvel_cost                  = 0
-        self.com_height                 = 0
-        self.face_up_cost               = 0
-        self.max_speed_cost             = 0
-        self.motor_vel_cost             = 0
-        self.motor_acc_cost             = 0
-        self.foot_vel_cost              = 0
-        self.ZMP_cost                   = 0
-        self.tray_box_cost              = 0
-        self.pole_pos_cost              = 0
-        self.pole_vel_cost              = 0
-        self.orient_pitch               = 0
+        if self.legacy_reward: 
+            self.l_foot_cost_var = 0
+            self.r_foot_cost_var = 0
+            self.l_foot_cost_speedpos = 0
+            self.r_foot_cost_speedpos = 0
+            self.l_foot_cost_hop = 0
+            self.r_foot_cost_hop = 0
+            self.hiproll_act = 0
+            self.hipyaw_act = 0
+            self.l_foot_cost_smooth_force   = 0
+            self.r_foot_cost_smooth_force   = 0
+            self.orient_rollpitch_cost      = 0
+            self.max_speed_cost             = 0
+            self.motor_vel_cost             = 0
+            self.motor_acc_cost             = 0
+        if self.mass_reward:
+            self.com_height                 = 0
+            self.tray_bos_cost              = 0
+            self.pole_pos_cost              = 0
+            self.pole_vel_cost              = 0
+            self.orient_pitch               = 0
+        if self.stand_reward:
+            self.com_height                 = 0
+            self.foot_vel_cost              = 0
+            self.ZMP_cost                   = 0
 
         return self.get_full_state()
 
