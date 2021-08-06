@@ -216,14 +216,14 @@
           <joint type='ball' limited='false' pos='0.0 0.0 -0.25' damping='0.1'/>
           <geom type='capsule' size='0.025 .25'/>
           <body name='slosh_mass1' pos='0 0 0.25'> 
-            <geom type='sphere' mass='1' size='.08'/>
+            <geom type='sphere' mass='5' size='.08'/>
           </body>
         </body>
         <body name='rope2' pos='0.0 -0.25 -0.5' euler='0 0 90'> 
           <joint type='ball' limited='false' pos='0.0 0.0 -0.25' damping='0.1'/>
           <geom type='capsule' size='0.025 .25'/>
           <body name='slosh_mass2' pos='0 0 0.25'> 
-            <geom type='sphere' mass='1' size='.08'/>
+            <geom type='sphere' mass='5' size='.08'/>
           </body>
         </body>
       </body>
