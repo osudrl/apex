@@ -21,10 +21,11 @@ import numpy as np
 _dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # Initialize libcassiesim
-# cassie_mujoco_init(str.encode(_dir_path+"/cassie_slosh_mass.xml"))
-# cassie_mujoco_init(str.encode(_dir_path+"/cassie_yoke.xml"))
 cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
-# cassie_mujoco_init(str.encode("../model/cassie_hfield.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_cart_soft.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassiepole_light_long_damp1.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_tray_box.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_carry_pole.xml"))
 
 
 # Interface classes
@@ -33,11 +34,13 @@ cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 # in the init or switch functions that nbody and ngeom to take in a name instead of letting you set all values at once
 class CassieSim:
     def __init__(self, modelfile, reinit=False):
-        self.c = cassie_sim_init(modelfile.encode('utf-8'), reinit)
-        params = cassie_sim_params(self.c)
-        self.nv = params[1]
+        reinit_c = ctypes.c_bool(reinit)
+        self.c = cassie_sim_init(modelfile.encode('utf-8'), reinit_c)
+        p_arr = (ctypes.c_int32 * 6)()
+        cassie_sim_params(self.c, p_arr)
+        self.nv = p_arr[1]
         self.nbody = 26
-        self.nq = params[0]
+        self.nq = p_arr[0]
         self.ngeom = 35
         # self.nv = 32
         # self.nbody = 26
@@ -421,11 +424,6 @@ class CassieSim:
     def set_joint_filter(self, joint_filters):
         cassie_sim_set_joint_filter(self.c, joint_filters)
 
-    def set_joint_filter2(self, x, y):
-        x_arr = (ctypes.c_double * (6*4))(*x)
-        y_arr = (ctypes.c_double * (6*3))(*y)
-        cassie_sim_set_joint_filter2(self.c, ctypes.cast(x_arr, ctypes.POINTER(ctypes.c_double)), ctypes.cast(y_arr, ctypes.POINTER(ctypes.c_double)))
-
     # Returns a pointer to an array of drive_filter_t objects. Can be accessed/indexed as a usual python array of
     # drive filter objects
     def get_drive_filter(self):
@@ -441,10 +439,6 @@ class CassieSim:
     # See cassiemujoco_ctypes for definition of drive_filter_t object
     def set_drive_filter(self, drive_filters):
         cassie_sim_set_drive_filter(self.c, drive_filters)
-
-    def set_drive_filter2(self, x):
-        x_arr = (ctypes.c_int * (10*9))(*x)
-        cassie_sim_set_drive_filter2(self.c, ctypes.cast(x_arr, ctypes.POINTER(ctypes.c_int)))
 
     # Get the current state of the torque delay array. Returns a 2d numpy array of size (10, 6), 
     # number of motors by number of delay cycles
@@ -465,6 +459,7 @@ class CassieSim:
 class CassieVis:
     def __init__(self, c, modelfile):
         self.v = cassie_vis_init(c.c, modelfile.encode('utf-8'))
+        self.is_recording = False
 
     def draw(self, c):
         state = cassie_vis_draw(self.v, c.c)
@@ -491,6 +486,17 @@ class CassieVis:
 
     def set_cam(self, body_name, zoom, azimuth, elevation):
         cassie_vis_set_cam(self.v, body_name.encode(), zoom, azimuth, elevation)
+
+    def init_recording(self, filename, width=1920, height=1080):
+        cassie_vis_init_recording(self.v, filename.encode(), ctypes.c_int(width), ctypes.c_int(height))
+        self.is_recording = True
+
+    def record_frame(self):
+        cassie_vis_record_frame(self.v)
+
+    def close_recording(self):
+        cassie_vis_close_recording(self.v)
+        self.is_recording = False
 
     def __del__(self):
         cassie_vis_free(self.v)

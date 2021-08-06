@@ -469,6 +469,19 @@ cassie_vis_apply_force.argtypes = [POINTER_T(struct_cassie_vis), POINTER_T(ctype
 cassie_vis_full_reset = _libraries['./libcassiemujoco.so'].cassie_vis_full_reset
 cassie_vis_full_reset.restype = None
 cassie_vis_full_reset.argtypes = [POINTER_T(struct_cassie_vis)]
+
+cassie_vis_init_recording = _libraries['./libcassiemujoco.so'].cassie_vis_init_recording
+cassie_vis_init_recording.restype = None
+cassie_vis_init_recording.argtypes = [POINTER_T(struct_cassie_vis), ctypes.c_char_p, ctypes.c_int32, ctypes.c_int32]
+
+cassie_vis_record_frame = _libraries['./libcassiemujoco.so'].cassie_vis_record_frame
+cassie_vis_record_frame.restype = None
+cassie_vis_record_frame.argtypes = [POINTER_T(struct_cassie_vis)]
+
+cassie_vis_close_recording = _libraries['./libcassiemujoco.so'].cassie_vis_close_recording
+cassie_vis_close_recording.restype = None
+cassie_vis_close_recording.argtypes = [POINTER_T(struct_cassie_vis)]
+
 cassie_state_alloc = _libraries['./libcassiemujoco.so'].cassie_state_alloc
 cassie_state_alloc.restype = POINTER_T(struct_cassie_state)
 cassie_state_alloc.argtypes = []
@@ -587,10 +600,6 @@ cassie_sim_set_joint_filter = _libraries['./libcassiemujoco.so'].cassie_sim_set_
 cassie_sim_set_joint_filter.restype = None
 cassie_sim_set_joint_filter.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(joint_filter_t)]
 
-cassie_sim_set_joint_filter2 = _libraries['./libcassiemujoco.so'].cassie_sim_set_joint_filter2
-cassie_sim_set_joint_filter2.restype = None
-cassie_sim_set_joint_filter2.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_double), POINTER_T(ctypes.c_double)]
-
 cassie_sim_drive_filter = _libraries['./libcassiemujoco.so'].cassie_sim_drive_filter
 cassie_sim_drive_filter.restype = POINTER_T(drive_filter_t)
 cassie_sim_drive_filter.argtypes = [POINTER_T(struct_cassie_sim)]
@@ -598,10 +607,6 @@ cassie_sim_drive_filter.argtypes = [POINTER_T(struct_cassie_sim)]
 cassie_sim_set_drive_filter = _libraries['./libcassiemujoco.so'].cassie_sim_set_drive_filter
 cassie_sim_set_drive_filter.restype = None
 cassie_sim_set_drive_filter.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(drive_filter_t)]
-
-cassie_sim_set_drive_filter2 = _libraries['./libcassiemujoco.so'].cassie_sim_set_drive_filter2
-cassie_sim_set_drive_filter2.restype = None
-cassie_sim_set_drive_filter2.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_int)]
 
 cassie_sim_torque_delay = _libraries['./libcassiemujoco.so'].cassie_sim_torque_delay
 cassie_sim_torque_delay.restype = None
@@ -619,8 +624,8 @@ cassie_sim_run_state_est = _libraries['./libcassiemujoco.so'].cassie_sim_run_sta
 cassie_sim_run_state_est.restype = None
 cassie_sim_run_state_est.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(cassie_out_t), POINTER_T(struct_c__SA_state_out_t)]
 cassie_sim_params = _libraries['./libcassiemujoco.so'].cassie_sim_params
-cassie_sim_params.restype = POINTER_T(ctypes.c_int32)
-cassie_sim_params.argtypes = [POINTER_T(struct_cassie_sim)]
+cassie_sim_params.restype = None
+cassie_sim_params.argtypes = [POINTER_T(struct_cassie_sim), POINTER_T(ctypes.c_int32)]
 
 class struct_c__SA_pd_motor_in_t(ctypes.Structure):
     _pack_ = True # source:False
@@ -890,7 +895,8 @@ __all__ = \
     'cassie_sim_foot_quat', 'cassie_sim_body_vel', 'cassie_sim_set_body_name_mass', 'cassie_vis_set_cam', 
     'cassie_sim_joint_filter', 'cassie_sim_set_joint_filter', 'cassie_sim_drive_filter', 'cassie_sim_set_drive_filter',
     'cassie_sim_torque_delay', 'cassie_sim_set_torque_delay', 'drive_filter_t', 'joint_filter_t', 'cassie_sim_act_vel',
-    'cassie_sim_set_drive_filter2', 'cassie_sim_set_joint_filter2', 'cassie_sim_sensordata', 'cassie_sim_copy_mjd', 'cassie_sim_copy_state_est',
-    'cassie_sim_copy_just_sim', 'cassie_sim_get_cassie_out', 'cassie_sim_run_state_est', 'cassie_sim_params']
+    'cassie_sim_sensordata', 'cassie_sim_copy_mjd', 'cassie_sim_copy_state_est',
+    'cassie_sim_copy_just_sim', 'cassie_sim_get_cassie_out', 'cassie_sim_run_state_est', 'cassie_sim_params',
+    'cassie_vis_record_frame', 'cassie_vis_init_recording', 'cassie_vis_close_recording']
 
 # 'cassie_sim_set_cassiestate'
