@@ -34,7 +34,7 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
         self.train_mass = False
         self.step_in_place = False
         self.train_pole = False
-        self.train_loadmass = False
+        self.train_loadmass = True
 
         if self.train_mass and self.sim.nq != 42:
             print("Error: wrong model file")
@@ -158,12 +158,12 @@ class CassieEnv_accel_nofy(CassieEnv_clean):
                 self.speed = (random.randint(0, 40)) / 10
             #     self.speed_schedule = [self.speed, np.clip(self.speed + (random.randint(5, 10)) / 10, 0, 4)]
             # self.speed_time = 150 + np.random.randint(-20, 20)
-        if self.train_mass:
-            self.speed_time = np.inf
-            if random.randint(0, 4) == 0:
-                self.speed = 0
-            else:
-                self.speed = (random.randint(-5, 1)) / 10
+        # if self.train_mass:
+        #     self.speed_time = np.inf
+        #     if random.randint(0, 4) == 0:
+        #         self.speed = 0
+        #     else:
+        #         self.speed = (random.randint(-5, 1)) / 10
 
         # self.speed_schedule = np.random.randint(0, 30, size=3) / 10
         # self.speed_schedule = np.random.randint(-10, 10, size=3) / 10

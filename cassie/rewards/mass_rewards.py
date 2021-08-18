@@ -40,8 +40,8 @@ def stand_up_pole_reward(self):
 
 def stand_up_pole_free_reward(self):
 
-    reward = 0.2*np.exp(-self.com_height) \
-                + 0.5*np.exp(-self.pole_pos_cost) + 0.3*np.exp(-self.pole_vel_cost) \
+    reward = 0.2*np.exp(-self.com_height) + 0.2*np.exp(-self.orient_cost) \
+                + 0.4*np.exp(-self.pole_pos_cost) + 0.2*np.exp(-self.pole_vel_cost) \
 
     return reward
 
@@ -58,13 +58,13 @@ def walk_pole_nopelorient_reward(self):
     return reward
 
 def walk_pole_reward(self):
-    reward = .1*np.exp(-self.forward_cost) + 0.05*np.exp(-self.orient_cost) \
-                + .05*np.exp(-self.straight_cost) + .05*np.exp(-self.yvel_cost) \
+    reward = .1*np.exp(-self.forward_cost) + 0.05*np.exp(-self.orient_pitch) \
+                + .05*np.exp(-self.yvel_cost) \
                 + .075*np.exp(-self.l_foot_cost_forcevel) + .075*np.exp(-self.r_foot_cost_forcevel) \
                 + .075*np.exp(-self.l_foot_cost_pos) + .075*np.exp(-self.r_foot_cost_pos) \
                 + .05*np.exp(-self.l_foot_orient) + .05*np.exp(-self.r_foot_orient) \
                 + .05*np.exp(-self.hiproll_cost) + .05*np.exp(-self.hipyaw_vel) \
                 + .05*np.exp(-self.act_cost) + 0.05*np.exp(-self.torque_penalty) \
-                + .075*np.exp(-self.pole_pos_cost) + .075*np.exp(-self.pole_vel_cost)
+                + .1*np.exp(-self.pole_pos_cost) + .1*np.exp(-self.pole_vel_cost)
 
     return reward

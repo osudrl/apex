@@ -20,6 +20,7 @@ class CassieEnv_clean:
     def __init__(self, simrate=60, dynamics_randomization=False, reward="empty_reward", history=0, model="cassie.xml", reinit=False):
         # self.sim = CassieSim("./cassie/cassiemujoco/cassie.xml")
         self.sim = CassieSim(os.path.join("./cassie/cassiemujoco/", model), reinit)
+        self.curr_model = model
         self.vis = None
         self.clock_based = True
         self.phase_based = False
@@ -102,7 +103,7 @@ class CassieEnv_clean:
         self.train_carrypole = False
         self.train_loadmass = False
         self.train_pole = False
-        self.load_list = ["cassie.xml", "cassie_tray_box.xml", "cassiepole_light.xml", "cassie_cart_soft.xml", "cassie_carry_pole.xml"]
+        self.load_list = ["cassie.xml", "cassie_tray_box.xml", "cassie_cart_soft.xml", "cassie_carry_pole.xml", "cassie_jug_spring.xml"]
         self.legacy_reward = False
         self.mass_reward = self.train_mass or self.train_pole
         self.stand_reward = self.train_stand
@@ -921,6 +922,14 @@ class CassieEnv_clean:
             if self.train_carrypole:
                 qpos = np.concatenate((qpos, np.zeros(self.sim.nq - len(qpos))))
                 qvel = np.concatenate((qvel, np.zeros(self.sim.nv - len(qvel))))
+            if self.curr_model == "cassie_tray_box.xml":
+                shift = np.array([0.1, 0, 0.23])
+                shift = rotate_by_quaternion(shift, qpos[3:7])
+                qpos = np.concatenate((qpos, [qpos[0]+shift[0], qpos[1]+shift[1], qpos[2]+shift[2]], qpos[3:7]))
+                qvel = np.concatenate((qvel, qvel[0:2], np.zeros(4)))    
+            if self.curr_model != "cassie.xml":
+                qpos = np.concatenate((qpos, np.zeros(self.sim.nq - len(qpos))))
+                qvel = np.concatenate((qvel, np.zeros(self.sim.nv - len(qvel))))        
             self.sim.set_qpos_full(qpos)
             self.sim.set_qvel_full(qvel)
         else:
