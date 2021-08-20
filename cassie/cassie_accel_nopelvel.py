@@ -73,13 +73,12 @@ class CassieEnv_accel_nopelvel(CassieEnv_clean):
             if self.vis is not None:
                 self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/" + self.load_list[rand_mass])
 
-        if self.train_mass:
+        if self.curr_model == "cassie_tray_box.xml" or self.train_mass:
             shift = np.array([0.1, 0, 0.23])
             shift = rotate_by_quaternion(shift, qpos[3:7])
             qpos = np.concatenate((qpos, [qpos[0]+shift[0], qpos[1]+shift[1], qpos[2]+shift[2]], qpos[3:7]))
             qvel = np.concatenate((qvel, qvel[0:2], np.zeros(4)))             
-
-        if self.train_loadmass and rand_mass > 1:
+        elif self.curr_model != "cassie.xml":
             qpos = np.concatenate((qpos, np.zeros(self.sim.nq - len(qpos))))
             qvel = np.concatenate((qvel, np.zeros(self.sim.nv - len(qvel))))        
 

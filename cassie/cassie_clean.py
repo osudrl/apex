@@ -117,8 +117,8 @@ class CassieEnv_clean:
             self.default_ipos = self.sim.get_body_ipos()
             self.default_fric = self.sim.get_geom_friction()
 
-            weak_factor = 0.7
-            strong_factor = 1.3
+            weak_factor = 0.5
+            strong_factor = 3.5
 
             pelvis_damp_range = [[self.default_damping[0], self.default_damping[0]], 
                                 [self.default_damping[1], self.default_damping[1]], 
@@ -146,8 +146,8 @@ class CassieEnv_clean:
             side_damp = hip_damp_range + achilles_damp_range + knee_damp_range + shin_damp_range + tarsus_damp_range + heel_damp_range + fcrank_damp_range + prod_damp_range + foot_damp_range
             self.damp_range = pelvis_damp_range + side_damp + side_damp
 
-            hi = 1.1
-            lo = 0.9
+            hi = 1.7
+            lo = 0.5
             m = self.default_mass
             pelvis_mass_range      = [[lo*m[1],  hi*m[1]]]  # 1
             hip_mass_range         = [[lo*m[2],  hi*m[2]],  # 2->4 and 14->16
@@ -257,6 +257,10 @@ class CassieEnv_clean:
         self.swing_ratio = 0.4
 
         self.debug = False
+
+    def remake_cassie(self, model):
+        self.sim = CassieSim(os.path.join("./cassie/cassiemujoco/", model), True)
+        self.curr_model = model
 
     def set_up_state_space(self):
 
@@ -622,8 +626,9 @@ class CassieEnv_clean:
             done = True
         if self.getup:
             done = False
-        if self.train_mass:
-            if self.sim.qpos_full()[37] < 0.7:
+        # print("curr model:", self.curr_model)
+        if self.train_mass or self.curr_model == "cassie_tray_box.xml":
+            if self.sim.qpos_full()[37] < 0.5:
                 done = True
         # if self.train_pole and (np.abs(qpos[-1]) > np.pi/4 or np.abs(qvel[4]) > 1.5):
         #     done = True
@@ -715,7 +720,7 @@ class CassieEnv_clean:
             if self.vis is not None:
                 self.vis = CassieVis(self.sim, "./cassie/cassiemujoco/" + self.load_list[rand_mass])
 
-        if self.train_mass or (self.train_loadmass and rand_mass == 1):
+        if self.curr_model == "cassie_tray_box.xml":#self.train_mass or (self.train_loadmass and rand_mass == 1):
             shift = np.array([0.1, 0, 0.23])
             shift = rotate_by_quaternion(shift, qpos[3:7])
             qpos = np.concatenate((qpos, [qpos[0]+shift[0], qpos[1]+shift[1], qpos[2]+shift[2]], qpos[3:7]))
@@ -821,6 +826,10 @@ class CassieEnv_clean:
             #### Dynamics Randomization ####
             self.damp_noise = np.clip([np.random.uniform(a, b) for a, b in self.damp_range], 0, None)
             self.mass_noise = np.clip([np.random.uniform(a, b) for a, b in self.mass_range], 0, None)
+            if self.sim.nv > 32:
+                self.damp_noise = np.concatenate((self.damp_noise, self.default_damping[32:]))
+            if self.sim.nbody > 26:
+                self.mass_noise = np.concatenate((self.mass_noise, self.default_mass[26:]))
             # com_noise = [0, 0, 0] + [np.random.uniform(self.delta_x_min, self.delta_x_min)] + [np.random.uniform(self.delta_y_min, self.delta_y_max)] + [0] + list(self.default_ipos[6:])
             # fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
             # fric_noise = []
@@ -829,7 +838,7 @@ class CassieEnv_clean:
             # rolling = np.random.uniform(5e-5, 5e-4)
             # for _ in range(int(len(self.default_fric)/3)):
             #     fric_noise += [translational, torsional, rolling]
-            self.fric_noise = np.clip([np.random.uniform(0.8, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)], 0, None)
+            self.fric_noise = np.clip([np.random.uniform(0.6, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)], 0, None)
             self.sim.set_dof_damping(self.damp_noise)
             self.sim.set_body_mass(self.mass_noise)
             # self.sim.set_body_ipos(com_noise)
