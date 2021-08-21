@@ -695,6 +695,29 @@ class CassieEnv_clean:
 
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
+        if self.dynamics_randomization:
+            #### Dynamics Randomization ####
+            self.damp_noise = np.clip([np.random.uniform(a, b) for a, b in self.damp_range], 0, None)
+            self.mass_noise = np.clip([np.random.uniform(a, b) for a, b in self.mass_range], 0, None)
+            if self.sim.nv > 32:
+                self.damp_noise = np.concatenate((self.damp_noise, self.default_damping[32:]))
+            if self.sim.nbody > 26:
+                self.mass_noise = np.concatenate((self.mass_noise, self.default_mass[26:]))
+            # com_noise = [0, 0, 0] + [np.random.uniform(self.delta_x_min, self.delta_x_min)] + [np.random.uniform(self.delta_y_min, self.delta_y_max)] + [0] + list(self.default_ipos[6:])
+            # fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
+            # fric_noise = []
+            # translational = np.random.uniform(0.6, 1.2)
+            # torsional = np.random.uniform(1e-4, 1e-2)
+            # rolling = np.random.uniform(5e-5, 5e-4)
+            # for _ in range(int(len(self.default_fric)/3)):
+            #     fric_noise += [translational, torsional, rolling]
+            self.fric_noise = np.clip([np.random.uniform(0.6, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)], 0, None)
+            self.sim.set_dof_damping(self.damp_noise)
+            self.sim.set_body_mass(self.mass_noise)
+            # self.sim.set_body_ipos(com_noise)
+            self.sim.set_geom_friction(self.fric_noise, "floor")
+            self.sim.set_const()
+
         if self.all_resets:        
             rand_ind = random.randint(0, self.reset_len-1)
             qpos = np.copy(self.reset_states["qpos"][rand_ind, :])
@@ -822,29 +845,6 @@ class CassieEnv_clean:
         self.com_vel_offset = 0#0.1*np.random.uniform(-0.1, 0.1, 2)
         self.max_foot_vel = 0.0
 
-        if self.dynamics_randomization:
-            #### Dynamics Randomization ####
-            self.damp_noise = np.clip([np.random.uniform(a, b) for a, b in self.damp_range], 0, None)
-            self.mass_noise = np.clip([np.random.uniform(a, b) for a, b in self.mass_range], 0, None)
-            if self.sim.nv > 32:
-                self.damp_noise = np.concatenate((self.damp_noise, self.default_damping[32:]))
-            if self.sim.nbody > 26:
-                self.mass_noise = np.concatenate((self.mass_noise, self.default_mass[26:]))
-            # com_noise = [0, 0, 0] + [np.random.uniform(self.delta_x_min, self.delta_x_min)] + [np.random.uniform(self.delta_y_min, self.delta_y_max)] + [0] + list(self.default_ipos[6:])
-            # fric_noise = [np.random.uniform(0.95, 1.05)] + [np.random.uniform(5e-4, 5e-3)] + [np.random.uniform(5e-5, 5e-4)]#+ list(self.default_fric[2:])
-            # fric_noise = []
-            # translational = np.random.uniform(0.6, 1.2)
-            # torsional = np.random.uniform(1e-4, 1e-2)
-            # rolling = np.random.uniform(5e-5, 5e-4)
-            # for _ in range(int(len(self.default_fric)/3)):
-            #     fric_noise += [translational, torsional, rolling]
-            self.fric_noise = np.clip([np.random.uniform(0.6, 1.2), np.random.uniform(1e-4, 1e-2), np.random.uniform(5e-5, 5e-4)], 0, None)
-            self.sim.set_dof_damping(self.damp_noise)
-            self.sim.set_body_mass(self.mass_noise)
-            # self.sim.set_body_ipos(com_noise)
-            self.sim.set_geom_friction(self.fric_noise, "floor")
-            self.sim.set_const()
-
         if self.slope_rand:
             rand_angle = np.pi/180*np.random.uniform(-5, 5, 2)
             floor_quat = euler2quat(z=0, y=rand_angle[0], x=rand_angle[1])
@@ -910,6 +910,16 @@ class CassieEnv_clean:
 
         self.state_history = [np.zeros(self._obs) for _ in range(self.history+1)]
 
+        if self.dynamics_randomization:
+            self.damp_noise = self.default_damping
+            self.mass_noise = self.default_mass
+            self.fric_noise = self.default_fric
+            self.sim.set_dof_damping(self.default_damping)
+            self.sim.set_body_mass(self.default_mass)
+            # self.sim.set_body_ipos(self.default_ipos)
+            self.sim.set_geom_friction(self.default_fric)
+            self.sim.set_const()
+
         self.speed = 0
         self.update_speed(self.speed)
 
@@ -944,16 +954,6 @@ class CassieEnv_clean:
         else:
             self.sim.full_reset()
             self.reset_cassie_state()
-
-        if self.dynamics_randomization:
-            self.damp_noise = self.default_damping
-            self.mass_noise = self.default_mass
-            self.fric_noise = self.default_fric
-            self.sim.set_dof_damping(self.default_damping)
-            self.sim.set_body_mass(self.default_mass)
-            # self.sim.set_body_ipos(self.default_ipos)
-            self.sim.set_geom_friction(self.default_fric)
-            self.sim.set_const()
 
         if self.slope_rand:
             self.sim.set_geom_quat(np.array([1, 0, 0, 0]), "floor")
