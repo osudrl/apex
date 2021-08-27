@@ -476,7 +476,10 @@ class CassieEnv_clean:
             # self.torque_cost += 0.00006*np.linalg.norm(np.square(curr_torques))
             self.torque_penalty += 0.05 * sum(np.abs(curr_torques)/len(curr_torques))
             
-            self.pel_transacc += np.linalg.norm(self.cassie_state.pelvis.translationalAcceleration[0:2])
+            if self.train_mass:
+                self.pel_transacc += np.linalg.norm(self.cassie_state.pelvis.translationalAcceleration[0:3])
+            else:
+                self.pel_transacc += np.linalg.norm(self.cassie_state.pelvis.translationalAcceleration[0:2])
             self.pel_rotacc += 2*np.linalg.norm(self.cassie_state.pelvis.rotationalVelocity[:])
 
             # Speedmatching costs
