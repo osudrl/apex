@@ -24,21 +24,21 @@ class perturb_worker(object):
         self.start_size = start_size
         self.perturb_incr = perturb_incr
         self.perturb_body = perturb_body
-        self.num_phases = self.cassie_env.phaselen + 1
+        self.num_phases = int(self.cassie_env.phaselen + 1)
 
     @torch.no_grad()
     def reset_to_phase(self, phase):
-        state = torch.Tensor(self.cassie_env.reset_for_test(full_reset=True))
+        state = torch.Tensor(self.cassie_env.reset_for_test())
         self.cassie_env.speed = 0.5
         for i in range(2*self.num_phases):
             action = self.policy(state, True)
             action = action.data.numpy()
-            state, reward, done, _ = self.cassie_env.step(action)
+            state = self.cassie_env.step_basic(action)
             state = torch.Tensor(state)
         for i in range(phase):
             action = self.policy(state, True)
             action = action.data.numpy()
-            state, reward, done, _ = self.cassie_env.step(action)
+            state = self.cassie_env.step_basic(action)
             state = torch.Tensor(state)
         return state
 
@@ -51,7 +51,9 @@ class perturb_worker(object):
         curr_size = self.start_size - self.perturb_incr
         done = False
         while not done:
+            
             curr_size += self.perturb_incr
+            # print("testing angle {} at force {}".format(angle, curr_size))
             state = self.reset_to_phase(phase)
             # Apply perturb
             force_x = curr_size * np.cos(angle)
@@ -62,7 +64,7 @@ class perturb_worker(object):
                 self.cassie_env.sim.apply_force([force_x, force_y, 0, 0, 0, 0], self.perturb_body)
                 action = self.policy(state, True)
                 action = action.data.numpy()
-                state, reward, done, _ = self.cassie_env.step(action)
+                state = self.cassie_env.step_basic(action)
                 state = torch.Tensor(state)
                 curr_time = self.cassie_env.sim.time()
             # Done perturbing, reset xfrc_applied
@@ -71,11 +73,11 @@ class perturb_worker(object):
             while curr_time < start_t + self.wait_time:
                 action = self.policy(state, True)
                 action = action.data.numpy()
-                state, reward, done, _ = self.cassie_env.step(action)
+                state = self.cassie_env.step_basic(action)
                 state = torch.Tensor(state)
                 curr_time = self.cassie_env.sim.time()
-                if self.cassie_env.sim.qpos()[2] < 0.4:  # Failed, reset and record force
-                    done = True
+                if self.cassie_env.sim.qpos()[2] < 0.4 or (self.cassie_env.curr_model == "cassie_tray_box.xml" and self.cassie_env.sim.qpos_full()[37] < 0.7):
+                    done = True  # Failed, reset and record force
                     break
         max_force = curr_size - self.perturb_incr
         # print("max force: ", curr_size - perturb_incr)
@@ -91,12 +93,12 @@ def reset_to_phase(env, policy, phase):
     for i in range(2*(env.phaselen + 1)):
         action = policy(state, True)
         action = action.data.numpy()
-        state, reward, done, _ = env.step(action)
+        state = env.step_basic(action)
         state = torch.Tensor(state)
     for i in range(phase):
         action = policy(state, True)
         action = action.data.numpy()
-        state, reward, done, _ = env.step(action)
+        state = env.step_basic(action)
         state = torch.Tensor(state)
     return state
 
@@ -130,7 +132,7 @@ def compute_perturbs(cassie_env, policy, wait_time=4, perturb_duration=0.2, pert
                     cassie_env.sim.apply_force([force_x, force_y, 0, 0, 0, 0], perturb_body)
                     action = policy(state, True)
                     action = action.data.numpy()
-                    state, reward, done, _ = cassie_env.step(action)
+                    state = cassie_env.step_basic(action)
                     state = torch.Tensor(state)
                     curr_time = cassie_env.sim.time()
                 # Done perturbing, reset perturb_time and xfrc_applied
@@ -139,7 +141,7 @@ def compute_perturbs(cassie_env, policy, wait_time=4, perturb_duration=0.2, pert
                 while curr_time < start_t + wait_time:
                     action = policy(state, True)
                     action = action.data.numpy()
-                    state, reward, done, _ = cassie_env.step(action)
+                    state = cassie_env.step_basic(action)
                     state = torch.Tensor(state)
                     curr_time = cassie_env.sim.time()
                     if cassie_env.sim.qpos()[2] < 0.4:  # Failed, reset and record force
@@ -158,11 +160,12 @@ def compute_perturbs_multi(env_fn, policy, wait_time=4, perturb_duration=0.2, pe
     bar_width = 30
     # Check to make sure don't make too many workers for the given
     temp_env = env_fn()
-    num_phases = temp_env.phaselen + 1 
+    num_phases = int(temp_env.phaselen + 1)
     if num_procs > num_angles * num_phases:
         num_procs = num_angles * num_phases
     # Make all args
-    args = [(i, j) for i in range(num_angles) for j in range(num_phases)]
+    # args = [(i, j) for i in range(num_angles) for j in range(num_phases)]
+    args = [(i, 14) for i in range(num_angles) for j in range(num_phases)]
     total_data = np.zeros((num_angles, num_phases))
     num_args = num_angles * num_phases
     
@@ -287,7 +290,7 @@ def perturb_worker_old(env_fn, qpos_phase, qvel_phase, policy, angles, wait_time
                     cassie_env.sim.apply_force([force_x, force_y, 0, 0, 0, 0], perturb_body)
                     action = policy(state, True)
                     action = action.data.numpy()
-                    state, reward, done, _ = cassie_env.step(action)
+                    state = cassie_env.step_basic(action)
                     state = torch.Tensor(state)
                     curr_time = cassie_env.sim.time()
                 # Done perturbing, reset xfrc_applied
@@ -296,7 +299,7 @@ def perturb_worker_old(env_fn, qpos_phase, qvel_phase, policy, angles, wait_time
                 while curr_time < start_t + wait_time:
                     action = policy(state, True)
                     action = action.data.numpy()
-                    state, reward, done, _ = cassie_env.step(action)
+                    state = cassie_env.step_basic(action)
                     state = torch.Tensor(state)
                     curr_time = cassie_env.sim.time()
                     if cassie_env.sim.qpos()[2] < 0.4:  # Failed, reset and record force
@@ -321,7 +324,7 @@ def compute_perturbs_multi_old(env_fn, policy, wait_time=4, perturb_duration=0.2
     for i in range(num_steps*4):
         action = policy(state, True)
         action = action.data.numpy()
-        state, reward, done, _ = cassie_env.step(action)
+        state = cassie_env.step_basic(action)
         state = torch.Tensor(state)
     qpos_phase = np.zeros((35, num_steps))
     qvel_phase = np.zeros((32, num_steps))
@@ -330,7 +333,7 @@ def compute_perturbs_multi_old(env_fn, policy, wait_time=4, perturb_duration=0.2
     for i in range(num_steps-1):
         action = policy(state, True)
         action = action.data.numpy()
-        state, reward, done, _ = cassie_env.step(action)
+        state = cassie_env.step_basic(action)
         state = torch.Tensor(state)
         # print("phase: ", cassie_env.phase)
         qpos_phase[:, i+1] = cassie_env.sim.qpos()
