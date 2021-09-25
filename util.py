@@ -565,8 +565,10 @@ class EvalProcessClass():
                         env.true_state = not env.true_state
                         print("True state:", env.true_state)
                     elif c == "e":
-                        do_norm = not do_norm
-                        print("Doing normalization: ", do_norm)
+                        # do_norm = not do_norm
+                        # print("Doing normalization: ", do_norm)
+                        # env.vis.set_cam("cassie-pelvis", 2.5, 130, -10)
+                        env.vis.set_cam("cassie-pelvis", 2.8, 220, -7)
 
                     env.update_speed(speed)
                     # print(speed)
@@ -629,7 +631,7 @@ class EvalProcessClass():
                         state *= scaling
                         state += shift
                     # print("state:", state)
-                    foot_euler = quaternion2euler(env.sim.xquat("left-foot"))
+                    # foot_euler = quaternion2euler(env.sim.xquat("left-foot"))
                     # print("lfoot:", foot_euler)
                     action = policy.forward(torch.Tensor(state), deterministic=True).detach().numpy()
 
@@ -706,8 +708,8 @@ class EvalProcessClass():
                     if args.no_viz:
                         yaw = quaternion2euler(new_orient)[2]
                         print("stp = {}  yaw = {:.2f}  spd = {}  ep_r = {:.2f}  stp_r = {:.2f}".format(timesteps, yaw, speed, eval_reward, reward))
-
-                curr_slow += 1
+                if not env.vis.ispaused():
+                    curr_slow += 1
                 if visualize:
                     render_state = env.render()
                     if env.vis.is_recording:

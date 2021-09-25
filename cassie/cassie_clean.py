@@ -454,6 +454,10 @@ class CassieEnv_clean:
             # Foot height cost
             self.sim.foot_pos(foot_pos)
             foot_forces = self.sim.get_foot_forces()
+            if foot_forces[0] > self.l_max_foot_force:
+                self.l_max_foot_force = foot_forces[0]
+            if foot_forces[1] > self.r_max_foot_force:
+                self.r_max_foot_force = foot_forces[1]
             # foot_forces = np.zeros(6)
             
             r_height_cost = 40*(des_height - foot_pos[5])**2
@@ -604,6 +608,11 @@ class CassieEnv_clean:
         if self.phase >= self.phaselen:
             self.phase -= self.phaselen
             self.counter += 1
+
+        if l_swing > 0.5:
+            self.l_max_foot_force = 0
+        if r_swing > 0.5:
+            self.r_max_foot_force = 0
 
         # update previous action
         self.prev_action = action
