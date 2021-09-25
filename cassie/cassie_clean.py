@@ -204,6 +204,8 @@ class CassieEnv_clean:
         self.prev_action = None 
         self.curr_action = None
         self.max_foot_vel = 0.0
+        self.l_max_foot_force = 0.0
+        self.r_max_foot_force = 0.0
 
         # for RNN policies
         self.critic_state = None
