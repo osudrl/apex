@@ -1,5 +1,5 @@
 from cassie import CassieEnv, CassiePlayground
-from rl.policies.actor import GaussianMLP_Actor
+from rl.policies.actor import Gaussian_FF_Actor
 from tools.test_commands import *
 from tools.eval_perturb import *
 from tools.eval_mission import *
@@ -56,6 +56,10 @@ if args.eval:
 if hasattr(policy, 'init_hidden_state'):
     policy.init_hidden_state()
 
+# model_args = make_model_args(cassie_env.sim, .7, 1.2, .7, 1.2, .7, 1.2, 4)
+# print(len(model_args))
+# get_model_stats(args.path)
+# exit()
 
 #TODO: make returning/save data in file inside function consist for all testing functions
 def test_commands(cassie_env, policy, args):
@@ -101,11 +105,16 @@ elif args.test == "mission":
     else:
         save_data = np.load(os.path.join(args.path, "eval_missions.npy"), allow_pickle=True)
         plot_mission_data(save_data, missions)
-elif args.test == "sensitivity":
-    print("Testing sensitivity")
-    save_data = eval_sensitivity(cassie_env, policy, incr=args.sens_incr, hi_factor=args.hi_factor, lo_factor=args.lo_factor)
-    print(save_data)
-    np.save(os.path.join(args.path, "eval_sensitivity.npy"), save_data)
+elif args.test == "model":
+    print("Testing model")
+    # save_data = eval_sensitivity(cassie_env, policy, incr=args.sens_incr, hi_factor=args.hi_factor, lo_factor=args.lo_factor)
+    # print(save_data)
+    # np.save(os.path.join(args.path, "eval_sensitivity.npy"), save_data)
+    # pass_data, damp_data, mass_data, fric_data = eval_model_multi(env_fn, policy, .7, 1.2, 20, args.n_procs)
+    # np.savez(os.path.join(args.path, "eval_model.npz"), pass_data=pass_data, damp_data=damp_data, mass_data=mass_data, fric_data=fric_data)
+    pass_data, type_data, scale_data = eval_model_multi2(env_fn, policy, .1, 5, 50, args.n_procs)
+    np.savez(os.path.join(args.path, "eval_model.npz"), pass_data=pass_data, type_data=type_data, scale_data=scale_data)
+    get_model_stats(args.path)
 elif args.test == "compare":
     print("running compare")
     compare_pols(args.path, args.path2)

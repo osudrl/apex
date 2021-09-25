@@ -25,6 +25,7 @@ cassie_mujoco_init(str.encode(_dir_path+"/cassie.xml"))
 # cassie_mujoco_init(str.encode(_dir_path+"/cassie_cart_soft.xml"))
 # cassie_mujoco_init(str.encode(_dir_path+"/cassiepole_light_long_damp1.xml"))
 # cassie_mujoco_init(str.encode(_dir_path+"/cassie_tray_box.xml"))
+# cassie_mujoco_init(str.encode(_dir_path+"/cassie_jug_spring.xml"))
 # cassie_mujoco_init(str.encode(_dir_path+"/cassie_carry_pole.xml"))
 
 
@@ -39,9 +40,9 @@ class CassieSim:
         p_arr = (ctypes.c_int32 * 6)()
         cassie_sim_params(self.c, p_arr)
         self.nv = p_arr[1]
-        self.nbody = 26
+        self.nbody = p_arr[4]
         self.nq = p_arr[0]
-        self.ngeom = 35
+        self.ngeom = p_arr[5]
         # self.nv = 32
         # self.nbody = 26
         # self.nq = 35

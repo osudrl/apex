@@ -52,6 +52,33 @@ def euler2quat(z=0, y=0, x=0):
     	result = -result
     return result
 
+def quaternion2euler(quaternion):
+	w = quaternion[0]
+	x = quaternion[1]
+	y = quaternion[2]
+	z = quaternion[3]
+	ysqr = y * y
+	
+	t0 = +2.0 * (w * x + y * z)
+	t1 = +1.0 - 2.0 * (x * x + ysqr)
+	X = math.degrees(math.atan2(t0, t1))
+	
+	t2 = +2.0 * (w * y - z * x)
+	t2 = +1.0 if t2 > +1.0 else t2
+	t2 = -1.0 if t2 < -1.0 else t2
+	Y = math.degrees(math.asin(t2))
+	
+	t3 = +2.0 * (w * z + x * y)
+	t4 = +1.0 - 2.0 * (ysqr + z * z)
+	Z = math.degrees(math.atan2(t3, t4))
+
+	result = np.zeros(3)
+	result[0] = X * np.pi / 180
+	result[1] = Y * np.pi / 180
+	result[2] = Z * np.pi / 180
+	
+	return result
+
 @ray.remote
 class eval_worker(object):
     def __init__(self, id_num, env_fn, policy, num_steps, max_speed, min_speed):
@@ -66,56 +93,75 @@ class eval_worker(object):
     def run_test(self, speed_schedule, orient_schedule):
         start_t = time.time()
         save_data = np.zeros(6)
-        state = torch.Tensor(self.cassie_env.reset_for_test(full_reset=True))
-        self.cassie_env.speed = 0.5
-        self.cassie_env.side_speed = 0
-        self.cassie_env.phase_add = 1
+        state = torch.Tensor(self.cassie_env.reset_for_test())
+        self.cassie_env.update_speed(0.5)
+        # self.cassie_env.speed = 0.5
+        # self.cassie_env.side_speed = 0
+        # self.cassie_env.phase_add = 1
         num_commands = len(orient_schedule)
         count = 0
         orient_ind = 0
         speed_ind = 1 
         orient_add = 0
         passed = 1
+        speed_error = 0
+        orient_error = 0
+        true_steps = 0
         while not (speed_ind == num_commands and orient_ind == num_commands and count == self.num_steps) and passed:
             # Update speed command
             if count == self.num_steps:
                 count = 0
-                self.cassie_env.speed = speed_schedule[speed_ind]
-                self.cassie_env.speed = np.clip(self.cassie_env.speed, self.min_speed, self.max_speed)
-                if self.cassie_env.speed > 1.4:
-                    self.cassie_env.phase_add = 1.5
-                else:
-                    self.cassie_env.phase_add = 1
+                speed_command = np.clip(speed_schedule[speed_ind], self.min_speed, self.max_speed)
+                self.cassie_env.update_speed(speed_command)
+                # self.cassie_env.speed = speed_schedule[speed_ind]
+                # self.cassie_env.speed = np.clip(self.cassie_env.speed, self.min_speed, self.max_speed)
+                # if self.cassie_env.speed > 1.4:
+                #     self.cassie_env.phase_add = 1.5
+                # else:
+                #     self.cassie_env.phase_add = 1
                 speed_ind += 1
             # Update orientation command
             elif count == self.num_steps // 2:
                 orient_add += orient_schedule[orient_ind]
                 orient_ind += 1
+                self.cassie_env.orient_add = orient_add
             # Update orientation
             # TODO: Make update orientation function in each env to this will work with an abitrary environment
-            quaternion = euler2quat(z=orient_add, y=0, x=0)
-            iquaternion = inverse_quaternion(quaternion)
-            curr_orient = state[1:5]
-            curr_transvel = state[15:18]
+            # quaternion = euler2quat(z=orient_add, y=0, x=0)
+            # iquaternion = inverse_quaternion(quaternion)
+            # curr_orient = state[1:5]
+            # curr_transvel = state[15:18]
 
-            new_orient = quaternion_product(iquaternion, curr_orient)
-            if new_orient[0] < 0:
-                new_orient = -new_orient
-            new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
-            state[1:5] = torch.FloatTensor(new_orient)
-            state[15:18] = torch.FloatTensor(new_translationalVelocity)
+            # new_orient = quaternion_product(iquaternion, curr_orient)
+            # if new_orient[0] < 0:
+            #     new_orient = -new_orient
+            # new_translationalVelocity = rotate_by_quaternion(curr_transvel, iquaternion)
+            # state[1:5] = torch.FloatTensor(new_orient)
+            # state[15:18] = torch.FloatTensor(new_translationalVelocity)
+
 
             # Get action
             action = self.policy(state, True)
             action = action.data.numpy()
-            state, reward, done, _ = self.cassie_env.step(action)
+            state = self.cassie_env.step_basic(action)
             state = torch.Tensor(state)
-            if self.cassie_env.sim.qpos()[2] < 0.4:
+            qpos = self.cassie_env.sim.qpos_full()
+            qvel = self.cassie_env.sim.qvel_full()
+            speed_error += np.abs(np.linalg.norm(qvel[0:2]) - self.cassie_env.speed)
+            quat = qpos[3:7]
+            pel_euler = quaternion2euler(quat)
+            orient_error = np.abs(self.cassie_env.orient_add - pel_euler[2])
+            if qpos[2] < 0.4 or (self.cassie_env.curr_model == "cassie_tray_box.xml" and qpos[37] < 0.7):
                 passed = 0
             count += 1
+            # true_steps += 1
         if passed:
             save_data[0] = passed
             save_data[1] = -1
+            # print("true steps:", true_steps)
+            # print("mult: ", self.num_steps  * num_commands)
+            save_data[2] = speed_error / (self.num_steps  * num_commands)
+            save_data[3] = orient_error / (self.num_steps  * num_commands)
         else:
             save_data[:] = np.array([passed, count//(self.num_steps//2), self.cassie_env.speed, orient_add,\
                         self.cassie_env.speed-speed_schedule[max(0, speed_ind-2)], orient_schedule[orient_ind-1]])
