@@ -66,6 +66,7 @@ class CassieEnv_clean:
         self.phase   = 0 # portion of the phase the robot is in
         self.counter = 0 # number of phase cycles completed in episode
         self.speed = 0
+        self.side_speed = 0
         self.phase_add = 1
 
         # NOTE: a reference trajectory represents ONE phase cycle
@@ -416,7 +417,7 @@ class CassieEnv_clean:
         r_stance = -r_force + 1
 
         orient_target = np.array([1, 0, 0, 0])
-        speed_target = np.array([self.speed, 0, 0])
+        speed_target = np.array([self.speed, self.side_speed, 0])
         foot_orient_target = self.neutral_foot_orient
         
         des_height = self.des_foot_height

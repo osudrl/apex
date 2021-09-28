@@ -59,8 +59,9 @@ def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based
                 'CassieNoaccelFootDist', 'CassieNoaccelFootDistNojoint', 'CassieNovelFootDist', 'CassieMinInput', 'CassieMinInputVelSidestep', 
                 'CassieTurn', 'CassieTurn_no_orientadd', 'CassieClean', 'CassieClean_pole', 'CassieClean_tray', 'CassieEnv_nomotorvel', 
                 'CassieEnv_nomotorvel_nopelvel', 'CassieEnv_mjvel', 'CassieEnv_filtervel', 'CassieEnv_accel_nopelvel', "CassieEnv_mj", 
-                "CassieEnv_accel_nofy_nojoint", "CassieEnv_accel_nofy", "CassieEnv_mj_accel", "CassieEnv_accel_nofy_pole", "CassieEnv_noaccel"]:
-        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn, CassieEnv_turn_no_orientadd, CassieEnv_clean, CassieEnv_clean_pole, CassieEnv_clean_tray, CassieEnv_nomotorvel, CassieEnv_nomotorvel_nopelvel, CassieEnv_mjvel, CassieEnv_filtervel, CassieEnv_accel_nopelvel, CassieEnv_mj, CassieEnv_accel_nofy_nojoint, CassieEnv_accel_nofy, CassieEnv_mj_accel, CassieEnv_accel_nofy_pole, CassieEnv_noaccel
+                "CassieEnv_accel_nofy_nojoint", "CassieEnv_accel_nofy", "CassieEnv_mj_accel", "CassieEnv_accel_nofy_pole", "CassieEnv_noaccel", 
+                "CassieEnv_noaccel_sidestep"]:
+        from cassie import CassieEnv, CassieMinEnv, CassiePlayground, CassieStandingEnv, CassieEnv_noaccel_footdist_omniscient, CassieEnv_footdist, CassieEnv_noaccel_footdist, CassieEnv_noaccel_footdist_nojoint, CassieEnv_novel_footdist, CassieEnv_mininput, CassieEnv_mininput_vel_sidestep, CassieEnv_turn, CassieEnv_turn_no_orientadd, CassieEnv_clean, CassieEnv_clean_pole, CassieEnv_clean_tray, CassieEnv_nomotorvel, CassieEnv_nomotorvel_nopelvel, CassieEnv_mjvel, CassieEnv_filtervel, CassieEnv_accel_nopelvel, CassieEnv_mj, CassieEnv_accel_nofy_nojoint, CassieEnv_accel_nofy, CassieEnv_mj_accel, CassieEnv_accel_nofy_pole, CassieEnv_noaccel, CassieEnv_noaccel_sidestep
         # from cassie import *
 
         if path == 'Cassie-v0':
@@ -118,6 +119,8 @@ def env_factory(path, traj="walking", simrate=50, phase_based=False, clock_based
             env_fn = partial(CassieEnv_accel_nofy_pole, simrate=simrate, dynamics_randomization=dynamics_randomization, reward=reward, history=history)
         elif path == "CassieEnv_noaccel":
             env_fn = partial(CassieEnv_noaccel, simrate=simrate, dynamics_randomization=dynamics_randomization, reward=reward, history=history)
+        elif path == "CassieEnv_noaccel_sidestep":
+            env_fn = partial(CassieEnv_noaccel_sidestep, simrate=simrate, dynamics_randomization=dynamics_randomization, reward=reward, history=history)
         else:
             print("Error: Unknown cassie environment")
             exit()

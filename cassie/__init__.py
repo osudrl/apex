@@ -27,7 +27,7 @@ from .cassie_accel_nofy import CassieEnv_accel_nofy
 from .cassie_mj_accel import CassieEnv_mj_accel
 from .cassie_accel_nofy_pole import CassieEnv_accel_nofy_pole
 from .cassie_noaccel import CassieEnv_noaccel
-
+from .cassie_noaccel_sidestep import CassieEnv_noaccel_sidestep
 
 from .cassiemujoco import *
 

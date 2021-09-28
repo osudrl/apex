@@ -1,5 +1,19 @@
 import numpy as np
 
+def run_side_maxforce_cost(self):
+
+    reward = .1*np.exp(-self.forward_cost) + .1*np.exp(-self.orient_cost) \
+                + .1*np.exp(-self.yvel_cost) \
+                + .10*np.exp(-self.l_foot_cost_forcevel) + .10*np.exp(-self.r_foot_cost_forcevel) \
+                + .1*np.exp(-self.l_foot_cost_pos) + .1*np.exp(-self.r_foot_cost_pos) \
+                + .025*np.exp(-self.l_foot_orient) + .025*np.exp(-self.r_foot_orient) \
+                + .05*np.exp(-self.hiproll_cost) + .05*np.exp(-self.hipyaw_vel) \
+                + .025*np.exp(-self.pel_transacc) + .025*np.exp(-self.pel_rotacc) \
+                + .025*np.exp(-self.act_cost) + 0.025*np.exp(-self.torque_penalty) \
+                + .025*np.exp(-self.l_max_foot_force / 500) + 0.025*np.exp(-self.r_max_foot_force / 500)
+
+    return reward
+
 def side_speedmatch_reward(self):
     qpos = np.copy(self.sim.qpos())
     qvel = np.copy(self.sim.qvel())
